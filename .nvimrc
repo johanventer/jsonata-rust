@@ -1,4 +1,5 @@
 function! Build() 
 	:botright Topen
-	:T cargo test
+	:execute 'normal! i'
+	:T cargo test -- --nocapture
 endfunction
