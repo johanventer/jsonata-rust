@@ -1,5 +1,1 @@
-function! Build() 
-	:botright Topen
-	:execute 'normal! i'
-	:T cargo test -- --nocapture
-endfunction
+let g:build_cmd = "cargo test -- --nocapture"
