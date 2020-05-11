@@ -1,33 +1,7 @@
 use std::{char, str};
 
-#[derive(Debug)]
-pub struct Error {
-    code: &'static str,
-    // stack,
-    position: usize,
-}
-
-#[derive(Debug)]
-enum Token {
-    End,
-    Range,
-    Assignment,
-    NotEqual,
-    GreaterEqual,
-    LessEqual,
-    DescendantWildcard,
-    ChainFunction,
-    Or,
-    In,
-    And,
-    Null,
-    Boolean(bool),
-    Operator(char),
-    String(String),
-    Number(f64),
-    Name(String),
-    Variable(String),
-}
+use crate::error::Error;
+use crate::token::{Token, TokenKind};
 
 pub struct Tokenizer<'a> {
     position: usize,
@@ -35,7 +9,7 @@ pub struct Tokenizer<'a> {
 }
 
 impl<'a> Tokenizer<'a> {
-    fn new(source: &'a str) -> Self {
+    pub fn new(source: &'a str) -> Self {
         Self {
             position: 0,
             source,
@@ -43,11 +17,11 @@ impl<'a> Tokenizer<'a> {
     }
 
     /// Returns the next token in the stream and its position as a tuple
-    fn next_token(&mut self, prefix: bool) -> Result<(Token, usize), Error> {
+    pub fn next(&mut self, prefix: bool) -> Option<Token> {
         loop {
             match self.source.as_bytes()[self.position..] {
                 [] => {
-                    break Ok((Token::End, self.position));
+                    break None;
                 }
                 // Skip whitespace
                 [b' ' | b'\r' | b'\n' | b'\t' | b'\x0b', ..] => {
@@ -58,25 +32,24 @@ impl<'a> Tokenizer<'a> {
                 [b'/', b'*', ..] => {
                     let comment_start = self.position;
                     self.position += 2;
-                    let result: Result<(), Error> = loop {
+                    loop {
                         match self.source.as_bytes()[self.position..] {
-                            [] => {
-                                break Err(Error {
+                            [] => panic!(format!(
+                                "{:#?}",
+                                Error {
                                     code: "S0106",
                                     position: comment_start,
-                                });
-                            }
+                                    message: "Comment has no closing tag".to_string()
+                                }
+                            )),
                             [b'*', b'/', ..] => {
                                 self.position += 2;
-                                break Ok(());
+                                break;
                             }
                             _ => {
                                 self.position += 1;
                             }
                         }
-                    };
-                    if let Err(e) = result {
-                        break Err(e);
                     }
                 }
                 // Regex
@@ -84,37 +57,58 @@ impl<'a> Tokenizer<'a> {
                 // Double-dot range operator
                 [b'.', b'.', ..] => {
                     self.position += 2;
-                    break Ok((Token::Range, self.position));
+                    break Some(Token {
+                        kind: TokenKind::Range,
+                        position: self.position,
+                    });
                 }
                 // := Assignment
                 [b':', b'=', ..] => {
                     self.position += 2;
-                    break Ok((Token::Assignment, self.position));
+                    break Some(Token {
+                        kind: TokenKind::Assignment,
+                        position: self.position,
+                    });
                 }
                 // !=
                 [b'!', b'=', ..] => {
                     self.position += 2;
-                    break Ok((Token::NotEqual, self.position));
+                    break Some(Token {
+                        kind: TokenKind::NotEqual,
+                        position: self.position,
+                    });
                 }
                 // >=
                 [b'>', b'=', ..] => {
                     self.position += 2;
-                    break Ok((Token::GreaterEqual, self.position));
+                    break Some(Token {
+                        kind: TokenKind::GreaterEqual,
+                        position: self.position,
+                    });
                 }
                 // <=
                 [b'<', b'=', ..] => {
                     self.position += 2;
-                    break Ok((Token::LessEqual, self.position));
+                    break Some(Token {
+                        kind: TokenKind::LessEqual,
+                        position: self.position,
+                    });
                 }
                 // ** Descendent wildcard
                 [b'*', b'*', ..] => {
                     self.position += 2;
-                    break Ok((Token::DescendantWildcard, self.position));
+                    break Some(Token {
+                        kind: TokenKind::DescendantWildcard,
+                        position: self.position,
+                    });
                 }
                 // ~> Chain function
                 [b'~', b'>', ..] => {
                     self.position += 2;
-                    break Ok((Token::ChainFunction, self.position));
+                    break Some(Token {
+                        kind: TokenKind::ChainFunction,
+                        position: self.position,
+                    });
                 }
                 // Numbers
                 [b'0'..=b'9', ..] | [b'-', b'0'..=b'9', ..] => {
@@ -122,54 +116,240 @@ impl<'a> Tokenizer<'a> {
                     self.position += 1;
                     // TODO(johan): Improve this lexing, it's pretty ordinary and allows all sorts
                     // of invalid stuff
-                    let result = loop {
+                    break loop {
                         match self.source.as_bytes()[self.position..] {
                             [b'0'..=b'9' | b'.' | b'e' | b'E' | b'-' | b'+', ..] => {
                                 self.position += 1;
                             }
                             _ => {
-                                if let Some(number) = str::from_utf8(
-                                    &self.source.as_bytes()[number_start..self.position],
-                                )
-                                .ok()
-                                .and_then(|s| s.parse::<f64>().ok())
+                                let token = &self.source.as_bytes()[number_start..self.position];
+                                if let Some(number) = str::from_utf8(token)
+                                    .ok()
+                                    .and_then(|s| s.parse::<f64>().ok())
                                 {
-                                    break Ok((Token::Number(number), self.position));
-                                } else {
-                                    break Err(Error {
-                                        code: "S0102",
+                                    break Some(Token {
+                                        kind: TokenKind::Number(number),
                                         position: self.position,
                                     });
+                                } else {
+                                    panic!(format!(
+                                        "{:#?}",
+                                        Error {
+                                            code: "S0102",
+                                            position: self.position,
+                                            message: "Number of out range".to_string() // TODO:
+                                                                                       //format!(
+                                                                                       //    "Number out of range: {}",
+                                                                                       //    token as &[char]
+                                                                                       //)
+                                        }
+                                    ))
                                 }
                             }
                         }
                     };
-
-                    break result;
                 }
                 // Single character operators
-                [c
-                @
-                (b'.' | b'[' | b']' | b'{' | b'}' | b'(' | b')' | b',' | b'@' | b'#' | b';'
-                | b':' | b'?' | b'+' | b'-' | b'*' | b'/' | b'%' | b'|' | b'=' | b'<'
-                | b'>' | b'^' | b'&' | b'!' | b'~'), ..] => {
+                [b'.', ..] => {
                     self.position += 1;
-                    break Ok((Token::Operator(c as char), self.position));
+                    break Some(Token {
+                        kind: TokenKind::Period,
+                        position: self.position,
+                    });
+                }
+                [b'[', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::LeftBracket,
+                        position: self.position,
+                    });
+                }
+                [b']', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::RightBracket,
+                        position: self.position,
+                    });
+                }
+                [b'{', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::LeftBrace,
+                        position: self.position,
+                    });
+                }
+                [b'}', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::RightBrace,
+                        position: self.position,
+                    });
+                }
+                [b'(', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::LeftParen,
+                        position: self.position,
+                    });
+                }
+                [b')', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::RightParen,
+                        position: self.position,
+                    });
+                }
+                [b',', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::Comma,
+                        position: self.position,
+                    });
+                }
+                [b'@', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::At,
+                        position: self.position,
+                    });
+                }
+                [b'#', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::Hash,
+                        position: self.position,
+                    });
+                }
+                [b';', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::SemiColon,
+                        position: self.position,
+                    });
+                }
+                [b':', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::Colon,
+                        position: self.position,
+                    });
+                }
+                [b'?', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::Question,
+                        position: self.position,
+                    });
+                }
+                [b'+', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::Add,
+                        position: self.position,
+                    });
+                }
+                [b'-', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::Sub,
+                        position: self.position,
+                    });
+                }
+                [b'*', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::Mul,
+                        position: self.position,
+                    });
+                }
+                [b'/', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::Div,
+                        position: self.position,
+                    });
+                }
+                [b'%', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::Mod,
+                        position: self.position,
+                    });
+                }
+                [b'|', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::Pipe,
+                        position: self.position,
+                    });
+                }
+                [b'=', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::Equ,
+                        position: self.position,
+                    });
+                }
+                [b'<', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::LeftCaret,
+                        position: self.position,
+                    });
+                }
+                [b'>', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::RightCaret,
+                        position: self.position,
+                    });
+                }
+                [b'^', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::Pow,
+                        position: self.position,
+                    });
+                }
+                [b'&', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::Ampersand,
+                        position: self.position,
+                    });
+                }
+                [b'!', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::Not,
+                        position: self.position,
+                    });
+                }
+                [b'~', ..] => {
+                    self.position += 1;
+                    break Some(Token {
+                        kind: TokenKind::Tilde,
+                        position: self.position,
+                    });
                 }
                 // String literals
                 [quote_type @ (b'\'' | b'"'), ..] => {
                     self.position += 1;
                     let mut string = String::new();
                     let string_start = self.position;
-                    let result: Result<String, Error> = loop {
+                    break loop {
                         match self.source.as_bytes()[self.position..] {
                             // End of string missing
-                            [] => {
-                                break Err(Error {
+                            [] => panic!(format!(
+                                "{:#?}",
+                                Error {
                                     code: "S0101",
                                     position: string_start,
-                                });
-                            }
+                                    message:
+                                        "String literal must be terminated by a matching quote"
+                                            .to_string()
+                                }
+                            )),
                             // Escape sequence
                             [b'\\', escape_char, ..] => {
                                 self.position += 1;
@@ -200,18 +380,29 @@ impl<'a> Tokenizer<'a> {
                                             string.push(character);
                                             self.position += 5;
                                         } else {
-                                            break Err(Error {
-                                                code: "S0104",
-                                                position: self.position,
-                                            });
+                                            panic!(format!(
+                                                "{:#?}",
+                                                Error {
+                                                    code: "S0104",
+                                                    position: self.position,
+                                                    message: "The escape sequence \\u must be followed by 4 hex digits".to_string()
+                                                }
+                                            ));
                                         }
                                     }
                                     // Invalid escape sequence
-                                    _ => {
-                                        break Err(Error {
-                                            code: "S0103",
-                                            position: self.position,
-                                        });
+                                    c @ _ => {
+                                        panic!(format!(
+                                            "{:#?}",
+                                            Error {
+                                                code: "S0104",
+                                                position: self.position,
+                                                message: format!(
+                                                    "Unsupported escape sequence: \\{}",
+                                                    c as char
+                                                )
+                                            }
+                                        ));
                                     }
                                 }
                             }
@@ -220,7 +411,10 @@ impl<'a> Tokenizer<'a> {
                                 // Check for the end of the string
                                 if c == quote_type {
                                     self.position += 1;
-                                    break Ok(string);
+                                    break Some(Token {
+                                        kind: TokenKind::String(string),
+                                        position: self.position,
+                                    });
                                 }
 
                                 // Otherwise add to the string
@@ -232,19 +426,12 @@ impl<'a> Tokenizer<'a> {
                             }
                         }
                     };
-
-                    match result {
-                        Err(e) => break Err(e),
-                        Ok(value) => {
-                            break Ok((Token::String(value), self.position));
-                        }
-                    }
                 }
                 // Quoted names (backticks)
                 [b'`', ..] => {
                     self.position += 1;
                     // Find the closing backtick and convert to a string
-                    if let Some(value) = self.source.as_bytes()[self.position..]
+                    match self.source.as_bytes()[self.position..]
                         .iter()
                         .position(|byte| *byte == b'`')
                         .and_then(|index| {
@@ -253,21 +440,30 @@ impl<'a> Tokenizer<'a> {
                                     .to_vec(),
                             )
                             .ok()
-                        })
-                    {
-                        self.position += value.len() + 1;
-                        break Ok((Token::Name(value), self.position));
-                    } else {
-                        break Err(Error {
-                            code: "S0105",
-                            position: self.position,
-                        });
+                        }) {
+                        Some(value) => {
+                            self.position += value.len() + 1;
+                            break Some(Token {
+                                kind: TokenKind::Name(value),
+                                position: self.position,
+                            });
+                        }
+                        None => panic!(format!(
+                            "{:#?}",
+                            Error {
+                                code: "S0105",
+                                position: self.position,
+                                message:
+                                    "Quoted property name must be terminated with a backquote (`)"
+                                        .to_string()
+                            }
+                        )),
                     }
                 }
                 // Names
                 [c, ..] => {
                     let name_start = self.position;
-                    let result = loop {
+                    break loop {
                         match self.source.as_bytes()[self.position..] {
                             // Match end of source, whitespace characters or a single-char operator
                             // to find the end of the name
@@ -285,7 +481,10 @@ impl<'a> Tokenizer<'a> {
                                     )
                                     .unwrap();
 
-                                    break Ok((Token::Variable(name), self.position));
+                                    break Some(Token {
+                                        kind: TokenKind::Variable(name),
+                                        position: self.position,
+                                    });
                                 } else {
                                     // TODO(johan): This could fail to unwrap
                                     let name = String::from_utf8(
@@ -294,26 +493,44 @@ impl<'a> Tokenizer<'a> {
                                     .unwrap();
 
                                     let token = match &name[..] {
-                                        "or" => (Token::Or, self.position),
-                                        "in" => (Token::In, self.position),
-                                        "and" => (Token::And, self.position),
-                                        "true" => (Token::Boolean(true), self.position),
-                                        "false" => (Token::Boolean(false), self.position),
-                                        "null" => (Token::Null, self.position),
-                                        _ => (Token::Name(name), self.position),
+                                        "or" => Token {
+                                            kind: TokenKind::Or,
+                                            position: self.position,
+                                        },
+                                        "in" => Token {
+                                            kind: TokenKind::In,
+                                            position: self.position,
+                                        },
+                                        "and" => Token {
+                                            kind: TokenKind::And,
+                                            position: self.position,
+                                        },
+                                        "true" => Token {
+                                            kind: TokenKind::Boolean(true),
+                                            position: self.position,
+                                        },
+                                        "false" => Token {
+                                            kind: TokenKind::Boolean(false),
+                                            position: self.position,
+                                        },
+                                        "null" => Token {
+                                            kind: TokenKind::Null,
+                                            position: self.position,
+                                        },
+                                        _ => Token {
+                                            kind: TokenKind::Name(name),
+                                            position: self.position,
+                                        },
                                     };
 
-                                    break Ok(token);
+                                    break Some(token);
                                 }
                             }
-
                             _ => {
                                 self.position += 1;
                             }
                         }
                     };
-
-                    break result;
                 }
             }
         }
@@ -327,59 +544,47 @@ mod tests {
     #[test]
     fn operators() {
         let mut tokenizer = Tokenizer::new("  @   # +  <=>= /* This is a comment */ ? -*");
-
+        assert!(matches!(tokenizer.next(false).unwrap().kind, TokenKind::At));
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Operator('@'), _)
-        ));
-
-        assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Operator('#'), _)
-        ));
-
-        assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Operator('+'), _)
-        ));
-
-        assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::LessEqual, _)
-        ));
-
-        assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::GreaterEqual, _)
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Hash
         ));
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Operator('?'), _)
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Add
         ));
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Operator('-'), _)
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::LessEqual
         ));
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Operator('*'), _)
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::GreaterEqual
+        ));
+        assert!(matches!(
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Question
+        ));
+        assert!(matches!(
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Sub
+        ));
+        assert!(matches!(
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Mul
         ));
     }
 
     #[test]
     fn strings() {
         let mut tokenizer = Tokenizer::new("\"There's a string here\" 'and another here'");
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::String(s), _) if s == "There's a string here"
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::String(s) if s == "There's a string here"
         ));
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::String(s), _) if s == "and another here"
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::String(s) if s == "and another here"
         ));
     }
 
@@ -387,83 +592,66 @@ mod tests {
     fn unicode_escapes() {
         let mut tokenizer = Tokenizer::new("\"\\u2d63\\u2d53\\u2d4d\"");
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::String(s), _) if s ==  "ⵣⵓⵍ"
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::String(s) if s ==  "ⵣⵓⵍ"
         ));
     }
 
     #[test]
     fn backtick_names() {
         let mut tokenizer = Tokenizer::new("  `hello`    `world`");
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Name(s), _) if s == "hello"
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Name(s) if s == "hello"
         ));
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Name(s), _) if s == "world"
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Name(s) if s == "world"
         ));
     }
 
     #[test]
     fn variables() {
         let mut tokenizer = Tokenizer::new("  $one   $two   $three  ");
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Variable(s), _) if s == "one"
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Variable(s) if s == "one"
         ));
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Variable(s), _) if s == "two"
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Variable(s) if s == "two"
         ));
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Variable(s), _) if s == "three"
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Variable(s) if s == "three"
         ));
     }
 
     #[test]
     fn name_operators() {
         let mut tokenizer = Tokenizer::new("or in and");
-
+        assert!(matches!(tokenizer.next(false).unwrap().kind, TokenKind::Or));
+        assert!(matches!(tokenizer.next(false).unwrap().kind, TokenKind::In));
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Or, _)
-        ));
-
-        assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::In, _)
-        ));
-
-        assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::And, _)
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::And
         ));
     }
 
     #[test]
     fn values() {
         let mut tokenizer = Tokenizer::new("true false null");
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Boolean(true), _)
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Boolean(true)
         ));
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Boolean(false), _)
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Boolean(false)
         ));
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Null, _)
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Null
         ));
     }
 
@@ -471,70 +659,57 @@ mod tests {
     fn numbers() {
         let mut tokenizer =
             Tokenizer::new("0 1 0.234 5.678 -0 -1 -0.234 -5.678 0e0 1e1 1e-1 1e+1 -2.234E-2");
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Number(n), _) if (n - 0.0 as f64).abs() < f64::EPSILON
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Number(n) if (n - 0.0 as f64).abs() < f64::EPSILON
         ));
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Number(n), _) if (n - 1.0 as f64).abs() < f64::EPSILON
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Number(n) if (n - 1.0 as f64).abs() < f64::EPSILON
         ));
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Number(n), _) if (n - 0.234 as f64).abs() < f64::EPSILON
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Number(n) if (n - 0.234 as f64).abs() < f64::EPSILON
         ));
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Number(n), _) if (n - 5.678 as f64).abs() < f64::EPSILON
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Number(n) if (n - 5.678 as f64).abs() < f64::EPSILON
         ));
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Number(n), _) if (n - -0.0 as f64).abs() < f64::EPSILON
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Number(n) if (n - -0.0 as f64).abs() < f64::EPSILON
         ));
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Number(n), _) if (n - -1.0 as f64).abs() < f64::EPSILON
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Number(n) if (n - -1.0 as f64).abs() < f64::EPSILON
         ));
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Number(n), _) if (n - -0.234 as f64).abs() < f64::EPSILON
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Number(n) if (n - -0.234 as f64).abs() < f64::EPSILON
         ));
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Number(n), _) if (n - -5.678 as f64).abs() < f64::EPSILON
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Number(n) if (n - -5.678 as f64).abs() < f64::EPSILON
         ));
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Number(n), _) if (n - 0e0 as f64).abs() < f64::EPSILON
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Number(n) if (n - 0e0 as f64).abs() < f64::EPSILON
         ));
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Number(n), _) if (n - 1e1 as f64).abs() < f64::EPSILON
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Number(n) if (n - 1e1 as f64).abs() < f64::EPSILON
         ));
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Number(n), _) if (n - 1e-1 as f64).abs() < f64::EPSILON
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Number(n) if (n - 1e-1 as f64).abs() < f64::EPSILON
         ));
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Number(n), _) if (n - 1e+1 as f64).abs() < f64::EPSILON
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Number(n) if (n - 1e+1 as f64).abs() < f64::EPSILON
         ));
-
         assert!(matches!(
-            tokenizer.next_token(false).unwrap(),
-            (Token::Number(n), _) if (n - -2.234E-2 as f64).abs() < f64::EPSILON
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Number(n) if (n - -2.234E-2 as f64).abs() < f64::EPSILON
         ));
     }
 }

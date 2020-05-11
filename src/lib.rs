@@ -1,12 +1,13 @@
 #![feature(or_patterns)]
 
-#[macro_use]
-extern crate lazy_static;
-
 use chrono::{DateTime, Utc};
 use json::JsonValue;
 use std::collections::HashMap;
 
+mod ast;
+mod error;
+mod parser;
+mod token;
 mod tokenizer;
 
 /// A binding in a stack frame
@@ -83,52 +84,6 @@ impl<'a> Frame<'a> {
         }
     }
 }
-
-lazy_static! {
-    static ref OPERATORS: HashMap<&'static str, u8> = [
-        (".", 75),
-        ("[", 80),
-        ("]", 0),
-        ("{", 70),
-        ("}", 0),
-        ("(", 80),
-        (")", 0),
-        (",", 0),
-        ("@", 80),
-        ("#", 80),
-        (";", 80),
-        (",", 80),
-        ("?", 20),
-        ("+", 50),
-        ("-", 50),
-        ("*", 60),
-        ("/", 60),
-        ("%", 60),
-        ("|", 20),
-        ("=", 40),
-        ("<", 40),
-        (">", 40),
-        ("^", 40),
-        ("**", 60),
-        ("..", 20),
-        (",=", 10),
-        ("!=", 40),
-        ("<=", 40),
-        (">=", 40),
-        ("~>", 40),
-        ("and", 30),
-        ("or", 25),
-        ("in", 40),
-        ("&", 50),
-        ("!", 0),
-        ("~", 0)
-    ]
-    .iter()
-    .copied()
-    .collect();
-}
-
-pub struct Parser {}
 
 pub struct JsonAta<'a> {
     expr: String,
