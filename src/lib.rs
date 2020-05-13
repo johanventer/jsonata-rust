@@ -7,7 +7,7 @@ use std::collections::HashMap;
 mod ast;
 mod error;
 mod parser;
-mod token;
+mod symbol;
 mod tokenizer;
 
 /// A binding in a stack frame

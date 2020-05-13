@@ -1,7 +1,119 @@
+use std::fmt;
 use std::{char, str};
 
 use crate::error::Error;
-use crate::token::{Token, TokenKind};
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum TokenKind {
+    // Double character operators
+    Range,
+    Assignment,
+    NotEqual,
+    GreaterEqual,
+    LessEqual,
+    DescendantWildcard,
+    ChainFunction,
+    // Named operators
+    Or,
+    In,
+    And,
+    // Single character operators
+    Period,
+    LeftBracket,
+    RightBracket,
+    LeftBrace,
+    RightBrace,
+    LeftParen,
+    RightParen,
+    Comma,
+    At,
+    Hash,
+    SemiColon,
+    Colon,
+    Question,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Pipe,
+    Equ,
+    RightCaret,
+    LeftCaret,
+    Pow,
+    Ampersand,
+    Not,
+    Tilde,
+    // Literal values
+    Null,
+    Boolean(bool),
+    String(String),
+    Number(f64),
+    // Identifiers
+    Name(String),
+    Variable(String),
+}
+
+#[derive(Debug, Clone)]
+pub struct Token {
+    pub kind: TokenKind,
+    pub position: usize,
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.kind.fmt(f)
+    }
+}
+
+impl fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TokenKind::Range => write!(f, ".."),
+            TokenKind::Assignment => write!(f, ":="),
+            TokenKind::NotEqual => write!(f, "!="),
+            TokenKind::GreaterEqual => write!(f, ">="),
+            TokenKind::LessEqual => write!(f, "<="),
+            TokenKind::DescendantWildcard => write!(f, "**"),
+            TokenKind::ChainFunction => write!(f, "~>"),
+            TokenKind::Or => write!(f, "or"),
+            TokenKind::In => write!(f, "in"),
+            TokenKind::And => write!(f, "and"),
+            TokenKind::Period => write!(f, "."),
+            TokenKind::LeftBracket => write!(f, "["),
+            TokenKind::RightBracket => write!(f, "]"),
+            TokenKind::LeftBrace => write!(f, "{{"),
+            TokenKind::RightBrace => write!(f, "}}"),
+            TokenKind::LeftParen => write!(f, "("),
+            TokenKind::RightParen => write!(f, ")"),
+            TokenKind::Comma => write!(f, ","),
+            TokenKind::At => write!(f, "@"),
+            TokenKind::Hash => write!(f, "#"),
+            TokenKind::SemiColon => write!(f, ";"),
+            TokenKind::Colon => write!(f, ":"),
+            TokenKind::Question => write!(f, "?"),
+            TokenKind::Add => write!(f, "+"),
+            TokenKind::Sub => write!(f, "-"),
+            TokenKind::Mul => write!(f, "*"),
+            TokenKind::Div => write!(f, "/"),
+            TokenKind::Mod => write!(f, "%"),
+            TokenKind::Pipe => write!(f, "|"),
+            TokenKind::Equ => write!(f, "="),
+            TokenKind::RightCaret => write!(f, ">"),
+            TokenKind::LeftCaret => write!(f, "<"),
+            TokenKind::Pow => write!(f, "^"),
+            TokenKind::Ampersand => write!(f, "&"),
+            TokenKind::Not => write!(f, "!"),
+            TokenKind::Tilde => write!(f, "~"),
+            TokenKind::Null => write!(f, "null"),
+            TokenKind::Boolean(v) => write!(f, "{}", v),
+            TokenKind::String(v) => write!(f, "{}", v),
+            TokenKind::Number(v) => write!(f, "{}", v),
+            TokenKind::Name(v) => write!(f, "{}", v),
+            TokenKind::Variable(v) => write!(f, "{}", v),
+        }
+    }
+}
 
 pub struct Tokenizer<'a> {
     position: usize,
@@ -17,7 +129,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     /// Returns the next token in the stream and its position as a tuple
-    pub fn next(&mut self, prefix: bool) -> Option<Token> {
+    pub fn next(&mut self, infix: bool) -> Option<Token> {
         loop {
             match self.source.as_bytes()[self.position..] {
                 [] => {
@@ -53,7 +165,7 @@ impl<'a> Tokenizer<'a> {
                     }
                 }
                 // Regex
-                [b'/', ..] if !prefix => unimplemented!("regex scanning is not yet implemented"),
+                [b'/', ..] if !infix => unimplemented!("regex scanning is not yet implemented"),
                 // Double-dot range operator
                 [b'.', b'.', ..] => {
                     self.position += 2;
@@ -391,7 +503,7 @@ impl<'a> Tokenizer<'a> {
                                         }
                                     }
                                     // Invalid escape sequence
-                                    c @ _ => {
+                                    c => {
                                         panic!(format!(
                                             "{:#?}",
                                             Error {

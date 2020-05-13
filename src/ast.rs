@@ -93,6 +93,24 @@ impl Node for VariableNode {
     }
 }
 
+pub struct MapNode {
+    pub position: usize,
+    pub lhs: Box<dyn Node>,
+    pub rhs: Box<dyn Node>,
+}
+
+impl Node for MapNode {
+    fn to_json(&self) -> JsonValue {
+        object! {
+            type: "binary",
+            value: ".",
+            position: self.position,
+            lhs: self.lhs.to_json(),
+            rhs: self.rhs.to_json()
+        }
+    }
+}
+
 pub struct AddNode {
     pub position: usize,
     pub lhs: Box<dyn Node>,
@@ -359,6 +377,140 @@ impl Node for InNode {
             position: self.position,
             lhs: self.lhs.to_json(),
             rhs: self.rhs.to_json()
+        }
+    }
+}
+
+pub struct UnaryMinusNode {
+    pub position: usize,
+    pub expression: Box<dyn Node>,
+}
+
+impl Node for UnaryMinusNode {
+    fn to_json(&self) -> JsonValue {
+        object! {
+            type: "unary",
+            value: "-",
+            position: self.position,
+            expression: self.expression.to_json(),
+        }
+    }
+}
+
+pub struct ChainFunctionNode {
+    pub position: usize,
+    pub lhs: Box<dyn Node>,
+    pub rhs: Box<dyn Node>,
+}
+
+impl Node for ChainFunctionNode {
+    fn to_json(&self) -> JsonValue {
+        object! {
+            type: "binary",
+            value: "~>",
+            position: self.position,
+            lhs: self.lhs.to_json(),
+            rhs: self.rhs.to_json()
+        }
+    }
+}
+
+pub struct WildcardNode {
+    pub position: usize,
+}
+
+impl Node for WildcardNode {
+    fn to_json(&self) -> JsonValue {
+        object! {
+            type: "*",
+            position: self.position,
+        }
+    }
+}
+
+pub struct DescendantWildcardNode {
+    pub position: usize,
+}
+
+impl Node for DescendantWildcardNode {
+    fn to_json(&self) -> JsonValue {
+        object! {
+            type: "**",
+            position: self.position,
+        }
+    }
+}
+
+pub struct ParentNode {
+    pub position: usize,
+}
+
+impl Node for ParentNode {
+    fn to_json(&self) -> JsonValue {
+        object! {
+            type: "%",
+            position: self.position,
+        }
+    }
+}
+
+pub struct FunctionNode {
+    pub position: usize,
+    pub procedure: Box<dyn Node>,
+    pub arguments: Vec<Box<dyn Node>>,
+}
+
+impl Node for FunctionNode {
+    fn to_json(&self) -> JsonValue {
+        let mut obj = object! {
+            type: "function",
+            position: self.position,
+            procedure: self.procedure.to_json(),
+        };
+        obj.insert(
+            "arguments",
+            self.arguments
+                .iter()
+                .map(|arg| arg.to_json())
+                .collect::<Vec<_>>(),
+        );
+        obj
+    }
+}
+
+pub struct PartialFunctionNode {
+    pub position: usize,
+    pub procedure: Box<dyn Node>,
+    pub arguments: Vec<Box<dyn Node>>,
+}
+
+impl Node for PartialFunctionNode {
+    fn to_json(&self) -> JsonValue {
+        let mut obj = object! {
+            type: "partial",
+            position: self.position,
+            procedure: self.procedure.to_json(),
+        };
+        obj.insert(
+            "arguments",
+            self.arguments
+                .iter()
+                .map(|arg| arg.to_json())
+                .collect::<Vec<_>>(),
+        );
+        obj
+    }
+}
+
+pub struct PartialArgNode {
+    pub position: usize,
+}
+
+impl Node for PartialArgNode {
+    fn to_json(&self) -> JsonValue {
+        object! {
+            type: "?",
+            position: self.position,
         }
     }
 }

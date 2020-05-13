@@ -1,66 +1,17 @@
 use crate::ast::*;
+use crate::error::Error;
 use crate::parser::Parser;
+use crate::tokenizer::{Token, TokenKind};
 
-#[derive(Debug, Clone)]
-pub enum TokenKind {
-    // Double character operators
-    Range,
-    Assignment,
-    NotEqual,
-    GreaterEqual,
-    LessEqual,
-    DescendantWildcard,
-    ChainFunction,
-    // Named operators
-    Or,
-    In,
-    And,
-    // Single character operators
-    Period,
-    LeftBracket,
-    RightBracket,
-    LeftBrace,
-    RightBrace,
-    LeftParen,
-    RightParen,
-    Comma,
-    At,
-    Hash,
-    SemiColon,
-    Colon,
-    Question,
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-    Pipe,
-    Equ,
-    RightCaret,
-    LeftCaret,
-    Pow,
-    Ampersand,
-    Not,
-    Tilde,
-    // Literal values
-    Null,
-    Boolean(bool),
-    String(String),
-    Number(f64),
-    // Identifiers
-    Name(String),
-    Variable(String),
+pub trait Symbol {
+    fn lbp(&self) -> u32;
+    fn nud(&self, parser: &mut Parser) -> Box<dyn Node>;
+    fn led(&self, parser: &mut Parser, left: Box<dyn Node>) -> Box<dyn Node>;
 }
 
-#[derive(Debug, Clone)]
-pub struct Token {
-    pub kind: TokenKind,
-    pub position: usize,
-}
-
-impl Token {
+impl Symbol for Token {
     /// The left binding power of the token
-    pub fn lbp(&self) -> u32 {
+    fn lbp(&self) -> u32 {
         match &self.kind {
             // Double character operators
             TokenKind::Range => 20,
@@ -113,7 +64,7 @@ impl Token {
     }
 
     /// Produce the null denotation for the token
-    pub fn nud(&self, parser: &mut Parser) -> Box<dyn Node> {
+    fn nud(&self, parser: &mut Parser) -> Box<dyn Node> {
         match &self.kind {
             TokenKind::Null => Box::new(NullNode {
                 position: self.position,
@@ -138,17 +89,50 @@ impl Token {
                 position: self.position,
                 value: value.clone(),
             }),
-            _ => unimplemented!("nud not implemented for token"),
+            TokenKind::And => Box::new(NameNode {
+                position: self.position,
+                value: "and".to_string(),
+            }),
+            TokenKind::Or => Box::new(NameNode {
+                position: self.position,
+                value: "or".to_string(),
+            }),
+            TokenKind::In => Box::new(NameNode {
+                position: self.position,
+                value: "in".to_string(),
+            }),
+            TokenKind::Sub => Box::new(UnaryMinusNode {
+                position: self.position,
+                expression: parser.expression(70),
+            }),
+            TokenKind::Mul => Box::new(WildcardNode {
+                position: self.position,
+            }),
+            TokenKind::DescendantWildcard => Box::new(DescendantWildcardNode {
+                position: self.position,
+            }),
+            TokenKind::Mod => Box::new(ParentNode {
+                position: self.position,
+            }),
+            _ => panic!(format!(
+                "{:#?}",
+                Error {
+                    code: "S0211",
+                    position: self.position,
+                    message: format!("The symbol {} cannot be used as a unary operator", self)
+                }
+            )),
         }
     }
 
     /// Produce the left denotation for the token
-    pub fn led(&self, parser: &mut Parser, left: Box<dyn Node>) -> Box<dyn Node> {
+    fn led(&self, parser: &mut Parser, left: Box<dyn Node>) -> Box<dyn Node> {
         match &self.kind {
-            //            TokenKind::Period => Box::new(MapNode {
-            //               lhs: left,
-            //              rhs: parser.expression(self.lbp()),
-            //         }),
+            TokenKind::Period => Box::new(MapNode {
+                position: self.position,
+                lhs: left,
+                rhs: parser.expression(self.lbp()),
+            }),
             TokenKind::Add => Box::new(AddNode {
                 position: self.position,
                 lhs: left,
@@ -224,6 +208,40 @@ impl Token {
                 lhs: left,
                 rhs: parser.expression(self.lbp()),
             }),
+            TokenKind::ChainFunction => Box::new(ChainFunctionNode {
+                position: self.position,
+                lhs: left,
+                rhs: parser.expression(self.lbp()),
+            }),
+            //                        TokenKind::LeftParen => {
+            //                            let mut arguments = Vec::new();
+            //                            let mut is_partial = false;
+            //
+            //                            if parser.token().kind != TokenKind::RightParen {
+            //                                loop {
+            //                                    match parser.token().kind {
+            //                                        TokenKind::Question => {
+            //                                            is_partial = true;
+            //                                            arguments.push(PartialArgNode {
+            //                                                position: parser.token().position
+            //                                            });
+            //                                        }
+            //
+            //
+            //                                    }
+            //
+            //                                    parser.next();
+            //                                }
+            //                            }
+            //
+            //                            parser.expect(TokenKind::LeftParen);
+            //
+            //                            Box::new(FunctionNode {
+            //                            position: self.position,
+            //
+            //
+            //                        })
+            //                        },
             _ => unimplemented!("led not implemented for token"),
         }
     }

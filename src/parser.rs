@@ -3,12 +3,8 @@
 ///   and builds on the Javascript framework described by Douglas Crockford at http://javascript.crockford.com/tdop/tdop.html
 ///   and in 'Beautiful Code', edited by Andy Oram and Greg Wilson, Copyright 2007 O'Reilly Media, Inc. 798-0-596-51004-6
 ///
-/// The formulation of a Top Down Operator Precendence parser (Pratt's Parser) is more complicated
-/// in a non-dynamic language.
-///
-/// This implementation borrows heavily from the ideas in Matt Diesel's cpp-pratt repository at
-/// https://github.com/MattDiesel/cpp-pratt. I was quite stuck on how to implement a Pratt parser
-/// in a statically typed language like Rust, and the discovery of this prior art was a godsend.
+/// The formulation of a Top Down Operator Precendence parser (Pratt's Parser) is little more
+/// complicated (and a lot more verbose) in a non-dynamic language.
 ///
 /// More resources:
 ///  - http://effbot.org/zone/simple-top-down-parsing.htm
@@ -27,8 +23,9 @@
 ///     precendence.
 ///  4. Productions are returned, which point to other productions forming the AST.
 use crate::ast::Node;
-use crate::token::Token;
-use crate::tokenizer::Tokenizer;
+use crate::error::Error;
+use crate::symbol::Symbol;
+use crate::tokenizer::{Token, TokenKind, Tokenizer};
 
 pub struct Parser<'a> {
     tokenizer: Tokenizer<'a>,
@@ -50,21 +47,51 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn next(&mut self) {
-        match self.tokenizer.next(false) {
+    pub fn token(&self) -> &Token {
+        &self.token
+    }
+
+    pub fn next(&mut self, infix: bool) {
+        match self.tokenizer.next(infix) {
             Some(token) => self.token = token,
             None => self.finished = true,
         };
     }
 
+    pub fn expect(&mut self, expected: TokenKind, infix: bool) {
+        self.next(infix);
+
+        if self.finished {
+            panic!(format!(
+                "{:#?}",
+                Error {
+                    code: "S0203",
+                    position: self.token.position,
+                    message: format!("Expected {} before end of expression", expected)
+                }
+            ))
+        }
+
+        if self.token.kind != expected {
+            panic!(format!(
+                "{:#?}",
+                Error {
+                    code: "S0202",
+                    position: self.token.position,
+                    message: format!("Expected {}, got {}", expected, self.token)
+                }
+            ))
+        }
+    }
+
     pub fn expression(&mut self, rbp: u32) -> Box<dyn Node> {
         let mut last = self.token.clone();
-        self.next();
+        self.next(true);
         let mut left = last.nud(self);
 
         while !self.finished && rbp < self.token.lbp() {
             last = self.token.clone();
-            self.next();
+            self.next(false);
             left = last.led(self, left)
         }
 
