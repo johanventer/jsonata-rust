@@ -1,413 +1,139 @@
 use json::{object, JsonValue};
 
-pub trait Node {
+pub trait ToJson {
     fn to_json(&self) -> JsonValue;
 }
 
-pub struct NullNode {
-    pub position: usize,
+pub enum Node {
+    Null(LiteralNode<NullValue, "value">),
+    Boolean(LiteralNode<bool, "value">),
+    String(LiteralNode<String, "string">),
+    Number(LiteralNode<f64, "number">),
+    Name(LiteralNode<String, "name">),
+    Variable(LiteralNode<String, "value">),
+    PathSeparator(BinaryNode<".">),
+    Add(BinaryNode<"+">),
+    Subtract(BinaryNode<"%">),
+    Multiply(BinaryNode<"*">),
+    Divide(BinaryNode<"/">),
+    Modulus(BinaryNode<"%">),
+    Equal(BinaryNode<"=">),
+    LessThan(BinaryNode<"<">),
+    GreaterThan(BinaryNode<">">),
+    NotEqual(BinaryNode<"!=">),
+    LessThanEqual(BinaryNode<"<=">),
+    GreaterThanEqual(BinaryNode<">=">),
+    Concat(BinaryNode<"&">),
+    And(BinaryNode<"and">),
+    Or(BinaryNode<"or">),
+    In(BinaryNode<"in">),
+    Chain(BinaryNode<"~>">),
+    Wildcard(BasicNode<"*">),
+    DescendantWildcard(BasicNode<"**">),
+    Parent(BasicNode<"%">),
+    Function(FunctionNode<"function">),
+    PartialFunction(FunctionNode<"partial">),
+    PartialFunctionArg(BasicNode<"?">),
+    UnaryMinus(UnaryNode<"-">),
 }
 
-impl Node for NullNode {
+// TODO(johan): There must be an easier way to do this, a macro perhaps?
+impl ToJson for Node {
     fn to_json(&self) -> JsonValue {
-        object! {
-            type: "value",
-            position: self.position,
-            value: JsonValue::Null
+        use Node::*;
+        match self {
+            Null(v) => v.to_json(),
+            Boolean(v) => v.to_json(),
+            String(v) => v.to_json(),
+            Number(v) => v.to_json(),
+            Name(v) => v.to_json(),
+            Variable(v) => v.to_json(),
+            PathSeparator(v) => v.to_json(),
+            Add(v) => v.to_json(),
+            Subtract(v) => v.to_json(),
+            Multiply(v) => v.to_json(),
+            Divide(v) => v.to_json(),
+            Modulus(v) => v.to_json(),
+            Equal(v) => v.to_json(),
+            LessThan(v) => v.to_json(),
+            GreaterThan(v) => v.to_json(),
+            NotEqual(v) => v.to_json(),
+            LessThanEqual(v) => v.to_json(),
+            GreaterThanEqual(v) => v.to_json(),
+            Concat(v) => v.to_json(),
+            And(v) => v.to_json(),
+            Or(v) => v.to_json(),
+            In(v) => v.to_json(),
+            Chain(v) => v.to_json(),
+            Wildcard(v) => v.to_json(),
+            DescendantWildcard(v) => v.to_json(),
+            Parent(v) => v.to_json(),
+            Function(v) => v.to_json(),
+            PartialFunction(v) => v.to_json(),
+            PartialFunctionArg(v) => v.to_json(),
+            UnaryMinus(v) => v.to_json(),
         }
     }
 }
 
-pub struct BooleanNode {
-    pub position: usize,
-    pub value: bool,
+/// Placeholder for a null value
+#[derive(Clone)]
+pub struct NullValue {}
+
+impl From<NullValue> for JsonValue {
+    fn from(null: NullValue) -> Self {
+        JsonValue::Null
+    }
 }
 
-impl Node for BooleanNode {
+pub struct LiteralNode<T, const kind: &'static str>
+where
+    T: Into<JsonValue> + Clone,
+{
+    pub position: usize,
+    pub value: T,
+}
+
+impl<T, const kind: &'static str> ToJson for LiteralNode<T, kind>
+where
+    T: Into<JsonValue> + Clone,
+{
     fn to_json(&self) -> JsonValue {
         object! {
-            type: "value",
+            type: kind,
             position: self.position,
-            value: JsonValue::from(self.value)
+            value: self.value.clone().into()
         }
     }
 }
 
-pub struct StringNode {
+pub struct UnaryNode<const value: &'static str> {
     pub position: usize,
-    pub value: String,
+    pub expression: Box<Node>,
 }
 
-impl Node for StringNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "string",
-            position: self.position,
-            value: JsonValue::from(&self.value[..])
-        }
-    }
-}
-
-pub struct NumberNode {
-    pub position: usize,
-    pub value: f64,
-}
-
-impl Node for NumberNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "number",
-            position: self.position,
-            value: JsonValue::from(self.value)
-        }
-    }
-}
-
-pub struct NameNode {
-    pub position: usize,
-    pub value: String,
-}
-
-impl Node for NameNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "name",
-            position: self.position,
-            value: JsonValue::from(&self.value[..])
-        }
-    }
-}
-
-pub struct VariableNode {
-    pub position: usize,
-    pub value: String,
-}
-
-impl Node for VariableNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "variable",
-            position: self.position,
-            value: JsonValue::from(&self.value[..])
-        }
-    }
-}
-
-pub struct MapNode {
-    pub position: usize,
-    pub lhs: Box<dyn Node>,
-    pub rhs: Box<dyn Node>,
-}
-
-impl Node for MapNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "binary",
-            value: ".",
-            position: self.position,
-            lhs: self.lhs.to_json(),
-            rhs: self.rhs.to_json()
-        }
-    }
-}
-
-pub struct AddNode {
-    pub position: usize,
-    pub lhs: Box<dyn Node>,
-    pub rhs: Box<dyn Node>,
-}
-
-impl Node for AddNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "binary",
-            value: "+",
-            position: self.position,
-            lhs: self.lhs.to_json(),
-            rhs: self.rhs.to_json()
-        }
-    }
-}
-
-pub struct SubtractNode {
-    pub position: usize,
-    pub lhs: Box<dyn Node>,
-    pub rhs: Box<dyn Node>,
-}
-
-impl Node for SubtractNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "binary",
-            value: "-",
-            position: self.position,
-            lhs: self.lhs.to_json(),
-            rhs: self.rhs.to_json()
-        }
-    }
-}
-
-pub struct MultiplyNode {
-    pub position: usize,
-    pub lhs: Box<dyn Node>,
-    pub rhs: Box<dyn Node>,
-}
-
-impl Node for MultiplyNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "binary",
-            value: "*",
-            position: self.position,
-            lhs: self.lhs.to_json(),
-            rhs: self.rhs.to_json()
-        }
-    }
-}
-
-pub struct DivideNode {
-    pub position: usize,
-    pub lhs: Box<dyn Node>,
-    pub rhs: Box<dyn Node>,
-}
-
-impl Node for DivideNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "binary",
-            value: "/",
-            position: self.position,
-            lhs: self.lhs.to_json(),
-            rhs: self.rhs.to_json()
-        }
-    }
-}
-
-pub struct ModulusNode {
-    pub position: usize,
-    pub lhs: Box<dyn Node>,
-    pub rhs: Box<dyn Node>,
-}
-
-impl Node for ModulusNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "binary",
-            value: "%",
-            position: self.position,
-            lhs: self.lhs.to_json(),
-            rhs: self.rhs.to_json()
-        }
-    }
-}
-
-pub struct EqualNode {
-    pub position: usize,
-    pub lhs: Box<dyn Node>,
-    pub rhs: Box<dyn Node>,
-}
-
-impl Node for EqualNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "binary",
-            value: "=",
-            position: self.position,
-            lhs: self.lhs.to_json(),
-            rhs: self.rhs.to_json()
-        }
-    }
-}
-
-pub struct LessThanNode {
-    pub position: usize,
-    pub lhs: Box<dyn Node>,
-    pub rhs: Box<dyn Node>,
-}
-
-impl Node for LessThanNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "binary",
-            value: "<",
-            position: self.position,
-            lhs: self.lhs.to_json(),
-            rhs: self.rhs.to_json()
-        }
-    }
-}
-
-pub struct GreaterThanNode {
-    pub position: usize,
-    pub lhs: Box<dyn Node>,
-    pub rhs: Box<dyn Node>,
-}
-
-impl Node for GreaterThanNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "binary",
-            value: ">",
-            position: self.position,
-            lhs: self.lhs.to_json(),
-            rhs: self.rhs.to_json()
-        }
-    }
-}
-
-pub struct NotEqualNode {
-    pub position: usize,
-    pub lhs: Box<dyn Node>,
-    pub rhs: Box<dyn Node>,
-}
-
-impl Node for NotEqualNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "binary",
-            value: "!=",
-            position: self.position,
-            lhs: self.lhs.to_json(),
-            rhs: self.rhs.to_json()
-        }
-    }
-}
-
-pub struct LessEqualNode {
-    pub position: usize,
-    pub lhs: Box<dyn Node>,
-    pub rhs: Box<dyn Node>,
-}
-
-impl Node for LessEqualNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "binary",
-            value: "<=",
-            position: self.position,
-            lhs: self.lhs.to_json(),
-            rhs: self.rhs.to_json()
-        }
-    }
-}
-
-pub struct GreaterEqualNode {
-    pub position: usize,
-    pub lhs: Box<dyn Node>,
-    pub rhs: Box<dyn Node>,
-}
-
-impl Node for GreaterEqualNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "binary",
-            value: ">=",
-            position: self.position,
-            lhs: self.lhs.to_json(),
-            rhs: self.rhs.to_json()
-        }
-    }
-}
-
-pub struct ConcatNode {
-    pub position: usize,
-    pub lhs: Box<dyn Node>,
-    pub rhs: Box<dyn Node>,
-}
-
-impl Node for ConcatNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "binary",
-            value: "&",
-            position: self.position,
-            lhs: self.lhs.to_json(),
-            rhs: self.rhs.to_json()
-        }
-    }
-}
-
-pub struct AndNode {
-    pub position: usize,
-    pub lhs: Box<dyn Node>,
-    pub rhs: Box<dyn Node>,
-}
-
-impl Node for AndNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "binary",
-            value: "and",
-            position: self.position,
-            lhs: self.lhs.to_json(),
-            rhs: self.rhs.to_json()
-        }
-    }
-}
-
-pub struct OrNode {
-    pub position: usize,
-    pub lhs: Box<dyn Node>,
-    pub rhs: Box<dyn Node>,
-}
-
-impl Node for OrNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "binary",
-            value: "or",
-            position: self.position,
-            lhs: self.lhs.to_json(),
-            rhs: self.rhs.to_json()
-        }
-    }
-}
-
-pub struct InNode {
-    pub position: usize,
-    pub lhs: Box<dyn Node>,
-    pub rhs: Box<dyn Node>,
-}
-
-impl Node for InNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "binary",
-            value: "in",
-            position: self.position,
-            lhs: self.lhs.to_json(),
-            rhs: self.rhs.to_json()
-        }
-    }
-}
-
-pub struct UnaryMinusNode {
-    pub position: usize,
-    pub expression: Box<dyn Node>,
-}
-
-impl Node for UnaryMinusNode {
+impl<const value: &'static str> ToJson for UnaryNode<value> {
     fn to_json(&self) -> JsonValue {
         object! {
             type: "unary",
-            value: "-",
+            value,
             position: self.position,
             expression: self.expression.to_json(),
         }
     }
 }
 
-pub struct ChainFunctionNode {
+pub struct BinaryNode<const value: &'static str> {
     pub position: usize,
-    pub lhs: Box<dyn Node>,
-    pub rhs: Box<dyn Node>,
+    pub lhs: Box<Node>,
+    pub rhs: Box<Node>,
 }
 
-impl Node for ChainFunctionNode {
+impl<const value: &'static str> ToJson for BinaryNode<value> {
     fn to_json(&self) -> JsonValue {
         object! {
             type: "binary",
-            value: "~>",
+            value,
             position: self.position,
             lhs: self.lhs.to_json(),
             rhs: self.rhs.to_json()
@@ -415,55 +141,29 @@ impl Node for ChainFunctionNode {
     }
 }
 
-pub struct WildcardNode {
+pub struct BasicNode<const kind: &'static str> {
     pub position: usize,
 }
 
-impl Node for WildcardNode {
+impl<const kind: &'static str> ToJson for BasicNode<kind> {
     fn to_json(&self) -> JsonValue {
         object! {
-            type: "*",
+            type: kind,
             position: self.position,
         }
     }
 }
 
-pub struct DescendantWildcardNode {
+pub struct FunctionNode<const kind: &'static str> {
     pub position: usize,
+    pub procedure: Box<Node>,
+    pub arguments: Vec<Box<Node>>,
 }
 
-impl Node for DescendantWildcardNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "**",
-            position: self.position,
-        }
-    }
-}
-
-pub struct ParentNode {
-    pub position: usize,
-}
-
-impl Node for ParentNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "%",
-            position: self.position,
-        }
-    }
-}
-
-pub struct FunctionNode {
-    pub position: usize,
-    pub procedure: Box<dyn Node>,
-    pub arguments: Vec<Box<dyn Node>>,
-}
-
-impl Node for FunctionNode {
+impl<const kind: &'static str> ToJson for FunctionNode<kind> {
     fn to_json(&self) -> JsonValue {
         let mut obj = object! {
-            type: "function",
+            type: kind,
             position: self.position,
             procedure: self.procedure.to_json(),
         };
@@ -475,42 +175,5 @@ impl Node for FunctionNode {
                 .collect::<Vec<_>>(),
         );
         obj
-    }
-}
-
-pub struct PartialFunctionNode {
-    pub position: usize,
-    pub procedure: Box<dyn Node>,
-    pub arguments: Vec<Box<dyn Node>>,
-}
-
-impl Node for PartialFunctionNode {
-    fn to_json(&self) -> JsonValue {
-        let mut obj = object! {
-            type: "partial",
-            position: self.position,
-            procedure: self.procedure.to_json(),
-        };
-        obj.insert(
-            "arguments",
-            self.arguments
-                .iter()
-                .map(|arg| arg.to_json())
-                .collect::<Vec<_>>(),
-        );
-        obj
-    }
-}
-
-pub struct PartialArgNode {
-    pub position: usize,
-}
-
-impl Node for PartialArgNode {
-    fn to_json(&self) -> JsonValue {
-        object! {
-            type: "?",
-            position: self.position,
-        }
     }
 }

@@ -22,7 +22,7 @@
 ///  3. Expression parsing ends when the token's precendence is less than the expression's
 ///     precendence.
 ///  4. Productions are returned, which point to other productions forming the AST.
-use crate::ast::Node;
+use crate::ast::{Node, ToJson};
 use crate::error::Error;
 use crate::symbol::Symbol;
 use crate::tokenizer::{Token, TokenKind, Tokenizer};
@@ -30,20 +30,14 @@ use crate::tokenizer::{Token, TokenKind, Tokenizer};
 pub struct Parser<'a> {
     tokenizer: Tokenizer<'a>,
     token: Token,
-    finished: bool,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(source: &'a str) -> Self {
         let mut tokenizer = Tokenizer::new(source);
-        let token = match tokenizer.next(false) {
-            Some(token) => token,
-            None => panic!("No token stream"),
-        };
         Self {
+            token: tokenizer.next(false),
             tokenizer,
-            token,
-            finished: false,
         }
     }
 
@@ -52,16 +46,11 @@ impl<'a> Parser<'a> {
     }
 
     pub fn next(&mut self, infix: bool) {
-        match self.tokenizer.next(infix) {
-            Some(token) => self.token = token,
-            None => self.finished = true,
-        };
+        self.token = self.tokenizer.next(infix);
     }
 
     pub fn expect(&mut self, expected: TokenKind, infix: bool) {
-        self.next(infix);
-
-        if self.finished {
+        if self.token.kind == TokenKind::End {
             panic!(format!(
                 "{:#?}",
                 Error {
@@ -82,14 +71,16 @@ impl<'a> Parser<'a> {
                 }
             ))
         }
+
+        self.next(infix);
     }
 
-    pub fn expression(&mut self, rbp: u32) -> Box<dyn Node> {
+    pub fn expression(&mut self, rbp: u32) -> Box<Node> {
         let mut last = self.token.clone();
         self.next(true);
         let mut left = last.nud(self);
 
-        while !self.finished && rbp < self.token.lbp() {
+        while rbp < self.token.lbp() {
             last = self.token.clone();
             self.next(false);
             left = last.led(self, left)
@@ -99,7 +90,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-pub fn parse(source: &str) -> Box<dyn Node> {
+pub fn parse(source: &str) -> Box<Node> {
     let mut parser = Parser::new(source);
     parser.expression(0)
 }

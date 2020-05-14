@@ -1,4 +1,5 @@
 #![feature(or_patterns)]
+#![feature(const_generics)]
 
 use chrono::{DateTime, Utc};
 use json::JsonValue;
