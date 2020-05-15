@@ -30,6 +30,7 @@ use crate::tokenizer::{Token, TokenKind, Tokenizer};
 pub struct Parser<'a> {
     tokenizer: Tokenizer<'a>,
     token: Token,
+    depth: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -38,6 +39,7 @@ impl<'a> Parser<'a> {
         Self {
             token: tokenizer.next(false),
             tokenizer,
+            depth: 0,
         }
     }
 
@@ -76,15 +78,33 @@ impl<'a> Parser<'a> {
     }
 
     pub fn expression(&mut self, rbp: u32) -> Box<Node> {
+        self.depth += 1;
         let mut last = self.token.clone();
+        //println!("{}: last: {:#?}", self.depth, last);
         self.next(true);
+        //println!("{}: current: {:#?}", self.depth, self.token);
+        //println!("{}: nud: {:#?}", self.depth, last);
         let mut left = last.nud(self);
 
         while rbp < self.token.lbp() {
+            //println!(
+            //    "{}: rbp: {}, current.lbp: {}",
+            //    self.depth,
+            //    rbp,
+            //    self.token.lbp()
+            //);
             last = self.token.clone();
+            //println!("{}: last: {:#?}", self.depth, last);
             self.next(false);
+            //println!("{}: current: {:#?}", self.depth, self.token);
+            //println!("{}: led: {:#?}", self.depth, last);
             left = last.led(self, left)
         }
+
+        //use json::stringify_pretty;
+        //println!("{}: {}", self.depth, stringify_pretty(left.to_json(), 4));
+
+        self.depth -= 1;
 
         left
     }
@@ -130,5 +150,20 @@ mod tests {
     }
 }"#;
         assert_eq!(expected, stringify_pretty(json, 4));
+    }
+
+    #[test]
+    fn function() {
+        let ast = parse(
+            r#"
+            $plot := function($x) {(
+                $floor := $string ~> $substringBefore(?, '.') ~> $number;
+                $index := $floor(($x + 1) * 20 + 0.5);
+                /*$join([0..$index].('.')) & 'O' & $join([$index..40].('.'))*/
+            )}
+            "#,
+        );
+        let json = ast.to_json();
+        println!("{}", stringify_pretty(json, 4));
     }
 }

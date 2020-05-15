@@ -1,5 +1,9 @@
+#![allow(incomplete_features)] // For const_generics
 #![feature(or_patterns)]
 #![feature(const_generics)]
+// TODO: Disable these
+#![allow(unused_variables)]
+#![allow(dead_code)]
 
 use chrono::{DateTime, Utc};
 use json::JsonValue;

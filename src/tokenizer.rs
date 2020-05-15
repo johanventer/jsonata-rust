@@ -151,14 +151,14 @@ impl<'a> Tokenizer<'a> {
                     self.position += 2;
                     loop {
                         match self.source.as_bytes()[self.position..] {
-                            [] => panic!(format!(
+                            [] => panic!(
                                 "{:#?}",
                                 Error {
                                     code: "S0106",
                                     position: comment_start,
                                     message: "Comment has no closing tag".to_string()
                                 }
-                            )),
+                            ),
                             [b'*', b'/', ..] => {
                                 self.position += 2;
                                 break;
@@ -249,7 +249,7 @@ impl<'a> Tokenizer<'a> {
                                         position: self.position,
                                     };
                                 } else {
-                                    panic!(format!(
+                                    panic!(
                                         "{:#?}",
                                         Error {
                                             code: "S0102",
@@ -260,7 +260,7 @@ impl<'a> Tokenizer<'a> {
                                                                                        //    token as &[char]
                                                                                        //)
                                         }
-                                    ))
+                                    )
                                 }
                             }
                         }
@@ -457,7 +457,7 @@ impl<'a> Tokenizer<'a> {
                     break loop {
                         match self.source.as_bytes()[self.position..] {
                             // End of string missing
-                            [] => panic!(format!(
+                            [] => panic!(
                                 "{:#?}",
                                 Error {
                                     code: "S0101",
@@ -466,7 +466,7 @@ impl<'a> Tokenizer<'a> {
                                         "String literal must be terminated by a matching quote"
                                             .to_string()
                                 }
-                            )),
+                            ),
                             // Escape sequence
                             [b'\\', escape_char, ..] => {
                                 self.position += 1;
@@ -497,19 +497,19 @@ impl<'a> Tokenizer<'a> {
                                             string.push(character);
                                             self.position += 5;
                                         } else {
-                                            panic!(format!(
+                                            panic!(
                                                 "{:#?}",
                                                 Error {
                                                     code: "S0104",
                                                     position: self.position,
                                                     message: "The escape sequence \\u must be followed by 4 hex digits".to_string()
                                                 }
-                                            ));
+                                            );
                                         }
                                     }
                                     // Invalid escape sequence
                                     c => {
-                                        panic!(format!(
+                                        panic!(
                                             "{:#?}",
                                             Error {
                                                 code: "S0104",
@@ -519,7 +519,7 @@ impl<'a> Tokenizer<'a> {
                                                     c as char
                                                 )
                                             }
-                                        ));
+                                        );
                                     }
                                 }
                             }
@@ -565,7 +565,7 @@ impl<'a> Tokenizer<'a> {
                                 position: self.position,
                             };
                         }
-                        None => panic!(format!(
+                        None => panic!(
                             "{:#?}",
                             Error {
                                 code: "S0105",
@@ -574,7 +574,7 @@ impl<'a> Tokenizer<'a> {
                                     "Quoted property name must be terminated with a backquote (`)"
                                         .to_string()
                             }
-                        )),
+                        ),
                     }
                 }
                 // Names
