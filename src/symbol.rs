@@ -1,5 +1,4 @@
 use crate::ast::*;
-use crate::error::Error;
 use crate::parser::Parser;
 use crate::tokenizer::{Token, TokenKind};
 
@@ -57,7 +56,7 @@ impl Symbol for Token {
             // Literal values
             Null => 0,
             Boolean(..) => 0,
-            String(..) => 0,
+            Str(..) => 0,
             Number(..) => 0,
             // Identifiers
             Name(..) => 0,
@@ -77,7 +76,7 @@ impl Symbol for Token {
                 position: self.position,
                 value: *value,
             })),
-            String(value) => Box::new(Node::String(LiteralNode {
+            Str(value) => Box::new(Node::String(LiteralNode {
                 position: self.position,
                 value: value.clone(),
             })),
@@ -164,15 +163,7 @@ impl Symbol for Token {
                     expressions,
                 }))
             }
-            _ => panic!(
-                "{:#?}",
-                Error {
-                    code: "S0211",
-                    position: self.position,
-                    // TODO: Bad error message
-                    message: format!("The symbol {:#?} cannot be used as a unary operator", self)
-                }
-            ),
+            _ => error!(S0211, self.position, self),
         }
     }
 
@@ -302,8 +293,10 @@ impl Symbol for Token {
                             match &arg {
                                 Node::Variable(_) => (),
                                 // TODO: Better error handling
-                                Node::Name(literal) => panic!("{:#?}", Error { code: "S0208", position: literal.position, message: format!("Parameter {} of function definition must be a variable name (start with $)", literal.value)}),
-                                _ => panic!("{:#?}", Error { code: "S0208", position: arg.get_position(), message: "Parameter of function definition must be a variable name (start with $)".to_string()})
+                                Node::Name(literal) => {
+                                    error!(S0208, literal.position, literal.value)
+                                }
+                                _ => error!(S0208, arg.get_position(), "TODO"),
                             }
                         }
 
@@ -341,15 +334,7 @@ impl Symbol for Token {
             Assignment => {
                 match left.as_ref() {
                     Node::Variable(_) => (),
-                    _ => panic!(
-                        "{:#?}",
-                        Error {
-                            code: "S0212",
-                            position: left.get_position(),
-                            message: "The left side of := must be a variable name (start with $)"
-                                .to_string()
-                        }
-                    ),
+                    _ => error!(S0212, left.get_position()),
                 }
 
                 Box::new(Node::Assignment(BinaryNode {

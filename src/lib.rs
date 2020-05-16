@@ -10,6 +10,7 @@ use json::JsonValue;
 use std::collections::HashMap;
 
 mod ast;
+#[macro_use]
 mod error;
 mod parser;
 mod symbol;

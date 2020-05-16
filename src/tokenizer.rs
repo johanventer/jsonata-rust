@@ -1,8 +1,6 @@
 use std::fmt;
 use std::{char, str};
 
-use crate::error::Error;
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     End,
@@ -48,11 +46,63 @@ pub enum TokenKind {
     // Literal values
     Null,
     Boolean(bool),
-    String(String),
+    Str(String),
     Number(f64),
     // Identifiers
     Name(String),
     Variable(String),
+}
+
+impl fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use TokenKind::*;
+        let value = match self {
+            End => "".to_string(),
+            Range => "..".to_string(),
+            Assignment => ":=".to_string(),
+            NotEqual => "!=".to_string(),
+            GreaterEqual => ">=".to_string(),
+            LessEqual => "<=".to_string(),
+            DescendantWildcard => "**".to_string(),
+            ChainFunction => "~>".to_string(),
+            Or => "or".to_string(),
+            In => "in".to_string(),
+            And => "and".to_string(),
+            Period => ".".to_string(),
+            LeftBracket => "[".to_string(),
+            RightBracket => "]".to_string(),
+            LeftBrace => "{".to_string(),
+            RightBrace => "}".to_string(),
+            LeftParen => "(".to_string(),
+            RightParen => ")".to_string(),
+            Comma => ",".to_string(),
+            At => "@".to_string(),
+            Hash => "#".to_string(),
+            SemiColon => ";".to_string(),
+            Colon => ":".to_string(),
+            Question => "?".to_string(),
+            Add => "+".to_string(),
+            Sub => "-".to_string(),
+            Mul => "*".to_string(),
+            Div => "/".to_string(),
+            Mod => "%".to_string(),
+            Pipe => "|".to_string(),
+            Equ => "=".to_string(),
+            RightCaret => ">".to_string(),
+            LeftCaret => "<".to_string(),
+            Pow => "^".to_string(),
+            Ampersand => "&".to_string(),
+            Not => "!".to_string(),
+            Tilde => "~".to_string(),
+            Null => "null".to_string(),
+            Str(v) => v.to_string(),
+            Name(v) => v.to_string(),
+            Variable(v) => v.to_string(),
+            Boolean(v) => format!("{}", v),
+            Number(v) => format!("{}", v),
+        };
+        write!(f, "{}", value)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -61,59 +111,15 @@ pub struct Token {
     pub position: usize,
 }
 
-impl fmt::Display for Token {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.kind.fmt(f)
+impl Token {
+    fn new(kind: TokenKind, position: usize) -> Self {
+        Self { kind, position }
     }
 }
 
-impl fmt::Display for TokenKind {
+impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            TokenKind::End => write!(f, ""),
-            TokenKind::Range => write!(f, ".."),
-            TokenKind::Assignment => write!(f, ":="),
-            TokenKind::NotEqual => write!(f, "!="),
-            TokenKind::GreaterEqual => write!(f, ">="),
-            TokenKind::LessEqual => write!(f, "<="),
-            TokenKind::DescendantWildcard => write!(f, "**"),
-            TokenKind::ChainFunction => write!(f, "~>"),
-            TokenKind::Or => write!(f, "or"),
-            TokenKind::In => write!(f, "in"),
-            TokenKind::And => write!(f, "and"),
-            TokenKind::Period => write!(f, "."),
-            TokenKind::LeftBracket => write!(f, "["),
-            TokenKind::RightBracket => write!(f, "]"),
-            TokenKind::LeftBrace => write!(f, "{{"),
-            TokenKind::RightBrace => write!(f, "}}"),
-            TokenKind::LeftParen => write!(f, "("),
-            TokenKind::RightParen => write!(f, ")"),
-            TokenKind::Comma => write!(f, ","),
-            TokenKind::At => write!(f, "@"),
-            TokenKind::Hash => write!(f, "#"),
-            TokenKind::SemiColon => write!(f, ";"),
-            TokenKind::Colon => write!(f, ":"),
-            TokenKind::Question => write!(f, "?"),
-            TokenKind::Add => write!(f, "+"),
-            TokenKind::Sub => write!(f, "-"),
-            TokenKind::Mul => write!(f, "*"),
-            TokenKind::Div => write!(f, "/"),
-            TokenKind::Mod => write!(f, "%"),
-            TokenKind::Pipe => write!(f, "|"),
-            TokenKind::Equ => write!(f, "="),
-            TokenKind::RightCaret => write!(f, ">"),
-            TokenKind::LeftCaret => write!(f, "<"),
-            TokenKind::Pow => write!(f, "^"),
-            TokenKind::Ampersand => write!(f, "&"),
-            TokenKind::Not => write!(f, "!"),
-            TokenKind::Tilde => write!(f, "~"),
-            TokenKind::Null => write!(f, "null"),
-            TokenKind::Boolean(v) => write!(f, "{}", v),
-            TokenKind::String(v) => write!(f, "{}", v),
-            TokenKind::Number(v) => write!(f, "{}", v),
-            TokenKind::Name(v) => write!(f, "{}", v),
-            TokenKind::Variable(v) => write!(f, "{}", v),
-        }
+        self.kind.fmt(f)
     }
 }
 
@@ -130,16 +136,17 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
+    fn emit(&self, kind: TokenKind) -> Token {
+        Token::new(kind, self.position)
+    }
+
     /// Returns the next token in the stream and its position as a tuple
     pub fn next(&mut self, infix: bool) -> Token {
+        use TokenKind::*;
+
         loop {
             match self.source.as_bytes()[self.position..] {
-                [] => {
-                    break Token {
-                        kind: TokenKind::End,
-                        position: self.position,
-                    };
-                }
+                [] => break self.emit(End),
                 // Skip whitespace
                 [b' ' | b'\r' | b'\n' | b'\t' | b'\x0b', ..] => {
                     self.position += 1;
@@ -151,14 +158,7 @@ impl<'a> Tokenizer<'a> {
                     self.position += 2;
                     loop {
                         match self.source.as_bytes()[self.position..] {
-                            [] => panic!(
-                                "{:#?}",
-                                Error {
-                                    code: "S0106",
-                                    position: comment_start,
-                                    message: "Comment has no closing tag".to_string()
-                                }
-                            ),
+                            [] => error!(S0106, comment_start),
                             [b'*', b'/', ..] => {
                                 self.position += 2;
                                 break;
@@ -174,58 +174,37 @@ impl<'a> Tokenizer<'a> {
                 // Double-dot range operator
                 [b'.', b'.', ..] => {
                     self.position += 2;
-                    break Token {
-                        kind: TokenKind::Range,
-                        position: self.position,
-                    };
+                    break self.emit(Range);
                 }
                 // := Assignment
                 [b':', b'=', ..] => {
                     self.position += 2;
-                    break Token {
-                        kind: TokenKind::Assignment,
-                        position: self.position,
-                    };
+                    break self.emit(Assignment);
                 }
                 // !=
                 [b'!', b'=', ..] => {
                     self.position += 2;
-                    break Token {
-                        kind: TokenKind::NotEqual,
-                        position: self.position,
-                    };
+                    break self.emit(NotEqual);
                 }
                 // >=
                 [b'>', b'=', ..] => {
                     self.position += 2;
-                    break Token {
-                        kind: TokenKind::GreaterEqual,
-                        position: self.position,
-                    };
+                    break self.emit(GreaterEqual);
                 }
                 // <=
                 [b'<', b'=', ..] => {
                     self.position += 2;
-                    break Token {
-                        kind: TokenKind::LessEqual,
-                        position: self.position,
-                    };
+                    break self.emit(LessEqual);
                 }
                 // ** Descendent wildcard
                 [b'*', b'*', ..] => {
                     self.position += 2;
-                    break Token {
-                        kind: TokenKind::DescendantWildcard,
-                        position: self.position,
-                    };
+                    break self.emit(DescendantWildcard);
                 }
                 // ~> Chain function
                 [b'~', b'>', ..] => {
                     self.position += 2;
-                    break Token {
-                        kind: TokenKind::ChainFunction,
-                        position: self.position,
-                    };
+                    break self.emit(ChainFunction);
                 }
                 // Numbers
                 [b'0'..=b'9', ..] | [b'-', b'0'..=b'9', ..] => {
@@ -244,23 +223,9 @@ impl<'a> Tokenizer<'a> {
                                     .ok()
                                     .and_then(|s| s.parse::<f64>().ok())
                                 {
-                                    break Token {
-                                        kind: TokenKind::Number(number),
-                                        position: self.position,
-                                    };
+                                    break self.emit(Number(number));
                                 } else {
-                                    panic!(
-                                        "{:#?}",
-                                        Error {
-                                            code: "S0102",
-                                            position: self.position,
-                                            message: "Number of out range".to_string() // TODO:
-                                                                                       //format!(
-                                                                                       //    "Number out of range: {}",
-                                                                                       //    token as &[char]
-                                                                                       //)
-                                        }
-                                    )
+                                    error!(S0102, self.position, str::from_utf8(token).unwrap());
                                 }
                             }
                         }
@@ -269,185 +234,107 @@ impl<'a> Tokenizer<'a> {
                 // Single character operators
                 [b'.', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::Period,
-                        position: self.position,
-                    };
+                    break self.emit(Period);
                 }
                 [b'[', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::LeftBracket,
-                        position: self.position,
-                    };
+                    break self.emit(LeftBracket);
                 }
                 [b']', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::RightBracket,
-                        position: self.position,
-                    };
+                    break self.emit(RightBracket);
                 }
                 [b'{', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::LeftBrace,
-                        position: self.position,
-                    };
+                    break self.emit(LeftBrace);
                 }
                 [b'}', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::RightBrace,
-                        position: self.position,
-                    };
+                    break self.emit(RightBrace);
                 }
                 [b'(', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::LeftParen,
-                        position: self.position,
-                    };
+                    break self.emit(LeftParen);
                 }
                 [b')', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::RightParen,
-                        position: self.position,
-                    };
+                    break self.emit(RightParen);
                 }
                 [b',', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::Comma,
-                        position: self.position,
-                    };
+                    break self.emit(Comma);
                 }
                 [b'@', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::At,
-                        position: self.position,
-                    };
+                    break self.emit(At);
                 }
                 [b'#', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::Hash,
-                        position: self.position,
-                    };
+                    break self.emit(Hash);
                 }
                 [b';', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::SemiColon,
-                        position: self.position,
-                    };
+                    break self.emit(SemiColon);
                 }
                 [b':', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::Colon,
-                        position: self.position,
-                    };
+                    break self.emit(Colon);
                 }
                 [b'?', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::Question,
-                        position: self.position,
-                    };
+                    break self.emit(Question);
                 }
                 [b'+', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::Add,
-                        position: self.position,
-                    };
+                    break self.emit(Add);
                 }
                 [b'-', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::Sub,
-                        position: self.position,
-                    };
+                    break self.emit(Sub);
                 }
                 [b'*', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::Mul,
-                        position: self.position,
-                    };
+                    break self.emit(Mul);
                 }
                 [b'/', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::Div,
-                        position: self.position,
-                    };
+                    break self.emit(Div);
                 }
                 [b'%', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::Mod,
-                        position: self.position,
-                    };
+                    break self.emit(Mod);
                 }
                 [b'|', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::Pipe,
-                        position: self.position,
-                    };
+                    break self.emit(Pipe);
                 }
                 [b'=', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::Equ,
-                        position: self.position,
-                    };
+                    break self.emit(Equ);
                 }
                 [b'<', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::LeftCaret,
-                        position: self.position,
-                    };
+                    break self.emit(LeftCaret);
                 }
                 [b'>', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::RightCaret,
-                        position: self.position,
-                    };
+                    break self.emit(RightCaret);
                 }
                 [b'^', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::Pow,
-                        position: self.position,
-                    };
+                    break self.emit(Pow);
                 }
                 [b'&', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::Ampersand,
-                        position: self.position,
-                    };
+                    break self.emit(Ampersand);
                 }
                 [b'!', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::Not,
-                        position: self.position,
-                    };
+                    break self.emit(Not);
                 }
                 [b'~', ..] => {
                     self.position += 1;
-                    break Token {
-                        kind: TokenKind::Tilde,
-                        position: self.position,
-                    };
+                    break self.emit(Tilde);
                 }
                 // String literals
                 [quote_type @ (b'\'' | b'"'), ..] => {
@@ -457,16 +344,7 @@ impl<'a> Tokenizer<'a> {
                     break loop {
                         match self.source.as_bytes()[self.position..] {
                             // End of string missing
-                            [] => panic!(
-                                "{:#?}",
-                                Error {
-                                    code: "S0101",
-                                    position: string_start,
-                                    message:
-                                        "String literal must be terminated by a matching quote"
-                                            .to_string()
-                                }
-                            ),
+                            [] => error!(S0101, string_start),
                             // Escape sequence
                             [b'\\', escape_char, ..] => {
                                 self.position += 1;
@@ -497,30 +375,11 @@ impl<'a> Tokenizer<'a> {
                                             string.push(character);
                                             self.position += 5;
                                         } else {
-                                            panic!(
-                                                "{:#?}",
-                                                Error {
-                                                    code: "S0104",
-                                                    position: self.position,
-                                                    message: "The escape sequence \\u must be followed by 4 hex digits".to_string()
-                                                }
-                                            );
+                                            error!(S0104, self.position)
                                         }
                                     }
                                     // Invalid escape sequence
-                                    c => {
-                                        panic!(
-                                            "{:#?}",
-                                            Error {
-                                                code: "S0104",
-                                                position: self.position,
-                                                message: format!(
-                                                    "Unsupported escape sequence: \\{}",
-                                                    c as char
-                                                )
-                                            }
-                                        );
-                                    }
+                                    c => error!(S0103, self.position, c),
                                 }
                             }
                             // Any other char
@@ -528,10 +387,7 @@ impl<'a> Tokenizer<'a> {
                                 // Check for the end of the string
                                 if c == quote_type {
                                     self.position += 1;
-                                    break Token {
-                                        kind: TokenKind::String(string),
-                                        position: self.position,
-                                    };
+                                    break self.emit(Str(string));
                                 }
 
                                 // Otherwise add to the string
@@ -560,21 +416,9 @@ impl<'a> Tokenizer<'a> {
                         }) {
                         Some(value) => {
                             self.position += value.len() + 1;
-                            break Token {
-                                kind: TokenKind::Name(value),
-                                position: self.position,
-                            };
+                            break self.emit(Name(value));
                         }
-                        None => panic!(
-                            "{:#?}",
-                            Error {
-                                code: "S0105",
-                                position: self.position,
-                                message:
-                                    "Quoted property name must be terminated with a backquote (`)"
-                                        .to_string()
-                            }
-                        ),
+                        None => error!(S0105, self.position),
                     }
                 }
                 // Names
@@ -598,10 +442,7 @@ impl<'a> Tokenizer<'a> {
                                     )
                                     .unwrap();
 
-                                    break Token {
-                                        kind: TokenKind::Variable(name),
-                                        position: self.position,
-                                    };
+                                    break self.emit(Variable(name));
                                 } else {
                                     // TODO(johan): This could fail to unwrap
                                     let name = String::from_utf8(
@@ -610,34 +451,13 @@ impl<'a> Tokenizer<'a> {
                                     .unwrap();
 
                                     let token = match &name[..] {
-                                        "or" => Token {
-                                            kind: TokenKind::Or,
-                                            position: self.position,
-                                        },
-                                        "in" => Token {
-                                            kind: TokenKind::In,
-                                            position: self.position,
-                                        },
-                                        "and" => Token {
-                                            kind: TokenKind::And,
-                                            position: self.position,
-                                        },
-                                        "true" => Token {
-                                            kind: TokenKind::Boolean(true),
-                                            position: self.position,
-                                        },
-                                        "false" => Token {
-                                            kind: TokenKind::Boolean(false),
-                                            position: self.position,
-                                        },
-                                        "null" => Token {
-                                            kind: TokenKind::Null,
-                                            position: self.position,
-                                        },
-                                        _ => Token {
-                                            kind: TokenKind::Name(name),
-                                            position: self.position,
-                                        },
+                                        "or" => self.emit(Or),
+                                        "in" => self.emit(In),
+                                        "and" => self.emit(And),
+                                        "true" => self.emit(Boolean(true)),
+                                        "false" => self.emit(Boolean(false)),
+                                        "null" => self.emit(Null),
+                                        _ => self.emit(Name(name)),
                                     };
 
                                     break token;
@@ -679,11 +499,11 @@ mod tests {
         let mut tokenizer = Tokenizer::new("\"There's a string here\" 'and another here'");
         assert!(matches!(
             tokenizer.next(false).kind,
-            TokenKind::String(s) if s == "There's a string here"
+            TokenKind::Str(s) if s == "There's a string here"
         ));
         assert!(matches!(
             tokenizer.next(false).kind,
-            TokenKind::String(s) if s == "and another here"
+            TokenKind::Str(s) if s == "and another here"
         ));
     }
 
@@ -692,7 +512,7 @@ mod tests {
         let mut tokenizer = Tokenizer::new("\"\\u2d63\\u2d53\\u2d4d\"");
         assert!(matches!(
             tokenizer.next(false).kind,
-            TokenKind::String(s) if s ==  "ⵣⵓⵍ"
+            TokenKind::Str(s) if s ==  "ⵣⵓⵍ"
         ));
     }
 

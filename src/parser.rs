@@ -23,7 +23,6 @@
 ///     precendence.
 ///  4. Productions are returned, which point to other productions forming the AST.
 use crate::ast::{Node, ToJson};
-use crate::error::Error;
 use crate::symbol::Symbol;
 use crate::tokenizer::{Token, TokenKind, Tokenizer};
 
@@ -53,25 +52,11 @@ impl<'a> Parser<'a> {
 
     pub fn expect(&mut self, expected: TokenKind, infix: bool) {
         if self.token.kind == TokenKind::End {
-            panic!(format!(
-                "{:#?}",
-                Error {
-                    code: "S0203",
-                    position: self.token.position,
-                    message: format!("Expected {} before end of expression", expected)
-                }
-            ))
+            error!(S0203, self.token.position, expected)
         }
 
         if self.token.kind != expected {
-            panic!(format!(
-                "{:#?}",
-                Error {
-                    code: "S0202",
-                    position: self.token.position,
-                    message: format!("Expected {}, got {}", expected, self.token)
-                }
-            ))
+            error!(S0202, self.token.position, expected, self.token)
         }
 
         self.next(infix);
