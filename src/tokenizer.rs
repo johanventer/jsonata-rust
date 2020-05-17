@@ -1,6 +1,8 @@
 use std::fmt;
 use std::{char, str};
 
+use crate::error::*;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     End,
@@ -39,7 +41,7 @@ pub enum TokenKind {
     Equ,
     RightCaret,
     LeftCaret,
-    Pow,
+    Caret,
     Ampersand,
     Not,
     Tilde,
@@ -90,7 +92,7 @@ impl fmt::Display for TokenKind {
             Equ => "=".to_string(),
             RightCaret => ">".to_string(),
             LeftCaret => "<".to_string(),
-            Pow => "^".to_string(),
+            Caret => "^".to_string(),
             Ampersand => "&".to_string(),
             Not => "!".to_string(),
             Tilde => "~".to_string(),
@@ -158,7 +160,7 @@ impl<'a> Tokenizer<'a> {
                     self.position += 2;
                     loop {
                         match self.source.as_bytes()[self.position..] {
-                            [] => error!(S0106, comment_start),
+                            [] => error!(s0106, comment_start),
                             [b'*', b'/', ..] => {
                                 self.position += 2;
                                 break;
@@ -207,29 +209,31 @@ impl<'a> Tokenizer<'a> {
                     break self.emit(ChainFunction);
                 }
                 // Numbers
-                [b'0'..=b'9', ..] | [b'-', b'0'..=b'9', ..] => {
+                [b'0'..=b'9', ..] => {
                     let number_start = self.position;
                     self.position += 1;
                     // TODO(johan): Improve this lexing, it's pretty ordinary and allows all sorts
                     // of invalid stuff
-                    break loop {
+                    loop {
                         match self.source.as_bytes()[self.position..] {
+                            // Range operator
+                            [b'.', b'.', ..] => break,
                             [b'0'..=b'9' | b'.' | b'e' | b'E' | b'-' | b'+', ..] => {
                                 self.position += 1;
                             }
-                            _ => {
-                                let token = &self.source.as_bytes()[number_start..self.position];
-                                if let Some(number) = str::from_utf8(token)
-                                    .ok()
-                                    .and_then(|s| s.parse::<f64>().ok())
-                                {
-                                    break self.emit(Number(number));
-                                } else {
-                                    error!(S0102, self.position, str::from_utf8(token).unwrap());
-                                }
-                            }
+                            _ => break,
                         }
-                    };
+                    }
+
+                    let token = &self.source.as_bytes()[number_start..self.position];
+                    if let Some(number) = str::from_utf8(token)
+                        .ok()
+                        .and_then(|s| s.parse::<f64>().ok())
+                    {
+                        break self.emit(Number(number));
+                    } else {
+                        error!(s0102, self.position, token);
+                    }
                 }
                 // Single character operators
                 [b'.', ..] => {
@@ -322,7 +326,7 @@ impl<'a> Tokenizer<'a> {
                 }
                 [b'^', ..] => {
                     self.position += 1;
-                    break self.emit(Pow);
+                    break self.emit(Caret);
                 }
                 [b'&', ..] => {
                     self.position += 1;
@@ -344,7 +348,7 @@ impl<'a> Tokenizer<'a> {
                     break loop {
                         match self.source.as_bytes()[self.position..] {
                             // End of string missing
-                            [] => error!(S0101, string_start),
+                            [] => error!(s0101, string_start),
                             // Escape sequence
                             [b'\\', escape_char, ..] => {
                                 self.position += 1;
@@ -375,11 +379,11 @@ impl<'a> Tokenizer<'a> {
                                             string.push(character);
                                             self.position += 5;
                                         } else {
-                                            error!(S0104, self.position)
+                                            error!(s0104, self.position)
                                         }
                                     }
                                     // Invalid escape sequence
-                                    c => error!(S0103, self.position, c),
+                                    c => error!(s0103, self.position, c),
                                 }
                             }
                             // Any other char
@@ -418,7 +422,7 @@ impl<'a> Tokenizer<'a> {
                             self.position += value.len() + 1;
                             break self.emit(Name(value));
                         }
-                        None => error!(S0105, self.position),
+                        None => error!(s0105, self.position),
                     }
                 }
                 // Names
@@ -570,8 +574,7 @@ mod tests {
 
     #[test]
     fn numbers() {
-        let mut tokenizer =
-            Tokenizer::new("0 1 0.234 5.678 -0 -1 -0.234 -5.678 0e0 1e1 1e-1 1e+1 -2.234E-2");
+        let mut tokenizer = Tokenizer::new("0 1 0.234 5.678 0e0 1e1 1e-1 1e+1 2.234E-2");
         assert!(matches!(
             tokenizer.next(false).kind,
             TokenKind::Number(n) if (n - 0.0 as f64).abs() < f64::EPSILON
@@ -587,22 +590,6 @@ mod tests {
         assert!(matches!(
             tokenizer.next(false).kind,
             TokenKind::Number(n) if (n - 5.678 as f64).abs() < f64::EPSILON
-        ));
-        assert!(matches!(
-            tokenizer.next(false).kind,
-            TokenKind::Number(n) if (n - -0.0 as f64).abs() < f64::EPSILON
-        ));
-        assert!(matches!(
-            tokenizer.next(false).kind,
-            TokenKind::Number(n) if (n - -1.0 as f64).abs() < f64::EPSILON
-        ));
-        assert!(matches!(
-            tokenizer.next(false).kind,
-            TokenKind::Number(n) if (n - -0.234 as f64).abs() < f64::EPSILON
-        ));
-        assert!(matches!(
-            tokenizer.next(false).kind,
-            TokenKind::Number(n) if (n - -5.678 as f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).kind,
@@ -622,7 +609,7 @@ mod tests {
         ));
         assert!(matches!(
             tokenizer.next(false).kind,
-            TokenKind::Number(n) if (n - -2.234E-2 as f64).abs() < f64::EPSILON
+            TokenKind::Number(n) if (n - 2.234E-2 as f64).abs() < f64::EPSILON
         ));
     }
 }

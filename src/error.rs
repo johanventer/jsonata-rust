@@ -1,101 +1,95 @@
-// Error codes
-//  Sxxxx    - Static errors (compile time)
-//  Txxxx    - Type errors
-//  Dxxxx    - Dynamic errors (evaluate time)
-//   01xx    - Tokenizer
-//   02xx    - Parser
-//   03xx    - Regex parser
-//   04xx    - Function signature parser/evaluator
-//   10xx    - Evaluator
-//   20xx    - Operators
-//   3xxx    - Functions (blocks of 10 for each function)
+//! Defines all the errors that the tokenizer, parser and evaluator can fail with.
+//!
+//! They are separated into a number of categories and identified by a code.
+//!
+//! The general format of the codes is:
+//! - `sxxxx` - Static errors (compile time)
+//! - `txxxx` - Type errors
+//! - `dxxxx` - Dynamic errors (evaluate time)
+//!
+//! The xxxx is a number which indicates where an error occurred, they are defined as:
+//! - `01xx` - Tokenizer
+//! - `02xx` - Parser
+//! - `03xx` - Regex parser
+//! - `04xx` - Function signature parser/evaluator
+//! - `10xx` - Evaluator
+//! - `20xx` - Operators
+//! - `3xxx` - Functions (blocks of 10 for each function)
+use std::str;
 
+use crate::tokenizer::{Token, TokenKind};
+
+/// Convenience macro for panicing on errors.
 #[macro_export]
 macro_rules! error {
-    (S0101, $p:expr) => {
-        panic!(
-            "{}[{}]: String literal must be terminated by a matching quote",
-            stringify!($c),
-            $p
-        )
-    };
-    (S0102, $p:expr, $t:expr) => {
-        panic!("{}[{}]: Number out of range: {}", stringify!($c), $p, $t)
-    };
-    (S0103, $p:expr, $t:expr) => {
-        panic!(
-            "{}[{}]: Unsupported escape sequence: \\{}",
-            stringify!($c),
-            $p,
-            $t
-        )
-    };
-    (S0104, $p:expr) => {
-        panic!(
-            "{}[{}]: The escape sequence \\u must be followed by 4 hex digits",
-            stringify!($c),
-            $p
-        )
-    };
-    (S0105, $p:expr) => {
-        panic!(
-            "{}[{}]: Quoted property name must be terminated with a backquote (`)",
-            stringify!($c),
-            $p
-        )
-    };
-    (S0106, $p:expr) => {
-        panic!("{}[{}]: Comment has no closing tag", stringify!($c), $p)
-    };
-    (S0201, $p:expr, $t:expr) => {
-        panic!("{}[{}]: Syntax error: {}", stringify!($c), $p, $t)
-    };
-    (S0202, $p:expr, $t1:expr, $t2:expr) => {
-        panic!("{}[{}]: Expected {}, got {}", stringify!($c), $p, $t1, $t2)
-    };
-    (S0203, $p:expr, $t:expr) => {
-        panic!(
-            "{}[{}]: Expected {} before end of expression",
-            stringify!($c),
-            $p,
-            $t
-        )
-    };
-    (S0208, $p:expr, $t:expr) => {
-        panic!(
-            "{}[{}]: Parameter {} of function definition must be a variable name (start with $)",
-            stringify!($c),
-            $p,
-            $t
-        )
-    };
-    (S0211, $p:expr, $t:expr) => {
-        panic!(
-            "{}[{}]: The symbol {} cannot be used as a unary operator",
-            stringify!($c),
-            $p,
-            $t
-        )
-    };
-    (S0212, $p:expr) => {
-        panic!(
-            "{}[{}]: The left side of := must be a variable name (start with $)",
-            stringify!($c),
-            $p
-        )
-    };
+    ($c:ident, $p:expr $(, $i:expr )*) => {
+        panic!("Error {} at position {}: {}", stringify!($c), $p, $c($($i),*));
+    }
 }
 
+pub fn s0101() -> &'static str {
+    "String literal must be terminated by a matching quote"
+}
+
+pub fn s0102(v: &[u8]) -> String {
+    format!("Number out of range: {}", str::from_utf8(v).unwrap())
+}
+
+pub fn s0103(v: u8) -> String {
+    format!("Unsupported escape sequence: \\{}", v as char)
+}
+
+pub fn s0104() -> &'static str {
+    "The escape sequence \\u must be followed by 4 hex digits"
+}
+
+pub fn s0105() -> &'static str {
+    "Quoted property name must be terminated with a backquote (`)"
+}
+
+pub fn s0106() -> &'static str {
+    "Comment has no closing tag"
+}
+
+pub fn s0202(t1: &TokenKind, t2: &Token) -> String {
+    format!("Expected `{}`, got `{}`", t1, t2)
+}
+
+pub fn s0203(t: &TokenKind) -> String {
+    format!("Expected `{}` before end of expression", t)
+}
+
+pub fn s0208(t: &str) -> String {
+    format!(
+        "Parameter `{}` of function definition must be a variable name (start with $)",
+        t
+    )
+}
+
+pub fn s0211(t: &Token) -> String {
+    format!("The symbol `{}` cannot be used as a unary operator", t)
+}
+
+pub fn s0212() -> &'static str {
+    "The left side of `:=` must be a variable name (start with $)"
+}
+
+pub fn s0214(t: &'static str) -> String {
+    format!(
+        "The right side of `{}` must be a variable name (start with $)",
+        t
+    )
+}
+
+// TODO:
+//        "S0201": "Syntax error: {{token}}",
 //        "S0204": "Unknown operator: {{token}}",
 //        "S0205": "Unexpected token: {{token}}",
 //        "S0206": "Unknown expression type: {{token}}",
 //        "S0207": "Unexpected end of expression",
-//        "S0208": "",
 //        "S0209": "A predicate cannot follow a grouping expression in a step",
 //        "S0210": "Each step can only have one grouping expression",
-//        "S0211": "",
 //        "S0213": "The literal value {{value}} cannot be used as a step within a path expression",
-//        "S0214": "The right side of {{token}} must be a variable name (start with $)",
 //        "S0215": "A context variable binding must precede any predicates on a step",
 //        "S0216": "A context variable binding must precede the 'order-by' clause on a step",
 //        "S0217": "The object representing the 'parent' cannot be derived from this expression",
