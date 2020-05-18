@@ -1,7 +1,8 @@
-use crate::ast::*;
 use crate::error::*;
-use crate::parser::Parser;
-use crate::tokenizer::{Token, TokenKind};
+
+use super::ast::*;
+use super::tokenizer::{Token, TokenKind};
+use super::Parser;
 
 /// Represents a symbol, which is essentially an enhanced token that performs its own parsing and
 /// creates syntax trees.
@@ -73,13 +74,13 @@ impl Symbol for Token {
          SemiColon => 0,
          Colon => 0,
          Question => 20,
-         Add => 50,
-         Sub => 50,
-         Mul => 60,
-         Div => 60,
-         Mod => 60,
+         Plus => 50,
+         Minus => 50,
+         Asterisk => 60,
+         ForwardSlash => 60,
+         Percent => 60,
          Pipe => 0,
-         Equ => 40,
+         Equal => 40,
          RightCaret => 40,
          LeftCaret => 40,
          Caret => 40,
@@ -100,53 +101,38 @@ impl Symbol for Token {
    fn nud(&self, parser: &mut Parser) -> Box<Node> {
       use TokenKind::*;
       match &self.kind {
-         Null => Box::new(Node::Null(LiteralNode {
-            position: self.position,
-            value: NullValue {},
-         })),
-         Boolean(value) => Box::new(Node::Boolean(LiteralNode {
-            position: self.position,
-            value: *value,
-         })),
-         Str(value) => Box::new(Node::String(LiteralNode {
-            position: self.position,
-            value: value.clone(),
-         })),
-         Number(value) => Box::new(Node::Number(LiteralNode {
-            position: self.position,
-            value: *value,
-         })),
-         Name(value) => Box::new(Node::Name(LiteralNode {
-            position: self.position,
-            value: value.clone(),
-         })),
-         Variable(value) => Box::new(Node::Variable(LiteralNode {
-            position: self.position,
-            value: value.clone(),
-         })),
-         And => Box::new(Node::Name(LiteralNode {
-            position: self.position,
-            value: "and".to_string(),
-         })),
-         Or => Box::new(Node::Name(LiteralNode {
-            position: self.position,
-            value: "or".to_string(),
-         })),
-         In => Box::new(Node::Name(LiteralNode {
-            position: self.position,
-            value: "in".to_string(),
-         })),
-         Sub => Box::new(Node::UnaryMinus(UnaryNode {
+         Null => Box::new(Node::Null(LiteralNode::new(self.position, NullValue {}))),
+         Boolean(value) => Box::new(Node::Boolean(LiteralNode::new(self.position, *value))),
+         Str(value) => Box::new(Node::String(LiteralNode::new(self.position, value.clone()))),
+         Number(value) => Box::new(Node::Number(LiteralNode::new(self.position, *value))),
+         Name(value) => Box::new(Node::Name(LiteralNode::new(self.position, value.clone()))),
+         Variable(value) => Box::new(Node::Variable(LiteralNode::new(
+            self.position,
+            value.clone(),
+         ))),
+         And => Box::new(Node::Name(LiteralNode::new(
+            self.position,
+            "and".to_string(),
+         ))),
+         Or => Box::new(Node::Name(LiteralNode::new(
+            self.position,
+            "or".to_string(),
+         ))),
+         In => Box::new(Node::Name(LiteralNode::new(
+            self.position,
+            "in".to_string(),
+         ))),
+         Minus => Box::new(Node::UnaryMinus(UnaryNode {
             position: self.position,
             expression: parser.expression(70),
          })),
-         Mul => Box::new(Node::Wildcard(EmptyNode {
+         Asterisk => Box::new(Node::Wildcard(EmptyNode {
             position: self.position,
          })),
          DescendantWildcard => Box::new(Node::DescendantWildcard(EmptyNode {
             position: self.position,
          })),
-         Mod => Box::new(Node::Parent(EmptyNode {
+         Percent => Box::new(Node::ParentOp(EmptyNode {
             position: self.position,
          })),
          // Parenthesis - block expression
@@ -227,7 +213,7 @@ impl Symbol for Token {
    }
 
    /// Produce the left denotation for the token
-   fn led(&self, parser: &mut Parser, left: Box<Node>) -> Box<Node> {
+   fn led(&self, parser: &mut Parser, mut left: Box<Node>) -> Box<Node> {
       use TokenKind::*;
       match &self.kind {
          Period => Box::new(Node::PathSeparator(BinaryNode {
@@ -235,32 +221,32 @@ impl Symbol for Token {
             lhs: left,
             rhs: parser.expression(self.lbp()),
          })),
-         Add => Box::new(Node::Add(BinaryNode {
+         Plus => Box::new(Node::Add(BinaryNode {
             position: self.position,
             lhs: left,
             rhs: parser.expression(self.lbp()),
          })),
-         Sub => Box::new(Node::Subtract(BinaryNode {
+         Minus => Box::new(Node::Subtract(BinaryNode {
             position: self.position,
             lhs: left,
             rhs: parser.expression(self.lbp()),
          })),
-         Mul => Box::new(Node::Multiply(BinaryNode {
+         Asterisk => Box::new(Node::Multiply(BinaryNode {
             position: self.position,
             lhs: left,
             rhs: parser.expression(self.lbp()),
          })),
-         Div => Box::new(Node::Divide(BinaryNode {
+         ForwardSlash => Box::new(Node::Divide(BinaryNode {
             position: self.position,
             lhs: left,
             rhs: parser.expression(self.lbp()),
          })),
-         Mod => Box::new(Node::Modulus(BinaryNode {
+         Percent => Box::new(Node::Modulus(BinaryNode {
             position: self.position,
             lhs: left,
             rhs: parser.expression(self.lbp()),
          })),
-         Equ => Box::new(Node::Equal(BinaryNode {
+         Equal => Box::new(Node::Equal(BinaryNode {
             position: self.position,
             lhs: left,
             rhs: parser.expression(self.lbp()),
@@ -486,12 +472,18 @@ impl Symbol for Token {
          LeftBracket => {
             if parser.token().kind == RightBracket {
                // Empty predicate means maintain singleton arrays in the output
-               let mut step = left.as_ref();
+               let mut step = left.as_mut();
                while let Node::ArrayPredicate(pred) = step {
-                  step = &pred.lhs.as_ref();
+                  step = pred.lhs.as_mut();
                }
-               // TODO: Need to specify that we keep singleton arrays for whatever this is indexing
-               //step.keep_array = true;
+
+               match step {
+                  Node::Name(literal) => {
+                     literal.keep_array = true;
+                  },
+                  _ => unreachable!("TODO: You cannot specify a singleton predicate on anything other than Node::Name")
+               }
+
                parser.expect(RightBracket, false);
                left
             } else {

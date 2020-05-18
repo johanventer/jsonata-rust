@@ -25,10 +25,18 @@
 //! 3. Expression parsing ends when the token's precedence is less than the expression's
 //!    precedence.
 //! 4. Productions are returned, which point to other productions forming the AST.
-use crate::ast::Node;
+mod ast;
+mod symbol;
+mod tokenizer;
+
 use crate::error::*;
-use crate::symbol::Symbol;
-use crate::tokenizer::{Token, TokenKind, Tokenizer};
+
+use ast::*;
+use tokenizer::*;
+use symbol::Symbol;
+
+pub use ast::Node;
+pub use tokenizer::{Token, TokenKind};
 
 /// An instance of a parser.
 pub struct Parser<'a> {
@@ -42,7 +50,7 @@ pub struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     /// Create a new parser from a source string slice.
-    pub fn new(source: &'a str) -> Self {
+    fn new(source: &'a str) -> Self {
         let mut tokenizer = Tokenizer::new(source);
         Self {
             token: tokenizer.next(false),
@@ -51,15 +59,18 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn token(&self) -> &Token {
+    /// Obtain a reference to the current token.
+    fn token(&self) -> &Token {
         &self.token
     }
 
-    pub fn next(&mut self, infix: bool) {
+    /// Advance the tokenizer.
+    fn next(&mut self, infix: bool) {
         self.token = self.tokenizer.next(infix);
     }
 
-    pub fn expect(&mut self, expected: TokenKind, infix: bool) {
+    /// Ensure that the current token is an expected type, and then advance the tokenzier.
+    fn expect(&mut self, expected: TokenKind, infix: bool) {
         if self.token.kind == TokenKind::End {
             error!(s0203, self.token.position, &expected)
         }
@@ -71,7 +82,8 @@ impl<'a> Parser<'a> {
         self.next(infix);
     }
 
-    pub fn expression(&mut self, rbp: u32) -> Box<Node> {
+    /// Parse an expression, with a specified right binding power.
+    fn expression(&mut self, rbp: u32) -> Box<Node> {
         self.depth += 1;
         // println!(
         //     "Enter {} ###################################################",
@@ -111,11 +123,173 @@ impl<'a> Parser<'a> {
 
         left
     }
+
+    fn process_ast(&self, ast: Box<Node>) -> Box<Node> {
+        use Node::*;
+        match *ast {
+            // Binary nodes
+            PathSeparator(node) => {
+                let result: Box<Node>;
+                let lstep = self.process_ast(node.lhs);
+
+                if let Path(_) = lstep.as_ref() {
+                    result = lstep;
+                } else if let Parent(node) = lstep.as_ref() {
+                    result = Box::new(Path(PathNode {
+                        steps: vec![],
+                        seeking_parent: vec![node.slot.clone()],
+                    }));
+                } else {
+                    result = Box::new(Path(PathNode::new()));
+                }
+
+                let rest = self.process_ast(node.rhs);
+                
+
+                result
+            },
+            _ => ast
+            // ArrayPredicate(node) => {
+
+            // },
+            // // TODO: Group-by
+            // OrderBy(node) => {
+
+            // },
+            // Assignment(node) => {
+
+            // },
+            // FocusVariableBind(node) => {
+
+            // },
+            // IndexVariableBind(node) => {
+
+            // },
+            // Chain(node) => {
+
+            // },
+            // Add(node) => {
+
+            // },
+            // Subtract(node) => {
+
+            // },
+            // Multiply(node) => {
+
+            // },
+            // Divide(node) => {
+
+            // },
+            // Modulus(node) => {
+
+            // },
+            // Equal(node) => {
+
+            // },
+            // LessThan(node) => {
+
+            // },
+            // GreaterThan(node) => {
+
+            // },
+            // NotEqual(node) => {
+
+            // },
+            // LessThanEqual(node) => {
+
+            // },
+            // GreaterThanEqual(node) => {
+
+            // },
+            // Concat(node) => {
+
+            // },
+            // And(node) => {
+
+            // },
+            // Or(node) => {
+
+            // },
+            // In(node) => {
+
+            // },
+            // Range(node) => {
+
+            // },
+            // // Unary nodes
+            // Array(node) => {
+
+            // },
+            // ObjectPrefix(node) => {
+
+            // },
+            // UnaryMinus(node) => {
+
+            // },
+            // // Functions
+            // FunctionCall(node) | PartialFunctionCall(node) => {
+
+            // },
+            // LambdaFunction(node) => {
+
+            // },
+            // // Objects
+            // Transform(node) => {
+
+            // },
+            // // Paths
+            // Name(node) => {
+
+            // },
+            // Parent(node) => {
+
+            // },
+            // Wildcard(node) => {
+
+            // },
+            // DescendantWildcard(node) => {
+
+            // },
+            // // Literals
+            // Null(node) => {
+
+            // },
+            // Boolean(node) => {
+
+            // },
+            // String(node) => {
+
+            // },
+            // Number(node) => {
+
+            // },
+            // Variable => {
+
+            // },
+            // // Other operators
+            // Ternary(node) => {
+
+            // },
+            // Block(node) => {
+
+            // },
+
+            
+
+
+        }
+        
+    }
+
+    fn parse(source: &'a str) -> Box<Node> {
+        let mut parser = Self::new(source);
+        let ast = parser.expression(0);
+        parser.process_ast(ast)
+    }
 }
 
 pub fn parse(source: &str) -> Box<Node> {
-    let mut parser = Parser::new(source);
-    parser.expression(0)
+    Parser::parse(source)
 }
 
 #[cfg(test)]
@@ -321,6 +495,7 @@ mod tests {
     "#
     )]
     fn parser_tests(source: &str) {
-        parse(source);
+        Parser::parse(source);
     }
 }
+

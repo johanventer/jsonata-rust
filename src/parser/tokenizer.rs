@@ -32,13 +32,13 @@ pub enum TokenKind {
     SemiColon,
     Colon,
     Question,
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
+    Plus,
+    Minus,
+    Asterisk,
+    ForwardSlash,
+    Percent,
     Pipe,
-    Equ,
+    Equal,
     RightCaret,
     LeftCaret,
     Caret,
@@ -83,13 +83,13 @@ impl fmt::Display for TokenKind {
             SemiColon => ";".to_string(),
             Colon => ":".to_string(),
             Question => "?".to_string(),
-            Add => "+".to_string(),
-            Sub => "-".to_string(),
-            Mul => "*".to_string(),
-            Div => "/".to_string(),
-            Mod => "%".to_string(),
+            Plus => "+".to_string(),
+            Minus => "-".to_string(),
+            Asterisk => "*".to_string(),
+            ForwardSlash => "/".to_string(),
+            Percent => "%".to_string(),
             Pipe => "|".to_string(),
-            Equ => "=".to_string(),
+            Equal => "=".to_string(),
             RightCaret => ">".to_string(),
             LeftCaret => "<".to_string(),
             Caret => "^".to_string(),
@@ -290,23 +290,23 @@ impl<'a> Tokenizer<'a> {
                 }
                 [b'+', ..] => {
                     self.position += 1;
-                    break self.emit(Add);
+                    break self.emit(Plus);
                 }
                 [b'-', ..] => {
                     self.position += 1;
-                    break self.emit(Sub);
+                    break self.emit(Minus);
                 }
                 [b'*', ..] => {
                     self.position += 1;
-                    break self.emit(Mul);
+                    break self.emit(Asterisk);
                 }
                 [b'/', ..] => {
                     self.position += 1;
-                    break self.emit(Div);
+                    break self.emit(ForwardSlash);
                 }
                 [b'%', ..] => {
                     self.position += 1;
-                    break self.emit(Mod);
+                    break self.emit(Percent);
                 }
                 [b'|', ..] => {
                     self.position += 1;
@@ -314,7 +314,7 @@ impl<'a> Tokenizer<'a> {
                 }
                 [b'=', ..] => {
                     self.position += 1;
-                    break self.emit(Equ);
+                    break self.emit(Equal);
                 }
                 [b'<', ..] => {
                     self.position += 1;
@@ -487,15 +487,15 @@ mod tests {
         let mut tokenizer = Tokenizer::new("  @   # +  <=>= /* This is a comment */ ? -*");
         assert!(matches!(tokenizer.next(false).kind, TokenKind::At));
         assert!(matches!(tokenizer.next(false).kind, TokenKind::Hash));
-        assert!(matches!(tokenizer.next(false).kind, TokenKind::Add));
+        assert!(matches!(tokenizer.next(false).kind, TokenKind::Plus));
         assert!(matches!(tokenizer.next(false).kind, TokenKind::LessEqual));
         assert!(matches!(
             tokenizer.next(false).kind,
             TokenKind::GreaterEqual
         ));
         assert!(matches!(tokenizer.next(false).kind, TokenKind::Question));
-        assert!(matches!(tokenizer.next(false).kind, TokenKind::Sub));
-        assert!(matches!(tokenizer.next(false).kind, TokenKind::Mul));
+        assert!(matches!(tokenizer.next(false).kind, TokenKind::Minus));
+        assert!(matches!(tokenizer.next(false).kind, TokenKind::Asterisk));
     }
 
     #[test]

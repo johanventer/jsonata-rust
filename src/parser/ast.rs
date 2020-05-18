@@ -13,7 +13,7 @@ pub trait NodeMethods {
 /// An AST node.
 ///
 /// Each node's associated value contains all of the pertinent AST information required for it.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub enum Node {
     Null(LiteralNode<NullValue, "value">),
     Boolean(LiteralNode<bool, "value">),
@@ -40,7 +40,7 @@ pub enum Node {
     Chain(BinaryNode<"~>">),
     Wildcard(EmptyNode<"*">),
     DescendantWildcard(EmptyNode<"**">),
-    Parent(EmptyNode<"%">),
+    ParentOp(EmptyNode<"%">),
     FunctionCall(FunctionCallNode<"function">),
     PartialFunctionCall(FunctionCallNode<"partial">),
     PartialFunctionArg(EmptyNode<"?">),
@@ -59,6 +59,10 @@ pub enum Node {
     ObjectPrefix(ObjectPrefixNode),
     ObjectInfix(ObjectInfixNode),
     ArrayPredicate(BinaryNode<"[">),
+
+    // Nodes created by last-stage AST processing
+    Path(PathNode),
+    Parent(ParentNode),
 }
 
 /// A helper macro to forward calls through to the contained nodes, so we only have one big
@@ -91,7 +95,7 @@ macro_rules! delegate {
             Node::Chain(n) => n.$f(),
             Node::Wildcard(n) => n.$f(),
             Node::DescendantWildcard(n) => n.$f(),
-            Node::Parent(n) => n.$f(),
+            Node::ParentOp(n) => n.$f(),
             Node::FunctionCall(n) => n.$f(),
             Node::PartialFunctionCall(n) => n.$f(),
             Node::PartialFunctionArg(n) => n.$f(),
@@ -110,6 +114,8 @@ macro_rules! delegate {
             Node::ObjectPrefix(n) => n.$f(),
             Node::ObjectInfix(n) => n.$f(),
             Node::ArrayPredicate(n) => n.$f(),
+            Node::Path(n) => n.$f(),
+            Node::Parent(n) => n.$f(),
         }
     };
 }
@@ -131,7 +137,7 @@ impl NodeMethods for Node {
 }
 
 /// A marker struct for a `null` value (in the Javascript sense of `null`).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct NullValue {}
 
 impl fmt::Display for NullValue {
@@ -147,13 +153,29 @@ impl From<NullValue> for JsonValue {
 }
 
 /// A literal node, containing only a literal value.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct LiteralNode<T, const KIND: &'static str>
 where
     T: Into<JsonValue> + Clone + fmt::Display,
 {
     pub position: usize,
     pub value: T,
+    /// Specifies that this literal node is a path step which should be kept as a singleton array
+    /// in output. Note this is only valid for Node::Name.
+    pub keep_array: bool,
+}
+
+impl<T, const TYPE: &'static str> LiteralNode<T, TYPE>
+where
+    T: Into<JsonValue> + Clone + fmt::Display,
+{
+    pub fn new(position: usize, value: T) -> Self {
+        Self {
+            position,
+            value,
+            keep_array: false,
+        }
+    }
 }
 
 impl<T, const TYPE: &'static str> NodeMethods for LiteralNode<T, TYPE>
@@ -179,7 +201,7 @@ where
 
 /// A unary node has only a value and an expression. It represents things like unary minus, i.e
 /// `-1`.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct UnaryNode<const VALUE: &'static str> {
     pub position: usize,
     pub expression: Box<Node>,
@@ -205,7 +227,7 @@ impl<const VALUE: &'static str> NodeMethods for UnaryNode<VALUE> {
 }
 
 /// A binary node, with a left hand side and a right hand side.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct BinaryNode<const VALUE: &'static str> {
     pub position: usize,
     pub lhs: Box<Node>,
@@ -233,8 +255,8 @@ impl<const VALUE: &'static str> NodeMethods for BinaryNode<VALUE> {
 }
 
 /// An empty node is used for nodes that don't have any additional information. Mostly this is
-/// useful for the path navigation operators like `**`, `*` and `%`.
-#[derive(Debug, PartialEq)]
+/// useful for the path navigation operators like `**`, `*`.
+#[derive(Debug)]
 pub struct EmptyNode<const TYPE: &'static str> {
     pub position: usize,
 }
@@ -257,7 +279,7 @@ impl<const TYPE: &'static str> NodeMethods for EmptyNode<TYPE> {
 }
 
 /// A function call, which has a procedure to call and a vector of arguments.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct FunctionCallNode<const TYPE: &'static str> {
     pub position: usize,
     pub procedure: Box<Node>,
@@ -284,7 +306,7 @@ impl<const TYPE: &'static str> NodeMethods for FunctionCallNode<TYPE> {
 }
 
 /// The definition of a lambda function, including it's arguments and body.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct LambdaNode {
     pub position: usize,
     pub procedure: Box<Node>,
@@ -314,7 +336,7 @@ impl NodeMethods for LambdaNode {
 
 /// An expressions node contains a vector of expressions, for things like blocks and array
 /// definitions.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct ExpressionsNode<const TYPE: &'static str> {
     pub position: usize,
     pub expressions: Vec<Node>,
@@ -339,7 +361,7 @@ impl<const TYPE: &'static str> NodeMethods for ExpressionsNode<TYPE> {
 }
 
 /// The order-by operator, which specifies sorting for arrays by one or more terms.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct OrderByNode {
     pub position: usize,
     pub lhs: Box<Node>,
@@ -367,7 +389,7 @@ impl NodeMethods for OrderByNode {
 }
 
 /// A term of the order-by operator.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct OrderByTermNode {
     pub position: usize,
     pub expression: Box<Node>,
@@ -393,7 +415,7 @@ impl NodeMethods for OrderByTermNode {
 }
 
 /// The ternary condition node, i.e `? :`.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct TernaryNode {
     pub position: usize,
     pub condition: Box<Node>,
@@ -422,7 +444,7 @@ impl NodeMethods for TernaryNode {
 }
 
 /// The object transform node, for the update/delete object transformers.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct TransformNode {
     pub position: usize,
     pub pattern: Box<Node>,
@@ -451,7 +473,7 @@ impl NodeMethods for TransformNode {
 }
 
 /// The prefix variant of an object definition.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct ObjectPrefixNode {
     pub position: usize,
     pub lhs: Vec<(Box<Node>, Box<Node>)>,
@@ -476,7 +498,7 @@ impl NodeMethods for ObjectPrefixNode {
 }
 
 /// The infix variant of an object definition.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct ObjectInfixNode {
     pub position: usize,
     pub lhs: Box<Node>,
@@ -502,3 +524,71 @@ impl NodeMethods for ObjectInfixNode {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Slot {
+    label: String,
+    level: u32,
+    index: u32,
+}
+
+#[derive(Debug)]
+pub struct ParentNode {
+    pub position: usize,
+    pub slot: Slot,
+}
+
+impl NodeMethods for ParentNode {
+    fn get_position(&self) -> usize {
+        self.position
+    }
+
+    fn get_value(&self) -> String {
+        // TODO: This should probably return the slot?
+        "%".to_string()
+    }
+
+    fn to_json(&self) -> JsonValue {
+        object! {
+            type: "%",
+            position: self.position,
+            // TODO: slot: self.slot.to_json()
+        }
+    }
+}
+
+/// An object path
+#[derive(Debug)]
+pub struct PathNode {
+    pub steps: Vec<Node>,
+    pub seeking_parent: Vec<Slot>,
+}
+
+impl PathNode {
+    pub fn new() -> Self {
+        Self {
+            steps: vec![],
+            seeking_parent: vec![],
+        }
+    }
+}
+
+impl NodeMethods for PathNode {
+    fn get_position(&self) -> usize {
+        // TODO - maybe this should return the position of the first step?
+        0
+    }
+
+    fn get_value(&self) -> String {
+        // TODO - maybe this should return a concatenated version of the path steps?
+        "".to_string()
+    }
+
+    fn to_json(&self) -> JsonValue {
+        object! {
+            type: "path",
+            position: self.get_position(),
+            steps: self.steps.iter().map(|step| step.to_json()).collect::<Vec<_>>(),
+            // TODO: seeking_parent: self.seeking_parent.
+        }
+    }
+}

@@ -9,12 +9,11 @@ use chrono::{DateTime, Utc};
 use json::JsonValue;
 use std::collections::HashMap;
 
-mod ast;
 #[macro_use]
 mod error;
 mod parser;
-mod symbol;
-mod tokenizer;
+
+use parser::Node;
 
 /// A binding in a stack frame
 pub enum Binding<'a> {
@@ -94,12 +93,11 @@ impl<'a> Frame<'a> {
 pub struct JsonAta<'a> {
     expr: String,
     environment: Frame<'a>,
+    ast: Box<Node>,
 }
 
 impl<'a> JsonAta<'a> {
     pub fn new(expr: &'a str) -> Self {
-        // Parse the AST
-
         let mut environment = Frame::new();
 
         // TODO: Apply statics to the environment
@@ -110,10 +108,12 @@ impl<'a> JsonAta<'a> {
         Self {
             expr: expr.to_string(),
             environment,
+            ast: parser::parse(expr),
         }
     }
 
     pub fn evaluate(&self, input: &str, bindings: Vec<Binding>) -> JsonValue {
+        parser::parse(input);
         json::from("TODO")
     }
 
@@ -121,12 +121,8 @@ impl<'a> JsonAta<'a> {
         self.environment.bind(name, value);
     }
 
-    pub fn ast() {
-        // TODO
-    }
-
-    pub fn errors() {
-        // TODO
+    pub fn ast(&self) -> &Node {
+        &self.ast
     }
 }
 
