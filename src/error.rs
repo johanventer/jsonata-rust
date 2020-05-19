@@ -74,6 +74,13 @@ pub fn s0212() -> &'static str {
     "The left side of `:=` must be a variable name (start with $)"
 }
 
+pub fn s0213(t: &str) -> String {
+    format!(
+        "The literal value `{}` cannot be used as a step within a path expression",
+        t
+    )
+}
+
 pub fn s0214(t: &'static str) -> String {
     format!(
         "The right side of `{}` must be a variable name (start with $)",
@@ -89,7 +96,6 @@ pub fn s0214(t: &'static str) -> String {
 //        "S0207": "Unexpected end of expression",
 //        "S0209": "A predicate cannot follow a grouping expression in a step",
 //        "S0210": "Each step can only have one grouping expression",
-//        "S0213": "The literal value {{value}} cannot be used as a step within a path expression",
 //        "S0215": "A context variable binding must precede any predicates on a step",
 //        "S0216": "A context variable binding must precede the 'order-by' clause on a step",
 //        "S0217": "The object representing the 'parent' cannot be derived from this expression",

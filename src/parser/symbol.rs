@@ -103,7 +103,7 @@ impl Symbol for Token {
       match &self.kind {
          Null => Box::new(Node::Null(LiteralNode::new(self.position, NullValue {}))),
          Boolean(value) => Box::new(Node::Boolean(LiteralNode::new(self.position, *value))),
-         Str(value) => Box::new(Node::String(LiteralNode::new(self.position, value.clone()))),
+         Str(value) => Box::new(Node::Str(LiteralNode::new(self.position, value.clone()))),
          Number(value) => Box::new(Node::Number(LiteralNode::new(self.position, *value))),
          Name(value) => Box::new(Node::Name(LiteralNode::new(self.position, value.clone()))),
          Variable(value) => Box::new(Node::Variable(LiteralNode::new(
@@ -148,10 +148,10 @@ impl Symbol for Token {
             }
             parser.expect(TokenKind::RightParen, true);
 
-            Box::new(Node::Block(ExpressionsNode {
-               position: self.position,
+            Box::new(Node::Block(ExpressionsNode::new(
+               self.position,
                expressions,
-            }))
+            )))
          }
          // Array constructor
          LeftBracket => {
@@ -176,10 +176,10 @@ impl Symbol for Token {
                }
             }
             parser.expect(TokenKind::RightBracket, true);
-            Box::new(Node::Array(ExpressionsNode {
-               position: self.position,
+            Box::new(Node::Array(ExpressionsNode::new(
+               self.position,
                expressions,
-            }))
+            )))
          }
          // Object - unary prefix form
          LeftBrace => {

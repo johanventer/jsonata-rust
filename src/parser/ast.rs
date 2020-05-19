@@ -17,7 +17,7 @@ pub trait NodeMethods {
 pub enum Node {
     Null(LiteralNode<NullValue, "value">),
     Boolean(LiteralNode<bool, "value">),
-    String(LiteralNode<String, "string">),
+    Str(LiteralNode<String, "string">),
     Number(LiteralNode<f64, "number">),
     Name(LiteralNode<String, "name">),
     Variable(LiteralNode<String, "variable">),
@@ -46,8 +46,8 @@ pub enum Node {
     PartialFunctionArg(EmptyNode<"?">),
     LambdaFunction(LambdaNode),
     UnaryMinus(UnaryNode<"-">),
-    Block(ExpressionsNode<"block">),
-    Array(ExpressionsNode<"unary">),
+    Block(ExpressionsNode<"block", "(">),
+    Array(ExpressionsNode<"unary", "[">),
     Range(BinaryNode<"..">),
     Assignment(BinaryNode<":=">),
     OrderBy(OrderByNode),
@@ -72,7 +72,7 @@ macro_rules! delegate {
         match $s {
             Node::Null(n) => n.$f(),
             Node::Boolean(n) => n.$f(),
-            Node::String(n) => n.$f(),
+            Node::Str(n) => n.$f(),
             Node::Number(n) => n.$f(),
             Node::Name(n) => n.$f(),
             Node::Variable(n) => n.$f(),
@@ -194,7 +194,8 @@ where
         object! {
             type: TYPE,
             position: self.position,
-            value: self.value.clone().into()
+            value: self.value.clone().into(),
+            keep_array: self.keep_array
         }
     }
 }
@@ -337,25 +338,42 @@ impl NodeMethods for LambdaNode {
 /// An expressions node contains a vector of expressions, for things like blocks and array
 /// definitions.
 #[derive(Debug)]
-pub struct ExpressionsNode<const TYPE: &'static str> {
+pub struct ExpressionsNode<const TYPE: &'static str, const VALUE: &'static str> {
     pub position: usize,
     pub expressions: Vec<Node>,
+
+    /// Notates that this node is a path contructor, used in Node::Array
+    pub consarray: bool,
 }
 
-impl<const TYPE: &'static str> NodeMethods for ExpressionsNode<TYPE> {
+impl<const TYPE: &'static str, const VALUE: &'static str> ExpressionsNode<TYPE, VALUE> {
+    pub fn new(position: usize, expressions: Vec<Node>) -> Self {
+        Self {
+            position,
+            expressions,
+            consarray: false,
+        }
+    }
+}
+
+impl<const TYPE: &'static str, const VALUE: &'static str> NodeMethods
+    for ExpressionsNode<TYPE, VALUE>
+{
     fn get_position(&self) -> usize {
         self.position
     }
 
     fn get_value(&self) -> String {
-        TYPE.to_string()
+        VALUE.to_string()
     }
 
     fn to_json(&self) -> JsonValue {
         object! {
             type: TYPE,
+            value: VALUE,
             position: self.position,
             expressions: self.expressions.iter().map(|expr| expr.to_json()).collect::<Vec<_>>(),
+            consarray: self.consarray
         }
     }
 }
@@ -559,36 +577,32 @@ impl NodeMethods for ParentNode {
 /// An object path
 #[derive(Debug)]
 pub struct PathNode {
-    pub steps: Vec<Node>,
+    pub steps: Vec<Box<Node>>,
     pub seeking_parent: Vec<Slot>,
-}
-
-impl PathNode {
-    pub fn new() -> Self {
-        Self {
-            steps: vec![],
-            seeking_parent: vec![],
-        }
-    }
+    pub keep_singleton_array: bool,
 }
 
 impl NodeMethods for PathNode {
     fn get_position(&self) -> usize {
-        // TODO - maybe this should return the position of the first step?
+        // No-op
         0
     }
 
     fn get_value(&self) -> String {
-        // TODO - maybe this should return a concatenated version of the path steps?
+        // No-op
         "".to_string()
     }
 
     fn to_json(&self) -> JsonValue {
         object! {
             type: "path",
-            position: self.get_position(),
             steps: self.steps.iter().map(|step| step.to_json()).collect::<Vec<_>>(),
-            // TODO: seeking_parent: self.seeking_parent.
+            // seeking_parent: self.seeking_parent.iter().map(|p| object!{
+            //     label: p.label.clone(),
+            //     level: p.level,
+            //     index: p.index
+            // }).collect::<Vec<_>>(),
+            // keep_singleton_array: self.keep_singleton_array
         }
     }
 }
