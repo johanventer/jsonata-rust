@@ -53,8 +53,8 @@ impl<'a> Parser<'a> {
     fn parse(source: &'a str) -> Box<Node> {
         let mut parser = Self::new(source);
         let ast = parser.expression(0);
-        ast
-        // parser.process_ast(&ast)
+        //ast
+        parser.process_ast(ast)
     }
 
     /// Create a new parser from a source string slice.
@@ -132,282 +132,245 @@ impl<'a> Parser<'a> {
         left
     }
 
-    // fn process_ast(&self, ast: &Box<Node>) -> Box<Node> {
-    //     use Node::*;
-    //     match &**ast {
-    //         PathSeparator(node) => {
-    //             let mut result: Box<Node>;
-    //             let lhs = self.process_ast(&node.lhs);
+    fn process_ast(&self, ast: Box<Node>) -> Box<Node> {
+        use Node::*;
 
-    //             if let Path(_) = lhs.as_ref() {
-    //                 // Left hand side is a Path, so let's start with that
-    //                 result = lhs;
-    //             } else if let Parent(node) = lhs.as_ref() {
-    //                 // Let hand side is a parent, so we will be looking for a parent
-    //                 result = Box::new(Path(PathNode {
-    //                     steps: vec![],
-    //                     seeking_parent: vec![node.slot.clone()],
-    //                     keep_singleton_array: false
-    //                 }));
-    //             } else {
-    //                 // Otherwise we are creating a new path, where the left hand side will be the
-    //                 // first step
-    //                 result = Box::new(Path(PathNode {
-    //                     steps: vec![lhs],
-    //                     seeking_parent: vec![],
-    //                     keep_singleton_array: false
-    //                 }));
-    //             }
+        match *ast {
+            PathSeparator(node) => {
+                let mut result: Box<Node>;
+                let lhs = self.process_ast(node.lhs);
 
-    //             let mut rhs = self.process_ast(&node.rhs);
-    //             /*
-    //              TODO: This needs implementing
-    //                         if (rest.type === 'function' &&
-    //                             rest.procedure.type === 'path' &&
-    //                             rest.procedure.steps.length === 1 &&
-    //                             rest.procedure.steps[0].type === 'name' &&
-    //                             result.steps[result.steps.length - 1].type === 'function') {
-    //                             // next function in chain of functions - will override a thenable
-    //                             result.steps[result.steps.length - 1].nextFunction = rest.procedure.steps[0].value;
-    //                         }
-    //             */
-    //             if let Path(result) = result.as_mut() {
-    //                 if let Path(node) = rhs.as_mut() {
-    //                     // Right hand side is a path, so it must be merged with our result
-    //                         result.steps.append(&mut node.steps);
-    //                 } else {
-    //                     /*
-    //                     TODO: Figure out what predicate and stages are valid for
-    //                     if(typeof rest.predicate !== 'undefined') {
-    //                         rest.stages = rest.predicate;
-    //                         delete rest.predicate;
-    //                     }
-    //                     */
-    //                     result.steps.push(rhs);
-    //                 }
+                if let Path(_) = *lhs {
+                    // Left hand side is a Path, so let's start with that
+                    result = lhs;
+                } else if let Parent(node) = *lhs {
+                    // Let hand side is a parent, so we will be looking for a parent
+                    result = Box::new(Path(PathNode {
+                        steps: vec![],
+                        seeking_parent: vec![node.slot],
+                        keep_singleton_array: false,
+                    }));
+                } else {
+                    // Otherwise we are creating a new path, where the left hand side will be the
+                    // first step
+                    result = Box::new(Path(PathNode {
+                        steps: vec![lhs],
+                        seeking_parent: vec![],
+                        keep_singleton_array: false,
+                    }));
+                }
 
-    //                 for step in &mut result.steps {
-    //                     let mut replace = false;
-    //                     match step.as_ref() {
-    //                         // Don't allow steps to be numbers, null, or boolean values
-    //                         Number(node) => error!(s0213, node.get_position(), &node.get_value()),
-    //                         Null(node)  => error!(s0213, node.get_position(), &node.get_value()),
-    //                         Boolean(node) => error!(s0213, node.get_position(), &node.get_value()),
+                let mut rhs = self.process_ast(node.rhs);
+                /*
+                 TODO: This needs implementing
+                            if (rest.type === 'function' &&
+                                rest.procedure.type === 'path' &&
+                                rest.procedure.steps.length === 1 &&
+                                rest.procedure.steps[0].type === 'name' &&
+                                result.steps[result.steps.length - 1].type === 'function') {
+                                // next function in chain of functions - will override a thenable
+                                result.steps[result.steps.length - 1].nextFunction = rest.procedure.steps[0].value;
+                            }
+                */
+                if let Path(result) = result.as_mut() {
+                    if let Path(node) = rhs.as_mut() {
+                        // Right hand side is a path, so it must be merged with our result
+                        result.steps.append(&mut node.steps);
+                    } else {
+                        /*
+                        TODO: Figure out what predicate and stages are valid for
+                        if(typeof rest.predicate !== 'undefined') {
+                            rest.stages = rest.predicate;
+                            delete rest.predicate;
+                        }
+                        */
+                        result.steps.push(rhs);
+                    }
 
-    //                         // Any steps within a path that are string literals should be changed to names
-    //                         Str(node) => replace = true,
+                    for step in &mut result.steps {
+                        let mut replace = false;
+                        match step.as_ref() {
+                            // Don't allow steps to be numbers, null, or boolean values
+                            Number(node) => error!(s0213, node.get_position(), &node.get_value()),
+                            Null(node) => error!(s0213, node.get_position(), &node.get_value()),
+                            Boolean(node) => error!(s0213, node.get_position(), &node.get_value()),
 
-    //                         _ => ()
-    //                     }
-    //                     if replace {
-    //                         *step = Box::new(Name(LiteralNode::new(step.get_position(), step.get_value())));
-    //                     }
-    //                 }
-    //                 // Any step that signal keeping a singleton array, should be flagged on the path
-    //                 if result.steps.iter().any(|step|
-    //                     match step.as_ref() {
-    //                         Name(node) => node.keep_array,
-    //                         _ => false
-    //                 }) {
-    //                     result.keep_singleton_array = true;
-    //                 }
+                            // Any steps within a path that are string literals should be changed to names
+                            Str(node) => replace = true,
 
-    //                 // If first step is a path constructor, flag it for special handling
-    //                 if let Some(Array(node)) = result.steps.first_mut().map(|b| b.as_mut()) {
-    //                     node.consarray = true;
-    //                 }
-    //                 // If last step is a path constructor, flag it for special handling
-    //                 if let Some(Array(node)) = result.steps.last_mut().map(|b| b.as_mut()) {
-    //                      node.consarray = true;
-    //                 }
+                            _ => (),
+                        }
+                        if replace {
+                            *step = Box::new(Name(LiteralNode::new(
+                                step.get_position(),
+                                step.get_value(),
+                            )));
+                        }
+                    }
+                    // Any step that signal keeping a singleton array, should be flagged on the path
+                    if result.steps.iter().any(|step| match step.as_ref() {
+                        Name(node) => node.keep_array,
+                        _ => false,
+                    }) {
+                        result.keep_singleton_array = true;
+                    }
 
-    //                 self.resolve_ancestry(result);
-    //             } else {
-    //                 // We know that result is a path as we constructed it above. TODO: What's
-    //                 // the idiomatic way in Rust to assert we know what we're doing here?
-    //                 unreachable!("`node` should definitely be a path here")
-    //             }
+                    // If first step is a path constructor, flag it for special handling
+                    if let Some(Array(node)) = result.steps.first_mut().map(|b| b.as_mut()) {
+                        node.consarray = true;
+                    }
+                    // If last step is a path constructor, flag it for special handling
+                    if let Some(Array(node)) = result.steps.last_mut().map(|b| b.as_mut()) {
+                        node.consarray = true;
+                    }
 
-    //             result
-    //         },
-    //         Name(node) => {
-    //             Box::new(Path(PathNode {
-    //                 steps: vec![Box::new(*ast.clone())],
-    //                 seeking_parent: vec![],
-    //                 keep_singleton_array: node.keep_array
-    //             }))
-    //         },
-    //         // Predicated step:
-    //         //  Left hand side is a step or a predicated step
-    //         //  Right hand side is the predicate expression
-    //         // ArrayPredicate(node) =>  {
-    //         //     let mut result = self.process_ast(node.lhs);
-    //         //     let mut step = &result;
-    //         //     let mut is_stages = false;
+                    self.resolve_ancestry(result);
+                } else {
+                    // We know that result is a path as we constructed it above. TODO: What's
+                    // the idiomatic way in Rust to assert we know what we're doing here?
+                    unreachable!("`node` should definitely be a Path here")
+                }
 
-    // /*
-    //                          // predicated step
-    //                         // LHS is a step or a predicated step
-    //                         // RHS is the predicate expr
-    //                         result = processAST(expr.lhs);
-    //                         var step = result;
-    //                         var type = 'predicate';
-    //                         if (result.type === 'path') {
-    //                             step = result.steps[result.steps.length - 1];
-    //                             type = 'stages';
-    //                         }
-    //                         if (typeof step.group !== 'undefined') {
-    //                             throw {
-    //                                 code: "S0209",
-    //                                 stack: (new Error()).stack,
-    //                                 position: expr.position
-    //                             };
-    //                         }
-    //                         if (typeof step[type] === 'undefined') {
-    //                             step[type] = [];
-    //                         }
-    //                         var predicate = processAST(expr.rhs);
-    //                         if(typeof predicate.seekingParent !== 'undefined') {
-    //                             predicate.seekingParent.forEach(slot => {
-    //                                 if(slot.level === 1) {
-    //                                     seekParent(step, slot);
-    //                                 } else {
-    //                                     slot.level--;
-    //                                 }
-    //                             });
-    //                             pushAncestry(step, predicate);
-    //                         }
-    //                         step[type].push({type: 'filter', expr: predicate, position: expr.position});
-    //                         break;
-    // // */
-    //         // },
-    //         _ => Box::new(*ast.clone())
+                result
+            }
+            // Wrap Name nodes in a Path node
+            Name(node) => Box::new(Path(PathNode {
+                steps: vec![Box::new(Name(LiteralNode::new(
+                    node.get_position(),
+                    node.get_value(),
+                )))],
+                seeking_parent: vec![],
+                keep_singleton_array: node.keep_array,
+            })),
+            // Array constructor - process each node
+            Array(node) => {
+                let mut expressions = Vec::new();
+                let position = node.get_position();
+                for expr in node.expressions {
+                    let expr = self.process_ast(expr);
+                    //pushAncestry(result, value);
+                    expressions.push(expr);
+                }
+                Box::new(Array(ExpressionsNode {
+                    position,
+                    expressions,
+                    consarray: node.consarray,
+                }))
+            }
+            // Block (array of expressions) - process each node
+            Block(node) => {
+                let mut expressions = Vec::new();
+                let mut consarray = false;
+                let position = node.get_position();
+                for expr in node.expressions {
+                    let expr = self.process_ast(expr);
+                    match *expr {
+                        Array(ref node) => {
+                            if node.consarray {
+                                consarray = true;
+                            }
+                        }
+                        Path(ref node) => {
+                            if !node.steps.is_empty() {
+                                if let Array(ref node) = *node.steps[0] {
+                                    if node.consarray {
+                                        consarray = true
+                                    }
+                                }
+                            }
+                        }
+                        _ => (),
+                    }
+                    // pushAncestry(result, value)
+                    expressions.push(expr);
+                }
+                Box::new(Block(ExpressionsNode {
+                    position,
+                    expressions,
+                    consarray,
+                }))
+            }
+            Transform(node) => {
+                let position = node.get_position();
+                let pattern = self.process_ast(node.pattern);
+                let update = self.process_ast(node.update);
+                let delete = match node.delete {
+                    Some(node) => Some(self.process_ast(node)),
+                    None => None,
+                };
+                Box::new(Transform(TransformNode {
+                    position,
+                    pattern,
+                    update,
+                    delete,
+                }))
+            }
+            Ternary(node) => {
+                let position = node.get_position();
+                let condition = self.process_ast(node.condition);
+                // pushAncestry(result, result.condition)
+                let then = self.process_ast(node.then);
+                // pushAncestry(result, result.then)
+                let els = match node.els {
+                    Some(node) => {
+                        let node = self.process_ast(node);
+                        // pushAncestry(result, node)
+                        Some(node)
+                    }
+                    None => None,
+                };
+                Box::new(Ternary(TernaryNode {
+                    position,
+                    condition,
+                    then,
+                    els,
+                }))
+            }
+            // Predicated step:
+            //  Left hand side is a step or a predicated step
+            //  Right hand side is the predicate expression
+            //ArrayPredicate(node) => {
+            //    let mut result = self.process_ast(node.lhs);
+            //    let mut step = &result;
+            //    let mut is_stages = false;
 
-    //         // },
-    //         // // TODO: Group-by
-    //         // OrderBy(node) => {
+            //    if let Path(node) = *result {
+            //        if node.steps.len() > 0 {
+            //            is_stages = true;
+            //            step = node.steps.last().unwrap();
+            //        }
+            //    }
+            //    //                         if (typeof step.group !== 'undefined') {
+            //    //                             throw {
+            //    //                                 code: "S0209",
+            //    //                                 stack: (new Error()).stack,
+            //    //                                 position: expr.position
+            //    //                             };
+            //    //                         }
+            //    //
+            //    //
 
-    //         // },
-    //         // Assignment(node) => {
+            //    let predicate = self.process_ast(node.rhs);
 
-    //         // },
-    //         // FocusVariableBind(node) => {
-
-    //         // },
-    //         // IndexVariableBind(node) => {
-
-    //         // },
-    //         // Chain(node) => {
-
-    //         // },
-    //         // Add(node) => {
-
-    //         // },
-    //         // Subtract(node) => {
-
-    //         // },
-    //         // Multiply(node) => {
-
-    //         // },
-    //         // Divide(node) => {
-
-    //         // },
-    //         // Modulus(node) => {
-
-    //         // },
-    //         // Equal(node) => {
-
-    //         // },
-    //         // LessThan(node) => {
-
-    //         // },
-    //         // GreaterThan(node) => {
-
-    //         // },
-    //         // NotEqual(node) => {
-
-    //         // },
-    //         // LessThanEqual(node) => {
-
-    //         // },
-    //         // GreaterThanEqual(node) => {
-
-    //         // },
-    //         // Concat(node) => {
-
-    //         // },
-    //         // And(node) => {
-
-    //         // },
-    //         // Or(node) => {
-
-    //         // },
-    //         // In(node) => {
-
-    //         // },
-    //         // Range(node) => {
-
-    //         // },
-    //         // // Unary nodes
-    //         // Array(node) => {
-
-    //         // },
-    //         // ObjectPrefix(node) => {
-
-    //         // },
-    //         // UnaryMinus(node) => {
-
-    //         // },
-    //         // // Functions
-    //         // FunctionCall(node) | PartialFunctionCall(node) => {
-
-    //         // },
-    //         // LambdaFunction(node) => {
-
-    //         // },
-    //         // // Objects
-    //         // Transform(node) => {
-
-    //         // },
-    //         // // Paths
-    //         // Name(node) => {
-
-    //         // },
-    //         // Parent(node) => {
-
-    //         // },
-    //         // Wildcard(node) => {
-
-    //         // },
-    //         // DescendantWildcard(node) => {
-
-    //         // },
-    //         // // Literals
-    //         // Null(node) => {
-
-    //         // },
-    //         // Boolean(node) => {
-
-    //         // },
-    //         // String(node) => {
-
-    //         // },
-    //         // Number(node) => {
-
-    //         // },
-    //         // Variable => {
-
-    //         // },
-    //         // // Other operators
-    //         // Ternary(node) => {
-
-    //         // },
-    //         // Block(node) => {
-
-    //         // },
-
-    //     }
-    // }
+            //    // /*
+            //    //                         var predicate = processAST(expr.rhs);
+            //    //                         if(typeof predicate.seekingParent !== 'undefined') {
+            //    //                             predicate.seekingParent.forEach(slot => {
+            //    //                                 if(slot.level === 1) {
+            //    //                                     seekParent(step, slot);
+            //    //                                 } else {
+            //    //                                     slot.level--;
+            //    //                                 }
+            //    //                             });
+            //    //                             pushAncestry(step, predicate);
+            //    //                         }
+            //    //                         step[type].push({type: 'filter', expr: predicate, position: expr.position});
+            //    //                         break;
+            //    // // */
+            //}
+            _ => ast,
+        }
+    }
 
     fn resolve_ancestry(&self, path: &mut PathNode) {
         // TODO
@@ -459,13 +422,13 @@ mod tests {
     // #[test_case("(Numbers12[2] != 0) and (Numbers[5] != Numbers[1])")]
     // #[test_case("(Numbers13[2] != 0) or (Numbers[5] = Numbers[1])")]
     // #[test_case("Email1.[address]")]
-    #[test_case("[Address4, Other.`Alternative.Address`].City")]
+    // #[test_case("[Address4, Other.`Alternative.Address`].City")]
     // #[test_case("Phone7.{type: number}")]
     // #[test_case("Phone8{type: number}")]
     // #[test_case("Phone9{type: number[]}")]
     // #[test_case("(5 + 3) * 4")]
     // #[test_case("Product.(Price * Quantity)")]
-    // #[test_case("(expr1; expr2; expr3)")]
+    #[test_case("(expr1; expr2; expr3)")]
     // #[test_case("Account1.Order.Product{`Product Name`: Price}")]
     // #[test_case(
     //     r#"

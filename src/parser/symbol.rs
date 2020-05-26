@@ -140,7 +140,7 @@ impl Symbol for Token {
             let mut expressions = Vec::new();
 
             while parser.token().kind != TokenKind::RightParen {
-               expressions.push(*parser.expression(0));
+               expressions.push(parser.expression(0));
                if parser.token().kind != TokenKind::SemiColon {
                   break;
                }
@@ -168,7 +168,7 @@ impl Symbol for Token {
                         rhs: parser.expression(0),
                      }));
                   }
-                  expressions.push(*item);
+                  expressions.push(item);
                   if parser.token().kind != TokenKind::Comma {
                      break;
                   }

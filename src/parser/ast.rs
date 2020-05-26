@@ -340,14 +340,14 @@ impl NodeMethods for LambdaNode {
 #[derive(Debug)]
 pub struct ExpressionsNode<const TYPE: &'static str, const VALUE: &'static str> {
     pub position: usize,
-    pub expressions: Vec<Node>,
+    pub expressions: Vec<Box<Node>>,
 
     /// Notates that this node is a path contructor, used in Node::Array
     pub consarray: bool,
 }
 
 impl<const TYPE: &'static str, const VALUE: &'static str> ExpressionsNode<TYPE, VALUE> {
-    pub fn new(position: usize, expressions: Vec<Node>) -> Self {
+    pub fn new(position: usize, expressions: Vec<Box<Node>>) -> Self {
         Self {
             position,
             expressions,
