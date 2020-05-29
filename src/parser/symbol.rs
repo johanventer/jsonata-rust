@@ -214,93 +214,35 @@ impl Symbol for Token {
 
    /// Produce the left denotation for the token
    fn led(&self, parser: &mut Parser, mut left: Box<Node>) -> Box<Node> {
+      macro_rules! binary {
+         ($n:tt) => {
+            Box::new(Node::$n(BinaryNode {
+               position: self.position,
+               lhs: left,
+               rhs: parser.expression(self.lbp()),
+            }))
+         };
+      }
+
       use TokenKind::*;
       match &self.kind {
-         Period => Box::new(Node::PathSeparator(BinaryNode {
-            position: self.position,
-            lhs: left,
-            rhs: parser.expression(self.lbp()),
-         })),
-         Plus => Box::new(Node::Add(BinaryNode {
-            position: self.position,
-            lhs: left,
-            rhs: parser.expression(self.lbp()),
-         })),
-         Minus => Box::new(Node::Subtract(BinaryNode {
-            position: self.position,
-            lhs: left,
-            rhs: parser.expression(self.lbp()),
-         })),
-         Asterisk => Box::new(Node::Multiply(BinaryNode {
-            position: self.position,
-            lhs: left,
-            rhs: parser.expression(self.lbp()),
-         })),
-         ForwardSlash => Box::new(Node::Divide(BinaryNode {
-            position: self.position,
-            lhs: left,
-            rhs: parser.expression(self.lbp()),
-         })),
-         Percent => Box::new(Node::Modulus(BinaryNode {
-            position: self.position,
-            lhs: left,
-            rhs: parser.expression(self.lbp()),
-         })),
-         Equal => Box::new(Node::Equal(BinaryNode {
-            position: self.position,
-            lhs: left,
-            rhs: parser.expression(self.lbp()),
-         })),
-         LeftCaret => Box::new(Node::LessThan(BinaryNode {
-            position: self.position,
-            lhs: left,
-            rhs: parser.expression(self.lbp()),
-         })),
-         RightCaret => Box::new(Node::GreaterThan(BinaryNode {
-            position: self.position,
-            lhs: left,
-            rhs: parser.expression(self.lbp()),
-         })),
-         NotEqual => Box::new(Node::NotEqual(BinaryNode {
-            position: self.position,
-            lhs: left,
-            rhs: parser.expression(self.lbp()),
-         })),
-         LessEqual => Box::new(Node::LessThanEqual(BinaryNode {
-            position: self.position,
-            lhs: left,
-            rhs: parser.expression(self.lbp()),
-         })),
-         GreaterEqual => Box::new(Node::GreaterThanEqual(BinaryNode {
-            position: self.position,
-            lhs: left,
-            rhs: parser.expression(self.lbp()),
-         })),
-         Ampersand => Box::new(Node::Concat(BinaryNode {
-            position: self.position,
-            lhs: left,
-            rhs: parser.expression(self.lbp()),
-         })),
-         And => Box::new(Node::And(BinaryNode {
-            position: self.position,
-            lhs: left,
-            rhs: parser.expression(self.lbp()),
-         })),
-         Or => Box::new(Node::Or(BinaryNode {
-            position: self.position,
-            lhs: left,
-            rhs: parser.expression(self.lbp()),
-         })),
-         In => Box::new(Node::In(BinaryNode {
-            position: self.position,
-            lhs: left,
-            rhs: parser.expression(self.lbp()),
-         })),
-         ChainFunction => Box::new(Node::Chain(BinaryNode {
-            position: self.position,
-            lhs: left,
-            rhs: parser.expression(self.lbp()),
-         })),
+         Period => binary!(PathSeparator),
+         Plus => binary!(Add),
+         Minus => binary!(Subtract),
+         Asterisk => binary!(Multiply),
+         ForwardSlash => binary!(Divide),
+         Percent => binary!(Modulus),
+         Equal => binary!(Equal),
+         LeftCaret => binary!(LessThan),
+         RightCaret => binary!(GreaterThan),
+         NotEqual => binary!(NotEqual),
+         LessEqual => binary!(LessThanEqual),
+         GreaterEqual => binary!(GreaterThanEqual),
+         Ampersand => binary!(Concat),
+         And => binary!(And),
+         Or => binary!(Or),
+         In => binary!(In),
+         ChainFunction => binary!(Chain),
          LeftParen => {
             let mut arguments = Vec::new();
             let mut is_partial = false;
