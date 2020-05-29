@@ -38,12 +38,12 @@ pub enum Node {
     Or(BinaryNode<"or">),
     In(BinaryNode<"in">),
     Chain(BinaryNode<"~>">),
-    Wildcard(EmptyNode<"*">),
-    DescendantWildcard(EmptyNode<"**">),
-    ParentOp(EmptyNode<"%">),
+    Wildcard(MarkerNode<"*">),
+    DescendantWildcard(MarkerNode<"**">),
+    ParentOp(MarkerNode<"%">),
     FunctionCall(FunctionCallNode<"function">),
     PartialFunctionCall(FunctionCallNode<"partial">),
-    PartialFunctionArg(EmptyNode<"?">),
+    PartialFunctionArg(MarkerNode<"?">),
     LambdaFunction(LambdaNode),
     UnaryMinus(UnaryNode<"-">),
     Block(ExpressionsNode<"block", "(">),
@@ -259,14 +259,15 @@ impl<const VALUE: &'static str> NodeMethods for BinaryNode<VALUE> {
     }
 }
 
-/// An empty node is used for nodes that don't have any additional information. Mostly this is
-/// useful for the path navigation operators like `**`, `*`.
+/// An marker node is used for nodes that don't have any additional information. This is
+/// used for the path navigation operators like `**`, `*` and `%`, as well as partial function
+/// arguments.
 #[derive(Debug)]
-pub struct EmptyNode<const TYPE: &'static str> {
+pub struct MarkerNode<const TYPE: &'static str> {
     pub position: usize,
 }
 
-impl<const TYPE: &'static str> NodeMethods for EmptyNode<TYPE> {
+impl<const TYPE: &'static str> NodeMethods for MarkerNode<TYPE> {
     fn get_position(&self) -> usize {
         self.position
     }

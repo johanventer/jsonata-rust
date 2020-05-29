@@ -126,13 +126,13 @@ impl Symbol for Token {
             position: self.position,
             expression: parser.expression(70),
          })),
-         Asterisk => Box::new(Node::Wildcard(EmptyNode {
+         Asterisk => Box::new(Node::Wildcard(MarkerNode {
             position: self.position,
          })),
-         DescendantWildcard => Box::new(Node::DescendantWildcard(EmptyNode {
+         DescendantWildcard => Box::new(Node::DescendantWildcard(MarkerNode {
             position: self.position,
          })),
-         Percent => Box::new(Node::ParentOp(EmptyNode {
+         Percent => Box::new(Node::ParentOp(MarkerNode {
             position: self.position,
          })),
          // Parenthesis - block expression
@@ -311,7 +311,7 @@ impl Symbol for Token {
                   match parser.token().kind {
                      TokenKind::Question => {
                         is_partial = true;
-                        arguments.push(Node::PartialFunctionArg(EmptyNode {
+                        arguments.push(Node::PartialFunctionArg(MarkerNode {
                            position: parser.token().position,
                         }));
                         parser.expect(TokenKind::Question, false);
