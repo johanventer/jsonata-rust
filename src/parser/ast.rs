@@ -63,6 +63,8 @@ pub enum Node {
     // Nodes created by last-stage AST processing
     Path(PathNode),
     Parent(ParentNode),
+    Bind(BindNode),
+    Apply(ApplyNode),
 }
 
 /// A helper macro to forward calls through to the contained nodes, so we only have one big
@@ -116,6 +118,8 @@ macro_rules! delegate {
             Node::ArrayPredicate(n) => n.$f(),
             Node::Path(n) => n.$f(),
             Node::Parent(n) => n.$f(),
+            Node::Bind(n) => n.$f(),
+            Node::Apply(n) => n.$f(),
         }
     };
 }
@@ -574,7 +578,7 @@ impl NodeMethods for ParentNode {
     }
 }
 
-/// An object path
+/// An object path.
 #[derive(Debug)]
 pub struct PathNode {
     pub steps: Vec<Box<Node>>,
@@ -603,6 +607,60 @@ impl NodeMethods for PathNode {
             //     index: p.index
             // }).collect::<Vec<_>>(),
             // keep_singleton_array: self.keep_singleton_array
+        }
+    }
+}
+
+/// Binding assignment.
+#[derive(Debug)]
+pub struct BindNode {
+    pub position: usize,
+    pub lhs: Box<Node>,
+    pub rhs: Box<Node>,
+}
+
+impl NodeMethods for BindNode {
+    fn get_position(&self) -> usize {
+        self.position
+    }
+
+    fn get_value(&self) -> String {
+        ":=".to_string()
+    }
+
+    fn to_json(&self) -> JsonValue {
+        object! {
+            type: "bind",
+            value: ":=",
+            lhs: self.lhs.to_json(),
+            rhs: self.rhs.to_json()
+        }
+    }
+}
+
+/// Function application.
+#[derive(Debug)]
+pub struct ApplyNode {
+    pub position: usize,
+    pub lhs: Box<Node>,
+    pub rhs: Box<Node>,
+}
+
+impl NodeMethods for ApplyNode {
+    fn get_position(&self) -> usize {
+        self.position
+    }
+
+    fn get_value(&self) -> String {
+        "~>".to_string()
+    }
+
+    fn to_json(&self) -> JsonValue {
+        object! {
+            type: "apply",
+            value: "~>",
+            lhs: self.lhs.to_json(),
+            rhs: self.rhs.to_json()
         }
     }
 }

@@ -135,6 +135,63 @@ impl<'a> Parser<'a> {
     fn process_ast(&self, ast: Box<Node>) -> Box<Node> {
         use Node::*;
 
+        /* Things to cover here:
+
+            [x] PathSeparator
+            [x] Name -> Gets wrapped in a path
+            [x] Chain -> Returns an Apply node
+            [ ] Wildcard
+            [ ] DescendantWildcard
+            [ ] ParentOp
+            [ ] FunctionCall
+            [ ] PartialFunctionCall
+            [ ] PartialFunctionCallArg
+            [ ] LambdaFunction
+            [ ] UnaryMinus
+            [x] Block
+            [x] Array
+            [ ] Range
+            [x] Assignment -> Returns a Bind node
+            [ ] OrderBy
+            [ ] OrderByTerm
+            [ ] FocusVariableBind
+            [ ] IndexVariableBind
+            [x] Ternary
+            [x] Transform
+            [ ] ObjectPrefix
+            [ ] ObjectInfix
+            [ ] ArrayPredicate
+
+            [ ] Path
+            [ ] Parent
+            [ ] Bind
+            [ ] Apply
+
+            Binary operators, just need to process both sides:
+                Add
+                Subtract
+                Multiply
+                Divide
+                Modulus
+                Equal
+                LessThan
+                GreaterThan
+                NotEqual
+                LessThanEqual
+                GreaterThanEqual
+                Concat
+                And
+                Or
+                In
+
+            Should be handled by the default case (just return the node, no processing):
+              Null,
+              Boolean,
+              Str,
+              Number,
+              Variable
+        */
+
         match *ast {
             PathSeparator(node) => {
                 let mut result: Box<Node>;
@@ -290,6 +347,7 @@ impl<'a> Parser<'a> {
                     consarray,
                 }))
             }
+            // Object transform
             Transform(node) => {
                 let position = node.get_position();
                 let pattern = self.process_ast(node.pattern);
@@ -305,6 +363,7 @@ impl<'a> Parser<'a> {
                     delete,
                 }))
             }
+            // Ternary conditional
             Ternary(node) => {
                 let position = node.get_position();
                 let condition = self.process_ast(node.condition);
@@ -326,6 +385,35 @@ impl<'a> Parser<'a> {
                     els,
                 }))
             }
+            // Assignment
+            Assignment(node) => {
+                let lhs = self.process_ast(node.lhs);
+                let rhs = self.process_ast(node.rhs);
+                // pushAncestry(result, result.rhs)
+                Box::new(Bind(BindNode {
+                    position: node.position,
+                    lhs,
+                    rhs,
+                }))
+            }
+            // Function application
+            Chain(node) => {
+                let lhs = self.process_ast(node.lhs);
+                let rhs = self.process_ast(node.rhs);
+                // pushAncestry(result, result.rhs)
+                Box::new(Apply(ApplyNode {
+                    position: node.position,
+                    lhs,
+                    rhs,
+                }))
+            }
+            // Group by
+            //  LHS is a step or a predicated step
+            //  RHS is the object constructor expression
+            // ObjectInfix(node) => {
+            //     let mut result = self.process_ast(node.lhs);
+            //     result
+            // }
             // Predicated step:
             //  Left hand side is a step or a predicated step
             //  Right hand side is the predicate expression
