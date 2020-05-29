@@ -146,6 +146,22 @@ impl<'a> Tokenizer<'a> {
     pub fn next(&mut self, infix: bool) -> Token {
         use TokenKind::*;
 
+        // Convenience for single character operators
+        macro_rules! op1 {
+            ($t:tt) => {{
+                self.position += 1;
+                break self.emit($t);
+            }};
+        }
+
+        // Convenience for double character operators
+        macro_rules! op2 {
+            ($t:tt) => {{
+                self.position += 2;
+                break self.emit($t);
+            }};
+        }
+
         loop {
             match self.source.as_bytes()[self.position..] {
                 [] => break self.emit(End),
@@ -173,41 +189,13 @@ impl<'a> Tokenizer<'a> {
                 }
                 // Regex
                 [b'/', ..] if !infix => unimplemented!("regex scanning is not yet implemented"),
-                // Double-dot range operator
-                [b'.', b'.', ..] => {
-                    self.position += 2;
-                    break self.emit(Range);
-                }
-                // := Assignment
-                [b':', b'=', ..] => {
-                    self.position += 2;
-                    break self.emit(Assignment);
-                }
-                // !=
-                [b'!', b'=', ..] => {
-                    self.position += 2;
-                    break self.emit(NotEqual);
-                }
-                // >=
-                [b'>', b'=', ..] => {
-                    self.position += 2;
-                    break self.emit(GreaterEqual);
-                }
-                // <=
-                [b'<', b'=', ..] => {
-                    self.position += 2;
-                    break self.emit(LessEqual);
-                }
-                // ** Descendent wildcard
-                [b'*', b'*', ..] => {
-                    self.position += 2;
-                    break self.emit(DescendantWildcard);
-                }
-                // ~> Chain function
-                [b'~', b'>', ..] => {
-                    self.position += 2;
-                    break self.emit(ChainFunction);
-                }
+                [b'.', b'.', ..] => op2!(Range),
+                [b':', b'=', ..] => op2!(Assignment),
+                [b'!', b'=', ..] => op2!(NotEqual),
+                [b'>', b'=', ..] => op2!(GreaterEqual),
+                [b'<', b'=', ..] => op2!(LessEqual),
+                [b'*', b'*', ..] => op2!(DescendantWildcard),
+                [b'~', b'>', ..] => op2!(ChainFunction),
                 // Numbers
                 [b'0'..=b'9', ..] => {
                     let number_start = self.position;
@@ -235,111 +223,32 @@ impl<'a> Tokenizer<'a> {
                         error!(s0102, self.position, token);
                     }
                 }
-                // Single character operators
-                [b'.', ..] => {
-                    self.position += 1;
-                    break self.emit(Period);
-                }
-                [b'[', ..] => {
-                    self.position += 1;
-                    break self.emit(LeftBracket);
-                }
-                [b']', ..] => {
-                    self.position += 1;
-                    break self.emit(RightBracket);
-                }
-                [b'{', ..] => {
-                    self.position += 1;
-                    break self.emit(LeftBrace);
-                }
-                [b'}', ..] => {
-                    self.position += 1;
-                    break self.emit(RightBrace);
-                }
-                [b'(', ..] => {
-                    self.position += 1;
-                    break self.emit(LeftParen);
-                }
-                [b')', ..] => {
-                    self.position += 1;
-                    break self.emit(RightParen);
-                }
-                [b',', ..] => {
-                    self.position += 1;
-                    break self.emit(Comma);
-                }
-                [b'@', ..] => {
-                    self.position += 1;
-                    break self.emit(At);
-                }
-                [b'#', ..] => {
-                    self.position += 1;
-                    break self.emit(Hash);
-                }
-                [b';', ..] => {
-                    self.position += 1;
-                    break self.emit(SemiColon);
-                }
-                [b':', ..] => {
-                    self.position += 1;
-                    break self.emit(Colon);
-                }
-                [b'?', ..] => {
-                    self.position += 1;
-                    break self.emit(Question);
-                }
-                [b'+', ..] => {
-                    self.position += 1;
-                    break self.emit(Plus);
-                }
-                [b'-', ..] => {
-                    self.position += 1;
-                    break self.emit(Minus);
-                }
-                [b'*', ..] => {
-                    self.position += 1;
-                    break self.emit(Asterisk);
-                }
-                [b'/', ..] => {
-                    self.position += 1;
-                    break self.emit(ForwardSlash);
-                }
-                [b'%', ..] => {
-                    self.position += 1;
-                    break self.emit(Percent);
-                }
-                [b'|', ..] => {
-                    self.position += 1;
-                    break self.emit(Pipe);
-                }
-                [b'=', ..] => {
-                    self.position += 1;
-                    break self.emit(Equal);
-                }
-                [b'<', ..] => {
-                    self.position += 1;
-                    break self.emit(LeftCaret);
-                }
-                [b'>', ..] => {
-                    self.position += 1;
-                    break self.emit(RightCaret);
-                }
-                [b'^', ..] => {
-                    self.position += 1;
-                    break self.emit(Caret);
-                }
-                [b'&', ..] => {
-                    self.position += 1;
-                    break self.emit(Ampersand);
-                }
-                [b'!', ..] => {
-                    self.position += 1;
-                    break self.emit(Not);
-                }
-                [b'~', ..] => {
-                    self.position += 1;
-                    break self.emit(Tilde);
-                }
+                [b'.', ..] => op1!(Period),
+                [b'[', ..] => op1!(LeftBracket),
+                [b']', ..] => op1!(RightBracket),
+                [b'{', ..] => op1!(LeftBrace),
+                [b'}', ..] => op1!(RightBrace),
+                [b'(', ..] => op1!(LeftParen),
+                [b')', ..] => op1!(RightParen),
+                [b',', ..] => op1!(Comma),
+                [b'@', ..] => op1!(At),
+                [b'#', ..] => op1!(Hash),
+                [b';', ..] => op1!(SemiColon),
+                [b':', ..] => op1!(Colon),
+                [b'?', ..] => op1!(Question),
+                [b'+', ..] => op1!(Plus),
+                [b'-', ..] => op1!(Minus),
+                [b'*', ..] => op1!(Asterisk),
+                [b'/', ..] => op1!(ForwardSlash),
+                [b'%', ..] => op1!(Percent),
+                [b'|', ..] => op1!(Pipe),
+                [b'=', ..] => op1!(Equal),
+                [b'<', ..] => op1!(LeftCaret),
+                [b'>', ..] => op1!(RightCaret),
+                [b'^', ..] => op1!(Caret),
+                [b'&', ..] => op1!(Ampersand),
+                [b'!', ..] => op1!(Not),
+                [b'~', ..] => op1!(Tilde),
                 // String literals
                 [quote_type @ (b'\'' | b'"'), ..] => {
                     self.position += 1;
