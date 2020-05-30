@@ -12,7 +12,7 @@ pub enum TokenKind {
     NotEqual,
     GreaterEqual,
     LessEqual,
-    DescendantWildcard,
+    Descendent,
     ChainFunction,
     // Named operators
     Or,
@@ -34,7 +34,7 @@ pub enum TokenKind {
     Question,
     Plus,
     Minus,
-    Asterisk,
+    Wildcard,
     ForwardSlash,
     Percent,
     Pipe,
@@ -65,7 +65,7 @@ impl fmt::Display for TokenKind {
             NotEqual => "!=".to_string(),
             GreaterEqual => ">=".to_string(),
             LessEqual => "<=".to_string(),
-            DescendantWildcard => "**".to_string(),
+            Descendent => "**".to_string(),
             ChainFunction => "~>".to_string(),
             Or => "or".to_string(),
             In => "in".to_string(),
@@ -85,7 +85,7 @@ impl fmt::Display for TokenKind {
             Question => "?".to_string(),
             Plus => "+".to_string(),
             Minus => "-".to_string(),
-            Asterisk => "*".to_string(),
+            Wildcard => "*".to_string(),
             ForwardSlash => "/".to_string(),
             Percent => "%".to_string(),
             Pipe => "|".to_string(),
@@ -194,7 +194,7 @@ impl<'a> Tokenizer<'a> {
                 [b'!', b'=', ..] => op2!(NotEqual),
                 [b'>', b'=', ..] => op2!(GreaterEqual),
                 [b'<', b'=', ..] => op2!(LessEqual),
-                [b'*', b'*', ..] => op2!(DescendantWildcard),
+                [b'*', b'*', ..] => op2!(Descendent),
                 [b'~', b'>', ..] => op2!(ChainFunction),
                 // Numbers
                 [b'0'..=b'9', ..] => {
@@ -238,7 +238,7 @@ impl<'a> Tokenizer<'a> {
                 [b'?', ..] => op1!(Question),
                 [b'+', ..] => op1!(Plus),
                 [b'-', ..] => op1!(Minus),
-                [b'*', ..] => op1!(Asterisk),
+                [b'*', ..] => op1!(Wildcard),
                 [b'/', ..] => op1!(ForwardSlash),
                 [b'%', ..] => op1!(Percent),
                 [b'|', ..] => op1!(Pipe),
@@ -404,7 +404,7 @@ mod tests {
         ));
         assert!(matches!(tokenizer.next(false).kind, TokenKind::Question));
         assert!(matches!(tokenizer.next(false).kind, TokenKind::Minus));
-        assert!(matches!(tokenizer.next(false).kind, TokenKind::Asterisk));
+        assert!(matches!(tokenizer.next(false).kind, TokenKind::Wildcard));
     }
 
     #[test]

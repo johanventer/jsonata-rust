@@ -46,54 +46,21 @@ impl Symbol for Token {
    fn lbp(&self) -> u32 {
       use TokenKind::*;
       match &self.kind {
-         End => 0,
-         // Double character operators
-         Range => 0,
+         End | Range | Colon | Comma | SemiColon | RightParen | RightBracket | RightBrace
+         | Pipe | Not | Tilde | Null | Boolean(..) | Str(..) | Number(..) | Name(..)
+         | Variable(..) => 0,
          Assignment => 10,
-         NotEqual => 40,
-         GreaterEqual => 40,
-         LessEqual => 40,
-         DescendantWildcard => 60,
-         ChainFunction => 40,
-         // Named operators
-         And => 30,
-         Or => 25,
-         In => 40,
-         // Single character operators
-         Period => 75,
-         LeftBracket => 80,
-         RightBracket => 0,
-         LeftBrace => 70,
-         RightBrace => 0,
-         LeftParen => 80,
-         RightParen => 0,
-         Comma => 0,
-         At => 80,
-         Hash => 80,
-         SemiColon => 0,
-         Colon => 0,
          Question => 20,
-         Plus => 50,
-         Minus => 50,
-         Asterisk => 60,
-         ForwardSlash => 60,
-         Percent => 60,
-         Pipe => 0,
-         Equal => 40,
-         RightCaret => 40,
-         LeftCaret => 40,
-         Caret => 40,
-         Ampersand => 50,
-         Not => 0,
-         Tilde => 0,
-         // Literal values
-         Null => 0,
-         Boolean(..) => 0,
-         Str(..) => 0,
-         Number(..) => 0,
-         // Identifiers
-         Name(..) => 0,
-         Variable(..) => 0,
+         Or => 25,
+         And => 30,
+         NotEqual | GreaterEqual | LessEqual | ChainFunction | In | Equal | RightCaret
+         | LeftCaret | Caret => 40,
+         Ampersand | Plus | Minus => 50,
+         Wildcard | Descendent | ForwardSlash | Percent => 60,
+         LeftBrace => 70,
+         Period => 75,
+         LeftBracket | LeftParen => 80,
+         At | Hash => 80,
       }
    }
 
@@ -125,10 +92,10 @@ impl Symbol for Token {
             position: self.position,
             expression: parser.expression(70),
          })),
-         Asterisk => Box::new(Node::Wildcard(MarkerNode {
+         Wildcard => Box::new(Node::Wildcard(MarkerNode {
             position: self.position,
          })),
-         DescendantWildcard => Box::new(Node::DescendantWildcard(MarkerNode {
+         Descendent => Box::new(Node::DescendantWildcard(MarkerNode {
             position: self.position,
          })),
          Percent => Box::new(Node::ParentOp(MarkerNode {
@@ -228,7 +195,7 @@ impl Symbol for Token {
          Period => binary!(PathSeparator),
          Plus => binary!(Add),
          Minus => binary!(Subtract),
-         Asterisk => binary!(Multiply),
+         Wildcard => binary!(Multiply),
          ForwardSlash => binary!(Divide),
          Percent => binary!(Modulus),
          Equal => binary!(Equal),

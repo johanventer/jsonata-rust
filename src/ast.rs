@@ -1,6 +1,157 @@
 use json::{array, object, JsonValue};
 use std::fmt;
 
+/// An object is represented as a list of (key, value) tuples
+type Object = Vec<(XNode, XNode)>;
+
+/// The possible values that an AST node can store.
+enum NodeValue {
+    Null,
+    Bool(bool),
+    Str(String),
+    Num(f64),
+}
+
+/// Types of unary expressions.
+enum UnaryOp {
+    Minus,
+    Array,
+}
+
+/// Types of binary expressions.
+enum BinaryOp {
+    Path,
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Modulus,
+    Equal,
+    NotEqual,
+    LessThan,
+    GreaterThan,
+    LessThanEqual,
+    GreaterThanEqual,
+    Concat,
+    And,
+    Or,
+    In,
+    Range,
+    FocusVariableBind,
+    IndexVariableBind,
+    ArrayPredicate,
+
+    /// Chained function application.
+    Apply,
+
+    /// A variable binding.
+    Bind,
+}
+
+/// Types of AST nodes.
+enum NodeKind {
+    /// A literal expression.
+    Literal,
+
+    /// A unary expression.
+    Unary(UnaryOp),
+
+    /// A binary expression.
+    Binary(BinaryOp),
+
+    /// A wildcard path navigation.
+    Wildcard,
+
+    /// A descendent path navigation.
+    Descendent,
+
+    /// A parent operator expression (resolved to Parent during post-processing).
+    ParentOp,
+
+    /// A function call. The associated value indicates whether it is a partial application or not.
+    Function(bool),
+
+    /// A partial function call argument.
+    PartialArg,
+
+    /// A lambda function definition.
+    Lambda,
+
+    /// A block consisting of multiple expressions.
+    Block,
+
+    /// A unprocessed array ordering expression.
+    OrderBy,
+
+    /// A sort term. The associated value indicates whether it is a descending term.
+    SortTerm(bool),
+
+    /// A ternary conditional expression.
+    Ternary,
+
+    /// An object transform expression.
+    Transform,
+
+    /// An object definition.
+    Object,
+
+    /// An object grouping expression.
+    ObjectGroup,
+
+    /// A parent expression.
+    Parent(Slot),
+
+    /// A path consisting of multiple steps.
+    Path,
+
+    /// A sorting expression.
+    Sort,
+
+    /// A filtering expression.
+    Filter,
+
+    /// An index expression.
+    Index,
+}
+
+/// A node in the parsed AST.
+struct XNode {
+    /// The kind of the node.
+    kind: NodeKind,
+
+    /// The position in the input source expression.
+    position: usize,
+
+    /// The node's value, typically only important for literal nodes, however also stores the
+    /// operator for a binary expression, for example.
+    value: NodeValue,
+
+    /// A general list of child nodes, could represent lhs/rhs, update/transform/delete,
+    /// condition/then/else, procedure/arguments etc.
+    children: Vec<XNode>,
+
+    /// An optional group by expression, represented as an object.
+    group_by: Option<Object>,
+
+    /// An optional list of predicates.
+    predicates: Option<Vec<XNode>>,
+
+    /// An optional list of evaluation stages, for example this specifies the filtering and
+    /// indexing for various expressions.
+    stages: Option<Vec<XNode>>,
+
+    /// Indicates if this node has a focussed variable binding.
+    focus: Option<String>,
+
+    /// Indicates if this node has an indexed variable binding.
+    index: Option<String>,
+
+    /// TODO: I'm not really sure what this indicates, yet, but it is used during evaluation.
+    tuple: bool,
+}
+
+// ==========================================================================================================
+
 /// This is a poorly named bucket of methods that every node type should implement.
 ///
 /// Mostly used for error messages and transformation to JSON.
@@ -9,16 +160,6 @@ pub trait NodeMethods {
     fn get_value(&self) -> String;
     fn to_json(&self) -> JsonValue;
 }
-
-/*
- TODO: Many nodes also need the following:
-   group - struct GroupNode { lhs: ObjectNode }
-   predicate - Vec<Node>
-   stages - Vec<Node>
-   focus - String
-   index - String
-   tuple - bool
-*/
 
 /// An AST node.
 ///
