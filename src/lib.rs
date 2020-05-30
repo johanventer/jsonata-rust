@@ -11,9 +11,12 @@ use std::collections::HashMap;
 
 #[macro_use]
 mod error;
+mod ast;
 mod parser;
+mod symbol;
+mod tokenizer;
 
-use parser::Node;
+use ast::NodeMethods;
 
 /// A binding in a stack frame
 pub enum Binding<'a> {
@@ -93,7 +96,7 @@ impl<'a> Frame<'a> {
 pub struct JsonAta<'a> {
     expr: String,
     environment: Frame<'a>,
-    ast: Box<Node>,
+    ast: Box<ast::Node>,
 }
 
 impl<'a> JsonAta<'a> {
@@ -112,8 +115,7 @@ impl<'a> JsonAta<'a> {
         }
     }
 
-    pub fn evaluate(&self, input: &str, bindings: Vec<Binding>) -> JsonValue {
-        parser::parse(input);
+    pub fn evaluate(&self, input: String, bindings: Vec<Binding>) -> JsonValue {
         json::from("TODO")
     }
 
@@ -121,8 +123,8 @@ impl<'a> JsonAta<'a> {
         self.environment.bind(name, value);
     }
 
-    pub fn ast(&self) -> &Node {
-        &self.ast
+    pub fn ast(&self) -> JsonValue {
+        self.ast.to_json()
     }
 }
 

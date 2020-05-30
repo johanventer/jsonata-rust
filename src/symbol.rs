@@ -1,8 +1,7 @@
+use crate::ast::*;
 use crate::error::*;
-
-use super::ast::*;
-use super::tokenizer::{Token, TokenKind};
-use super::Parser;
+use crate::parser::Parser;
+use crate::tokenizer::{Token, TokenKind};
 
 /// Represents a symbol, which is essentially an enhanced token that performs its own parsing and
 /// creates syntax trees.
@@ -184,7 +183,7 @@ impl Symbol for Token {
          // Object - unary prefix form
          LeftBrace => {
             let object = object_parse(parser);
-            Box::new(Node::ObjectPrefix(ObjectPrefixNode {
+            Box::new(Node::Object(ObjectNode {
                position: self.position,
                lhs: object,
             }))
@@ -253,13 +252,13 @@ impl Symbol for Token {
                   match parser.token().kind {
                      TokenKind::Question => {
                         is_partial = true;
-                        arguments.push(Node::PartialFunctionArg(MarkerNode {
+                        arguments.push(Box::new(Node::PartialFunctionArg(MarkerNode {
                            position: parser.token().position,
-                        }));
+                        })));
                         parser.expect(TokenKind::Question, false);
                      }
                      _ => {
-                        arguments.push(*parser.expression(0));
+                        arguments.push(parser.expression(0));
                      }
                   }
                   if parser.token().kind != TokenKind::Comma {
@@ -277,7 +276,7 @@ impl Symbol for Token {
 
                   // All of the args must be Variable nodes
                   for arg in &arguments {
-                     match &arg {
+                     match arg.as_ref() {
                         Node::Variable(_) => (),
                         _ => error!(s0208, arg.get_position(), &arg.get_value()),
                      }
@@ -293,7 +292,6 @@ impl Symbol for Token {
                parser.expect(TokenKind::LeftBrace, false);
                func = Box::new(Node::LambdaFunction(LambdaNode {
                   position: self.position,
-                  procedure: left,
                   arguments,
                   body: parser.expression(0),
                }));
@@ -336,16 +334,16 @@ impl Symbol for Token {
                if parser.token().kind == LeftCaret {
                   parser.expect(LeftCaret, false);
                } else if parser.token().kind == RightCaret {
-                  parser.expect(LeftCaret, false);
+                  parser.expect(RightCaret, false);
                   descending = true;
                } else {
                   // Unspecified, default to ascending
                }
-               terms.push(Node::OrderByTerm(OrderByTermNode {
+               terms.push(SortTermNode {
                   position: self.position,
                   descending,
                   expression: parser.expression(0),
-               }));
+               });
                if parser.token().kind != Comma {
                   break;
                }
@@ -401,10 +399,10 @@ impl Symbol for Token {
                els,
             }))
          }
-         // Object - binary infix form
+         // Object group by
          LeftBrace => {
             let object = object_parse(parser);
-            Box::new(Node::ObjectInfix(ObjectInfixNode {
+            Box::new(Node::ObjectGroup(ObjectGroupNode {
                position: self.position,
                lhs: left,
                rhs: object,

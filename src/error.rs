@@ -17,7 +17,7 @@
 //! - `3xxx` - Functions (blocks of 10 for each function)
 use std::str;
 
-use crate::parser::{Token, TokenKind};
+use crate::tokenizer::{Token, TokenKind};
 
 /// Convenience macro for panicing on errors.
 #[macro_export]

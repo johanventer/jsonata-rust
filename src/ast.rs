@@ -10,6 +10,16 @@ pub trait NodeMethods {
     fn to_json(&self) -> JsonValue;
 }
 
+/*
+ TODO: Many nodes also need the following:
+   group - struct GroupNode { lhs: ObjectNode }
+   predicate - Vec<Node>
+   stages - Vec<Node>
+   focus - String
+   index - String
+   tuple - bool
+*/
+
 /// An AST node.
 ///
 /// Each node's associated value contains all of the pertinent AST information required for it.
@@ -38,9 +48,9 @@ pub enum Node {
     Or(BinaryNode<"or">),
     In(BinaryNode<"in">),
     Chain(BinaryNode<"~>">),
-    Wildcard(MarkerNode<"*">),
-    DescendantWildcard(MarkerNode<"**">),
-    ParentOp(MarkerNode<"%">),
+    Wildcard(MarkerNode<"wildcard">),
+    DescendantWildcard(MarkerNode<"descendent">),
+    ParentOp(MarkerNode<"parent">),
     FunctionCall(FunctionCallNode<"function">),
     PartialFunctionCall(FunctionCallNode<"partial">),
     PartialFunctionArg(MarkerNode<"?">),
@@ -51,13 +61,13 @@ pub enum Node {
     Range(BinaryNode<"..">),
     Assignment(BinaryNode<":=">),
     OrderBy(OrderByNode),
-    OrderByTerm(OrderByTermNode),
+    SortTerm(SortTermNode),
     FocusVariableBind(BinaryNode<"@">),
     IndexVariableBind(BinaryNode<"#">),
     Ternary(TernaryNode),
     Transform(TransformNode),
-    ObjectPrefix(ObjectPrefixNode),
-    ObjectInfix(ObjectInfixNode),
+    Object(ObjectNode),
+    ObjectGroup(ObjectGroupNode),
     ArrayPredicate(BinaryNode<"[">),
 
     // Nodes created by last-stage AST processing
@@ -65,6 +75,9 @@ pub enum Node {
     Parent(ParentNode),
     Bind(BindNode),
     Apply(ApplyNode),
+    Sort(SortNode),
+    // Filter
+    // Index
 }
 
 /// A helper macro to forward calls through to the contained nodes, so we only have one big
@@ -108,18 +121,19 @@ macro_rules! delegate {
             Node::Array(n) => n.$f(),
             Node::Assignment(n) => n.$f(),
             Node::OrderBy(n) => n.$f(),
-            Node::OrderByTerm(n) => n.$f(),
+            Node::SortTerm(n) => n.$f(),
             Node::FocusVariableBind(n) => n.$f(),
             Node::IndexVariableBind(n) => n.$f(),
             Node::Ternary(n) => n.$f(),
             Node::Transform(n) => n.$f(),
-            Node::ObjectPrefix(n) => n.$f(),
-            Node::ObjectInfix(n) => n.$f(),
+            Node::Object(n) => n.$f(),
+            Node::ObjectGroup(n) => n.$f(),
             Node::ArrayPredicate(n) => n.$f(),
             Node::Path(n) => n.$f(),
             Node::Parent(n) => n.$f(),
             Node::Bind(n) => n.$f(),
             Node::Apply(n) => n.$f(),
+            Node::Sort(n) => n.$f(),
         }
     };
 }
@@ -164,8 +178,7 @@ where
 {
     pub position: usize,
     pub value: T,
-    /// Specifies that this literal node is a path step which should be kept as a singleton array
-    /// in output. Note this is only valid for Node::Name.
+    /// Specifies that this literal node is a path step which should be kept as an array
     pub keep_array: bool,
 }
 
@@ -199,7 +212,7 @@ where
             type: TYPE,
             position: self.position,
             value: self.value.clone().into(),
-            keep_array: self.keep_array
+            keepArray: self.keep_array
         }
     }
 }
@@ -273,7 +286,7 @@ impl<const TYPE: &'static str> NodeMethods for MarkerNode<TYPE> {
     }
 
     fn get_value(&self) -> String {
-        TYPE.to_string()
+        unreachable!();
     }
 
     fn to_json(&self) -> JsonValue {
@@ -289,7 +302,7 @@ impl<const TYPE: &'static str> NodeMethods for MarkerNode<TYPE> {
 pub struct FunctionCallNode<const TYPE: &'static str> {
     pub position: usize,
     pub procedure: Box<Node>,
-    pub arguments: Vec<Node>,
+    pub arguments: Vec<Box<Node>>,
 }
 
 impl<const TYPE: &'static str> NodeMethods for FunctionCallNode<TYPE> {
@@ -315,8 +328,7 @@ impl<const TYPE: &'static str> NodeMethods for FunctionCallNode<TYPE> {
 #[derive(Debug)]
 pub struct LambdaNode {
     pub position: usize,
-    pub procedure: Box<Node>,
-    pub arguments: Vec<Node>,
+    pub arguments: Vec<Box<Node>>,
     pub body: Box<Node>,
 }
 
@@ -326,14 +338,13 @@ impl NodeMethods for LambdaNode {
     }
 
     fn get_value(&self) -> String {
-        self.procedure.get_value()
+        "function".to_string()
     }
 
     fn to_json(&self) -> JsonValue {
         object! {
             type: "lambda",
             position: self.position,
-            procedure: self.procedure.to_json(),
             arguments: self.arguments.iter().map(|arg| arg.to_json()).collect::<Vec<_>>(),
             body: self.body.to_json()
         }
@@ -388,7 +399,7 @@ impl<const TYPE: &'static str, const VALUE: &'static str> NodeMethods
 pub struct OrderByNode {
     pub position: usize,
     pub lhs: Box<Node>,
-    pub rhs: Vec<Node>,
+    pub rhs: Vec<SortTermNode>,
 }
 
 impl NodeMethods for OrderByNode {
@@ -413,13 +424,13 @@ impl NodeMethods for OrderByNode {
 
 /// A term of the order-by operator.
 #[derive(Debug)]
-pub struct OrderByTermNode {
+pub struct SortTermNode {
     pub position: usize,
     pub expression: Box<Node>,
     pub descending: bool,
 }
 
-impl NodeMethods for OrderByTermNode {
+impl NodeMethods for SortTermNode {
     fn get_position(&self) -> usize {
         self.position
     }
@@ -495,14 +506,14 @@ impl NodeMethods for TransformNode {
     }
 }
 
-/// The prefix variant of an object definition.
+/// An object definition.
 #[derive(Debug)]
-pub struct ObjectPrefixNode {
+pub struct ObjectNode {
     pub position: usize,
     pub lhs: Vec<(Box<Node>, Box<Node>)>,
 }
 
-impl NodeMethods for ObjectPrefixNode {
+impl NodeMethods for ObjectNode {
     fn get_position(&self) -> usize {
         self.position
     }
@@ -520,15 +531,15 @@ impl NodeMethods for ObjectPrefixNode {
     }
 }
 
-/// The infix variant of an object definition.
+/// Object group by
 #[derive(Debug)]
-pub struct ObjectInfixNode {
+pub struct ObjectGroupNode {
     pub position: usize,
     pub lhs: Box<Node>,
     pub rhs: Vec<(Box<Node>, Box<Node>)>,
 }
 
-impl NodeMethods for ObjectInfixNode {
+impl NodeMethods for ObjectGroupNode {
     fn get_position(&self) -> usize {
         self.position
     }
@@ -549,9 +560,9 @@ impl NodeMethods for ObjectInfixNode {
 
 #[derive(Debug, Clone)]
 pub struct Slot {
-    label: String,
-    level: u32,
-    index: u32,
+    pub label: String,
+    pub level: u32,
+    pub index: u32,
 }
 
 #[derive(Debug)]
@@ -589,25 +600,18 @@ pub struct PathNode {
 
 impl NodeMethods for PathNode {
     fn get_position(&self) -> usize {
-        // No-op
-        0
+        unreachable!();
     }
 
     fn get_value(&self) -> String {
-        // No-op
-        "".to_string()
+        unreachable!();
     }
 
     fn to_json(&self) -> JsonValue {
         object! {
             type: "path",
             steps: self.steps.iter().map(|step| step.to_json()).collect::<Vec<_>>(),
-            // seeking_parent: self.seeking_parent.iter().map(|p| object!{
-            //     label: p.label.clone(),
-            //     level: p.level,
-            //     index: p.index
-            // }).collect::<Vec<_>>(),
-            // keep_singleton_array: self.keep_singleton_array
+            keepSingletonArray: self.keep_singleton_array
         }
     }
 }
@@ -662,6 +666,30 @@ impl NodeMethods for ApplyNode {
             value: "~>",
             lhs: self.lhs.to_json(),
             rhs: self.rhs.to_json()
+        }
+    }
+}
+
+/// Array sort.
+#[derive(Debug)]
+pub struct SortNode {
+    pub position: usize,
+    pub terms: Vec<SortTermNode>,
+}
+
+impl NodeMethods for SortNode {
+    fn get_position(&self) -> usize {
+        self.position
+    }
+
+    fn get_value(&self) -> String {
+        unreachable!()
+    }
+
+    fn to_json(&self) -> JsonValue {
+        object! {
+            type: "sort",
+            terms: self.terms.iter().map(|t| t.to_json()).collect::<Vec<_>>()
         }
     }
 }

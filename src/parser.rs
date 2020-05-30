@@ -25,18 +25,11 @@
 //! 3. Expression parsing ends when the token's precedence is less than the expression's
 //!    precedence.
 //! 4. Productions are returned, which point to other productions forming the AST.
-mod ast;
-mod symbol;
-mod tokenizer;
 
+use crate::ast::*;
 use crate::error::*;
-
-use ast::*;
-use symbol::Symbol;
-use tokenizer::*;
-
-pub use ast::Node;
-pub use tokenizer::{Token, TokenKind};
+use crate::symbol::Symbol;
+use crate::tokenizer::*;
 
 /// An instance of a parser.
 pub struct Parser<'a> {
@@ -44,13 +37,14 @@ pub struct Parser<'a> {
     tokenizer: Tokenizer<'a>,
     /// The last token obtained from the tokenizer.
     token: Token,
-    /// TODO: remove
-    depth: usize,
+
+    ancestor_label: u32,
+    ancestor_index: u32,
 }
 
 impl<'a> Parser<'a> {
     /// Returns the parsed AST for a given source string
-    fn parse(source: &'a str) -> Box<Node> {
+    pub fn parse(source: &'a str) -> Box<Node> {
         let mut parser = Self::new(source);
         let ast = parser.expression(0);
         //ast
@@ -58,27 +52,28 @@ impl<'a> Parser<'a> {
     }
 
     /// Create a new parser from a source string slice.
-    fn new(source: &'a str) -> Self {
+    pub fn new(source: &'a str) -> Self {
         let mut tokenizer = Tokenizer::new(source);
         Self {
             token: tokenizer.next(false),
             tokenizer,
-            depth: 0,
+            ancestor_index: 0,
+            ancestor_label: 0,
         }
     }
 
     /// Obtain a reference to the current token.
-    fn token(&self) -> &Token {
+    pub fn token(&self) -> &Token {
         &self.token
     }
 
     /// Advance the tokenizer.
-    fn next(&mut self, infix: bool) {
+    pub fn next(&mut self, infix: bool) {
         self.token = self.tokenizer.next(infix);
     }
 
     /// Ensure that the current token is an expected type, and then advance the tokenzier.
-    fn expect(&mut self, expected: TokenKind, infix: bool) {
+    pub fn expect(&mut self, expected: TokenKind, infix: bool) {
         if self.token.kind == TokenKind::End {
             error!(s0203, self.token.position, &expected)
         }
@@ -91,108 +86,74 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse an expression, with a specified right binding power.
-    fn expression(&mut self, rbp: u32) -> Box<Node> {
-        self.depth += 1;
-        // println!(
-        //     "Enter {} ###################################################",
-        //     self.depth
-        // );
+    pub fn expression(&mut self, rbp: u32) -> Box<Node> {
         let mut last = self.token.clone();
         self.next(true);
-        // println!("{}: nud: {}", self.depth, last);
         let mut left = last.nud(self);
 
         while rbp < self.token.lbp() {
-            // println!(
-            //     "{}: rbp: {}, current.lbp: {}, current: {}",
-            //     self.depth,
-            //     rbp,
-            //     self.token.lbp(),
-            //     self.token
-            // );
             last = self.token.clone();
             self.next(false);
-            // println!("{}: led: {}", self.depth, last);
             left = last.led(self, left)
         }
-
-        // use crate::ast::ToJson;
-        // use json::stringify_pretty;
-        // println!(
-        //     "RESULT {}: {}",
-        //     self.depth,
-        //     stringify_pretty(left.to_json(), 4)
-        // );
-        // println!(
-        //     "Exit {} ###################################################",
-        //     self.depth
-        // );
-        self.depth -= 1;
 
         left
     }
 
-    fn process_ast(&self, ast: Box<Node>) -> Box<Node> {
+    fn process_ast(&mut self, ast: Box<Node>) -> Box<Node> {
         use Node::*;
 
-        /* Things to cover here:
+        macro_rules! binary {
+            ($t:tt, $n:ident) => {{
+                let lhs = self.process_ast($n.lhs);
+                let rhs = self.process_ast($n.rhs);
+                // pushAncestory for both lhs and rhs
+                Box::new($t(BinaryNode {
+                    position: $n.position,
+                    lhs,
+                    rhs,
+                }))
+            }};
+        }
 
+        /* Things to cover here:
             [x] PathSeparator
             [x] Name -> Gets wrapped in a path
             [x] Chain -> Returns an Apply node
-            [ ] Wildcard
-            [ ] DescendantWildcard
-            [ ] ParentOp
-            [ ] FunctionCall
-            [ ] PartialFunctionCall
-            [ ] PartialFunctionCallArg
-            [ ] LambdaFunction
-            [ ] UnaryMinus
+            [x] ParentOp
+            [x] FunctionCall
+            [x] PartialFunctionCall
+            [x] LambdaFunction
+            [x] UnaryMinus
             [x] Block
             [x] Array
-            [ ] Range
             [x] Assignment -> Returns a Bind node
-            [ ] OrderBy
-            [ ] OrderByTerm
-            [ ] FocusVariableBind
-            [ ] IndexVariableBind
+            [x] OrderBy
             [x] Ternary
             [x] Transform
-            [ ] ObjectPrefix
-            [ ] ObjectInfix
+            [x] Object
+            [ ] GroupBy
             [ ] ArrayPredicate
-
-            [ ] Path
-            [ ] Parent
-            [ ] Bind
-            [ ] Apply
-
-            Binary operators, just need to process both sides:
-                Add
-                Subtract
-                Multiply
-                Divide
-                Modulus
-                Equal
-                LessThan
-                GreaterThan
-                NotEqual
-                LessThanEqual
-                GreaterThanEqual
-                Concat
-                And
-                Or
-                In
-
-            Should be handled by the default case (just return the node, no processing):
-              Null,
-              Boolean,
-              Str,
-              Number,
-              Variable
+            [ ] FocusVariableBind
+            [ ] IndexVariableBind
         */
 
         match *ast {
+            ParentOp(node) => {
+                let result = Box::new(Parent(ParentNode {
+                    position: node.position,
+                    slot: Slot {
+                        label: format!("!{}", self.ancestor_label),
+                        level: 1,
+                        index: self.ancestor_index,
+                    },
+                }));
+
+                self.ancestor_index += 1;
+                self.ancestor_label += 1;
+
+                result
+            }
             PathSeparator(node) => {
                 let mut result: Box<Node>;
                 let lhs = self.process_ast(node.lhs);
@@ -281,21 +242,18 @@ impl<'a> Parser<'a> {
                         node.consarray = true;
                     }
 
-                    self.resolve_ancestry(result);
-                } else {
-                    // We know that result is a path as we constructed it above. TODO: What's
-                    // the idiomatic way in Rust to assert we know what we're doing here?
-                    unreachable!("`node` should definitely be a Path here")
+                    // self.resolve_ancestry(result);
                 }
 
                 result
             }
             // Wrap Name nodes in a Path node
             Name(node) => Box::new(Path(PathNode {
-                steps: vec![Box::new(Name(LiteralNode::new(
-                    node.get_position(),
-                    node.get_value(),
-                )))],
+                steps: vec![Box::new(Name(LiteralNode {
+                    position: node.position,
+                    value: node.value,
+                    keep_array: node.keep_array,
+                }))],
                 seeking_parent: vec![],
                 keep_singleton_array: node.keep_array,
             })),
@@ -312,6 +270,38 @@ impl<'a> Parser<'a> {
                     position,
                     expressions,
                     consarray: node.consarray,
+                }))
+            }
+            // Object constructor - process each pair
+            Object(node) => {
+                let mut lhs = Vec::new();
+
+                for (key, value) in node.lhs {
+                    let key = self.process_ast(key);
+                    // pushAncestry
+                    let value = self.process_ast(value);
+                    // pushAncestry
+                    lhs.push((key, value));
+                }
+
+                Box::new(Object(ObjectNode {
+                    position: node.position,
+                    lhs,
+                }))
+            }
+            UnaryMinus(node) => {
+                let mut expression = self.process_ast(node.expression);
+
+                // Pre-process unary minus on numbers
+                if let Number(ref mut number) = *expression {
+                    number.value = -number.value;
+                } else {
+                    // pushAncestry
+                }
+
+                Box::new(UnaryMinus(UnaryNode {
+                    position: node.position,
+                    expression,
                 }))
             }
             // Block (array of expressions) - process each node
@@ -407,16 +397,94 @@ impl<'a> Parser<'a> {
                     rhs,
                 }))
             }
+            FunctionCall(node) => {
+                let mut arguments = Vec::new();
+                for arg in node.arguments {
+                    let arg = self.process_ast(arg);
+                    // pushAncestory
+                    arguments.push(arg);
+                }
+                let procedure = self.process_ast(node.procedure);
+                Box::new(FunctionCall(FunctionCallNode {
+                    position: node.position,
+                    arguments,
+                    procedure,
+                }))
+            }
+            PartialFunctionCall(node) => {
+                let mut arguments = Vec::new();
+                for arg in node.arguments {
+                    let arg = self.process_ast(arg);
+                    // pushAncestory
+                    arguments.push(arg);
+                }
+                let procedure = self.process_ast(node.procedure);
+                Box::new(PartialFunctionCall(FunctionCallNode {
+                    position: node.position,
+                    arguments,
+                    procedure,
+                }))
+            }
+            LambdaFunction(node) => {
+                let body = self.process_ast(node.body);
+                Box::new(LambdaFunction(LambdaNode {
+                    position: node.position,
+                    arguments: node.arguments,
+                    body,
+                }))
+                // TODO: Tail call optimization
+            }
+            // Order by
+            //  LHS is the array to be ordered
+            //  RHS defines the terms
+            OrderBy(node) => {
+                let mut lhs = self.process_ast(node.lhs);
+                let mut terms = Vec::new();
+
+                for term in node.rhs {
+                    let expression = self.process_ast(term.expression);
+                    // pushAncestory
+                    terms.push(SortTermNode {
+                        position: term.position,
+                        descending: term.descending,
+                        expression,
+                    })
+                }
+
+                let sort = Box::new(Sort(SortNode {
+                    position: node.position,
+                    terms,
+                }));
+
+                if let Path(ref mut node) = lhs.as_mut() {
+                    node.steps.push(sort);
+                    lhs
+                } else {
+                    Box::new(Path(PathNode {
+                        steps: vec![sort],
+                        seeking_parent: vec![],
+                        keep_singleton_array: false,
+                    }))
+                }
+            }
+            // // Positional variable binding
+            // IndexVariableBind(node) => {
+
+            // },
+            // // Context variable binding
+            // FocusVariableBind(node) => {
+
+            // }
             // Group by
             //  LHS is a step or a predicated step
             //  RHS is the object constructor expression
-            // ObjectInfix(node) => {
+            // GroupBy(node) => {
             //     let mut result = self.process_ast(node.lhs);
             //     result
             // }
             // Predicated step:
-            //  Left hand side is a step or a predicated step
-            //  Right hand side is the predicate expression
+            //  LHS is a step or a predicated step
+            //  RHS is the predicate expression
             //ArrayPredicate(node) => {
             //    let mut result = self.process_ast(node.lhs);
             //    let mut step = &result;
@@ -456,6 +524,22 @@ impl<'a> Parser<'a> {
             //    //                         break;
             //    // // */
             //}
+            Add(node) => binary!(Add, node),
+            Subtract(node) => binary!(Subtract, node),
+            Multiply(node) => binary!(Multiply, node),
+            Divide(node) => binary!(Divide, node),
+            Modulus(node) => binary!(Modulus, node),
+            Equal(node) => binary!(Equal, node),
+            LessThan(node) => binary!(LessThan, node),
+            GreaterThan(node) => binary!(GreaterThan, node),
+            NotEqual(node) => binary!(NotEqual, node),
+            LessThanEqual(node) => binary!(LessThanEqual, node),
+            GreaterThanEqual(node) => binary!(GreaterThanEqual, node),
+            Concat(node) => binary!(Concat, node),
+            And(node) => binary!(And, node),
+            Or(node) => binary!(Or, node),
+            In(node) => binary!(In, node),
+            Range(node) => binary!(Range, node),
             _ => ast,
         }
     }
@@ -477,203 +561,241 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    // #[test_case("Address1.City")]
-    // #[test_case("Other.`Over 18 ?`")]
-    // #[test_case("Phone1[0]")]
-    // #[test_case("Phone2[-1]")]
-    // #[test_case("Phone3[0].Number")]
-    // #[test_case("Phone4[[0..1]]")]
-    // #[test_case("$[0]")]
-    // #[test_case("$[0].ref")]
-    // #[test_case("$[0].ref[0]")]
-    // #[test_case("$.ref")]
-    // #[test_case("Phone5[type='mobile']")]
-    // #[test_case("Phone6[type='mobile'].number")]
-    // #[test_case("Address2.*")]
-    // #[test_case("*.Postcode1")]
-    // #[test_case("**.Postcode2")]
-    // #[test_case("FirstName & ' ' & Surname")]
-    // #[test_case("Address3.(Street & ', ' & City)")]
-    // #[test_case("5&0&true")]
-    // #[test_case("Numbers1[0] + Numbers[1]")]
-    // #[test_case("Numbers2[0] - Numbers[1]")]
-    // #[test_case("Numbers3[0] * Numbers[1]")]
-    // #[test_case("Numbers4[0] / Numbers[1]")]
-    // #[test_case("Numbers5[0] % Numbers[1]")]
-    // #[test_case("Numbers6[0] = Numbers[5]")]
-    // #[test_case("Numbers7[0] != Numbers[5]")]
-    // #[test_case("Numbers8[0] < Numbers[5]")]
-    // #[test_case("Numbers9[0] <= Numbers[5]")]
-    // #[test_case("Numbers10[0] > Numbers[5]")]
-    // #[test_case("Numbers11[0] >= Numbers[5]")]
-    // #[test_case("\"01962 001234\" in Phone.number")]
-    // #[test_case("(Numbers12[2] != 0) and (Numbers[5] != Numbers[1])")]
-    // #[test_case("(Numbers13[2] != 0) or (Numbers[5] = Numbers[1])")]
-    // #[test_case("Email1.[address]")]
-    // #[test_case("[Address4, Other.`Alternative.Address`].City")]
-    // #[test_case("Phone7.{type: number}")]
-    // #[test_case("Phone8{type: number}")]
-    // #[test_case("Phone9{type: number[]}")]
-    // #[test_case("(5 + 3) * 4")]
-    // #[test_case("Product.(Price * Quantity)")]
+    #[test_case("Address1.City")]
+    #[test_case("Other.`Over 18 ?`")]
+    #[test_case("Phone1[0]")]
+    #[test_case("Phone2[-1]")]
+    #[test_case("Phone3[0].Number")]
+    #[test_case("Phone4[[0..1]]")]
+    #[test_case("$[0]")]
+    #[test_case("$[0].ref")]
+    #[test_case("$[0].ref[0]")]
+    #[test_case("$.ref")]
+    #[test_case("Phone5[type='mobile']")]
+    #[test_case("Phone6[type='mobile'].number")]
+    #[test_case("Address2.*")]
+    #[test_case("*.Postcode1")]
+    #[test_case("**.Postcode2")]
+    #[test_case("FirstName & ' ' & Surname")]
+    #[test_case("Address3.(Street & ', ' & City)")]
+    #[test_case("5&0&true")]
+    #[test_case("Numbers1[0] + Numbers[1]")]
+    #[test_case("Numbers2[0] - Numbers[1]")]
+    #[test_case("Numbers3[0] * Numbers[1]")]
+    #[test_case("Numbers4[0] / Numbers[1]")]
+    #[test_case("Numbers5[0] % Numbers[1]")]
+    #[test_case("Numbers6[0] = Numbers[5]")]
+    #[test_case("Numbers7[0] != Numbers[5]")]
+    #[test_case("Numbers8[0] < Numbers[5]")]
+    #[test_case("Numbers9[0] <= Numbers[5]")]
+    #[test_case("Numbers10[0] > Numbers[5]")]
+    #[test_case("Numbers11[0] >= Numbers[5]")]
+    #[test_case("\"01962 001234\" in Phone.number")]
+    #[test_case("(Numbers12[2] != 0) and (Numbers[5] != Numbers[1])")]
+    #[test_case("(Numbers13[2] != 0) or (Numbers[5] = Numbers[1])")]
+    #[test_case("Email1.[address]")]
+    #[test_case("[Address4, Other.`Alternative.Address`].City")]
+    #[test_case("Phone7.{type: number}")]
+    #[test_case("Phone8{type: number}")]
+    #[test_case("Phone9{type: number[]}")]
+    #[test_case("(5 + 3) * 4")]
+    #[test_case("Product.(Price * Quantity)")]
     #[test_case("(expr1; expr2; expr3)")]
-    // #[test_case("Account1.Order.Product{`Product Name`: Price}")]
-    // #[test_case(
-    //     r#"
-    //     Account2.Order.Product {
-    //         `Product Name`: {"Price": Price, "Qty": Quantity}
-    //     }
-    // "#
-    // )]
-    // #[test_case(
-    //     r#"
-    //     Account3.Order.Product {
-    //       `Product Name`: $.{"Price": Price, "Qty": Quantity}
-    //     }
-    // "#
-    // )]
-    // #[test_case("Account4.Order.Product{`Product Name`: $.(Price*Quantity)}")]
-    // #[test_case("Account5.Order.Product{`Product Name`: $sum($.(Price*Quantity))}")]
-    // #[test_case("$sum1(Account.Order.Product.Price)")]
-    // #[test_case("$sum2(Account.Order.Product.(Price*Quantity))")]
-    // #[test_case(
-    //     r#"
-    //     Invoice.(
-    //       $p := Product.Price;
-    //       $q := Product.Quantity;
-    //       $p * $q
-    //     )
-    // "#
-    // )]
-    // #[test_case(
-    //     r#"
-    //     (
-    //       $volume := function($l, $w, $h){ $l * $w * $h };
-    //       $volume(10, 10, 5);
-    //     )
-    // "#
-    // )]
-    // #[test_case(
-    //     r#"
-    //     (
-    //       $factorial:= function($x){ $x <= 1 ? 1 : $x * $factorial($x-1) };
-    //       $factorial(4)
-    //     )
-    // "#
-    // )]
-    // #[test_case(
-    //     r#"
-    //     (
-    //       $factorial := function($x){(
-    //         $iter := function($x, $acc) {
-    //           $x <= 1 ? $acc : $iter($x - 1, $x * $acc)
-    //         };
-    //         $iter($x, 1)
-    //       )};
-    //       $factorial(170)
-    //     )
-    // "#
-    // )]
-    // #[test_case(
-    //     r#"
-    //     (
-    //       $twice := function($f) { function($x){ $f($f($x)) } };
-    //       $add3 := function($y){ $y + 3 };
-    //       $add6 := $twice($add3);
-    //       $add6(7)
-    //     )
-    // "#
-    // )]
-    // #[test_case(
-    //     r#"
-    //     Account.(
-    //       $AccName := function() { $.'Account Name' };
+    #[test_case("Account1.Order.Product{`Product Name`: Price}")]
+    #[test_case("Account2.Order.Product^(Price)")]
+    #[test_case("Account3.Order.Product^(>Price)")]
+    #[test_case("Account4.Order.Product^(>Price, <Quantity)")]
+    #[test_case("Account5.Order.Product^(Price * Quantity)")]
+    #[test_case("student[type='fulltime']^(DoB).name")]
+    #[test_case(
+        r#"
+        Account6.Order.Product.{
+          'Product': `Product Name`,
+          'Order': %.OrderID,
+          'Account': %.%.`Account Name`
+        }
+    "#
+    )]
+    #[test_case(
+        r#"
+        Account7.Order.Product {
+            `Product Name`: {"Price": Price, "Qty": Quantity}
+        }
+    "#
+    )]
+    #[test_case(
+        r#"
+        Account8.Order.Product {
+          `Product Name`: $.{"Price": Price, "Qty": Quantity}
+        }
+    "#
+    )]
+    #[test_case(
+        r#"
+        library1.books#$i['Kernighan' in authors].{
+          'title': title,
+          'index': $i
+        }
+    "#
+    )]
+    #[test_case(
+        r#"
+        library2.loans@$l.books@$b[$l.isbn=$b.isbn].{
+          'title': $b.title,
+          'customer': $l.customer
+        }
+    "#
+    )]
+    #[test_case(
+        r#"
+        (library3.loans)@$l.(catalog.books)@$b[$l.isbn=$b.isbn].{
+          'title': $b.title,
+          'customer': $l.customer
+        }
+    "#
+    )]
+    #[test_case("Account9.Order.Product{`Product Name`: $.(Price*Quantity)}")]
+    #[test_case("Account10.Order.Product{`Product Name`: $sum($.(Price*Quantity))}")]
+    #[test_case("$sum1(Account.Order.Product.Price)")]
+    #[test_case("$sum2(Account.Order.Product.(Price*Quantity))")]
+    #[test_case(
+        r#"
+        Invoice.(
+          $p := Product.Price;
+          $q := Product.Quantity;
+          $p * $q
+        )
+    "#
+    )]
+    #[test_case(
+        r#"
+        (
+          $volume := function($l, $w, $h){ $l * $w * $h };
+          $volume(10, 10, 5);
+        )
+    "#
+    )]
+    #[test_case(
+        r#"
+        (
+          $factorial:= function($x){ $x <= 1 ? 1 : $x * $factorial($x-1) };
+          $factorial(4)
+        )
+    "#
+    )]
+    #[test_case(
+        r#"
+        (
+          $factorial := function($x){(
+            $iter := function($x, $acc) {
+              $x <= 1 ? $acc : $iter($x - 1, $x * $acc)
+            };
+            $iter($x, 1)
+          )};
+          $factorial(170)
+        )
+    "#
+    )]
+    #[test_case(
+        r#"
+        (
+          $twice := function($f) { function($x){ $f($f($x)) } };
+          $add3 := function($y){ $y + 3 };
+          $add6 := $twice($add3);
+          $add6(7)
+        )
+    "#
+    )]
+    #[test_case(
+        r#"
+        Account.(
+          $AccName := function() { $.'Account Name' };
 
-    //       Order[OrderID = 'order104'].Product.{
-    //         'Account': $AccName(),
-    //         'SKU-' & $string(ProductID): $.'Product Name'
-    //       }
-    //     )
-    // "#
-    // )]
-    // #[test_case(
-    //     r#"
-    //     (
-    //       $firstN := $substring(?, 0, ?);
-    //       $first5 := $firstN(?, 5);
-    //       $first5("Hello, World")
-    //     )
-    // "#
-    // )]
-    // #[test_case(
-    //     "Customer.Email ~> $substringAfter(\"@\") ~> $substringBefore(\".\") ~> $uppercase()"
-    // )]
-    // #[test_case(
-    //     r#"
-    //     Account.Order.Product.{
-    //       'Product': `Product Name`,
-    //       'Order': %.OrderID,
-    //       'Account': %.%.`Account Name`
-    //     }
-    // "#
-    // )]
-    // #[test_case(
-    //     r#"
-    //     library.books#$i['Kernighan' in authors].{
-    //       'title': title,
-    //       'index': $i
-    //     }
-    // "#
-    // )]
-    // #[test_case(
-    //     r#"
-    //     library.loans@$l.books@$b[$l.isbn=$b.isbn].{
-    //       'title': $b.title,
-    //       'customer': $l.customer
-    //     }
-    // "#
-    // )]
-    // #[test_case(
-    //     r#"
-    //     (library.loans)@$l.(catalog.books)@$b[$l.isbn=$b.isbn].{
-    //       'title': $b.title,
-    //       'customer': $l.customer
-    //     }
-    // "#
-    // )]
-    // #[test_case("payload ~> |Account.Order.Product|{'Price': Price * 1.2}|")]
-    // #[test_case("$ ~> |Account.Order.Product|{'Total': Price * Quantity}, ['Price', 'Quantity']|")]
-    // #[test_case(
-    //     r#"
-    //     /* Long-winded expressions might need some explanation */
-    //     (
-    //       $pi := 3.1415926535897932384626;
-    //       /* JSONata is not known for its graphics support! */
-    //       $plot := function($x) {(
-    //         $floor := $string ~> $substringBefore(?, '.') ~> $number;
-    //         $index := $floor(($x + 1) * 20 + 0.5);
-    //         $join([0..$index].('.')) & 'O' & $join([$index..40].('.'))
-    //       )};
+          Order[OrderID = 'order104'].Product.{
+            'Account': $AccName(),
+            'SKU-' & $string(ProductID): $.'Product Name'
+          }
+        )
+    "#
+    )]
+    #[test_case(
+        r#"
+        (
+          $firstN := $substring(?, 0, ?);
+          $first5 := $firstN(?, 5);
+          $first5("Hello, World")
+        )
+    "#
+    )]
+    #[test_case(
+        "Customer.Email ~> $substringAfter(\"@\") ~> $substringBefore(\".\") ~> $uppercase()"
+    )]
+    #[test_case(
+        r#"
+        Account.Order.Product.{
+          'Product': `Product Name`,
+          'Order': %.OrderID,
+          'Account': %.%.`Account Name`
+        }
+    "#
+    )]
+    #[test_case(
+        r#"
+        library.books#$i['Kernighan' in authors].{
+          'title': title,
+          'index': $i
+        }
+    "#
+    )]
+    #[test_case(
+        r#"
+        library.loans@$l.books@$b[$l.isbn=$b.isbn].{
+          'title': $b.title,
+          'customer': $l.customer
+        }
+    "#
+    )]
+    #[test_case(
+        r#"
+        (library.loans)@$l.(catalog.books)@$b[$l.isbn=$b.isbn].{
+          'title': $b.title,
+          'customer': $l.customer
+        }
+    "#
+    )]
+    #[test_case("payload ~> |Account.Order.Product|{'Price': Price * 1.2}|")]
+    #[test_case("$ ~> |Account.Order.Product|{'Total': Price * Quantity}, ['Price', 'Quantity']|")]
+    #[test_case(
+        r#"
+        /* Long-winded expressions might need some explanation */
+        (
+          $pi := 3.1415926535897932384626;
+          /* JSONata is not known for its graphics support! */
+          $plot := function($x) {(
+            $floor := $string ~> $substringBefore(?, '.') ~> $number;
+            $index := $floor(($x + 1) * 20 + 0.5);
+            $join([0..$index].('.')) & 'O' & $join([$index..40].('.'))
+          )};
 
-    //       /* Factorial is the product of the integers 1..n */
-    //       $product := function($a, $b) { $a * $b };
-    //       $factorial := function($n) { $n = 0 ? 1 : $reduce([1..$n], $product) };
+          /* Factorial is the product of the integers 1..n */
+          $product := function($a, $b) { $a * $b };
+          $factorial := function($n) { $n = 0 ? 1 : $reduce([1..$n], $product) };
 
-    //       $sin := function($x){ /* define sine in terms of cosine */
-    //         $cos($x - $pi/2)
-    //       };
-    //       $cos := function($x){ /* Derive cosine by expanding Maclaurin series */
-    //         $x > $pi ? $cos($x - 2 * $pi) : $x < -$pi ? $cos($x + 2 * $pi) :
-    //           $sum([0..12].($power(-1, $) * $power($x, 2*$) / $factorial(2*$)))
-    //       };
+          $sin := function($x){ /* define sine in terms of cosine */
+            $cos($x - $pi/2)
+          };
+          $cos := function($x){ /* Derive cosine by expanding Maclaurin series */
+            $x > $pi ? $cos($x - 2 * $pi) : $x < -$pi ? $cos($x + 2 * $pi) :
+              $sum([0..12].($power(-1, $) * $power($x, 2*$) / $factorial(2*$)))
+          };
 
-    //       [0..24].$sin($*$pi/12).$plot($)
-    //     )
-    // "#
-    // )]
+          [0..24].$sin($*$pi/12).$plot($)
+        )
+    "#
+    )]
     fn parser_tests(source: &str) {
         let ast = Parser::parse(source);
-        use json::stringify_pretty;
-        println!("{}", stringify_pretty(ast.to_json(), 4));
+        // use json::stringify_pretty;
+        // println!("{}", stringify_pretty(ast.to_json(), 4));
     }
 }
