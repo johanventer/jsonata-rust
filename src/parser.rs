@@ -75,11 +75,17 @@ impl<'a> Parser<'a> {
     /// Ensure that the current token is an expected type, and then advance the tokenzier.
     pub fn expect(&mut self, expected: TokenKind, infix: bool) {
         if self.token.kind == TokenKind::End {
-            error!(s0203, self.token.position, &expected)
+            error!(
+                self.token.position,
+                ParserError::UnexpectedBeforeEnd(&expected)
+            )
         }
 
         if self.token.kind != expected {
-            error!(s0202, self.token.position, &expected, &self.token)
+            error!(
+                self.token.position,
+                ParserError::Unexpected(&expected, &self.token)
+            )
         }
 
         self.next(infix);

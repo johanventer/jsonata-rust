@@ -150,7 +150,7 @@ impl Symbol for Token {
             Node::new_with_children(N::Transform, p, children)
          }
 
-         _ => error!(s0211, self.position, self),
+         _ => error!(p, ParserError::NotUnaryOperator(self)),
       }
    }
 
@@ -224,7 +224,7 @@ impl Symbol for Token {
                   for arg in &arguments {
                      match arg.kind {
                         N::Var(..) => (),
-                        _ => new_error!(arg.position, ParserError::FuncArgMustBeVar(arg)),
+                        _ => error!(arg.position, ParserError::FuncArgMustBeVar(arg)),
                      }
                   }
 
@@ -255,7 +255,7 @@ impl Symbol for Token {
          T::Bind => {
             match left.kind {
                N::Var(..) => (),
-               _ => new_error!(left.position, ParserError::LeftOfBindMustBeVar),
+               _ => error!(left.position, ParserError::LeftOfBindMustBeVar),
             }
 
             Node::new_with_children(
@@ -300,7 +300,7 @@ impl Symbol for Token {
             let rhs = parser.expression(self.lbp());
             match rhs.kind {
                N::Var(..) => (),
-               _ => new_error!(rhs.position, ParserError::RightMustBeVar('@')),
+               _ => error!(rhs.position, ParserError::RightMustBeVar('@')),
             }
 
             Node::new_with_children(N::Binary(BinaryOp::ContextBind), p, vec![left, rhs])
@@ -311,7 +311,7 @@ impl Symbol for Token {
             let rhs = parser.expression(self.lbp());
             match rhs.kind {
                N::Var(..) => (),
-               _ => new_error!(rhs.position, ParserError::RightMustBeVar('#')),
+               _ => error!(rhs.position, ParserError::RightMustBeVar('#')),
             }
 
             Node::new_with_children(N::Binary(BinaryOp::PositionalBind), p, vec![left, rhs])

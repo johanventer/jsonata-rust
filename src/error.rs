@@ -21,9 +21,52 @@ use std::str;
 use crate::ast::Node;
 use crate::tokenizer::{Token, TokenKind};
 
+/// Convenience macro for panicing on errors.
+#[macro_export]
+macro_rules! error {
+    ($p:expr, $e:expr) => {
+        panic!("Error at position {}: {}", $p, $e);
+    };
+}
+
 pub trait Error {}
 
+pub enum TokenizerError<'a> {
+    StringNotClosed,
+    CommentNotClosed,
+    BackquoteNotClosed,
+    NumberOutOfRange(&'a [u8]),
+    InvalidEscape,
+    UnsupportedEscape(u8),
+}
+
+impl<'a> Error for TokenizerError<'a> {}
+impl<'a> fmt::Display for TokenizerError<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use TokenizerError::*;
+        match self {
+            StringNotClosed => write!(f, "String literal must be terminated by a matching quote"),
+            CommentNotClosed => write!(f, "Comment has no closing tag"),
+            BackquoteNotClosed => write!(
+                f,
+                "Quoted property name must be terminated with a backquote (`)"
+            ),
+            NumberOutOfRange(num) => {
+                write!(f, "Number out of range: {}", str::from_utf8(num).unwrap())
+            }
+            InvalidEscape => write!(
+                f,
+                "The escape sequence \\u must be followed by 4 hex digits"
+            ),
+            UnsupportedEscape(c) => write!(f, "Unsupported escape sequence: \\{}", *c as char),
+        }
+    }
+}
+
 pub enum ParserError<'a> {
+    Unexpected(&'a TokenKind, &'a Token),
+    UnexpectedBeforeEnd(&'a TokenKind),
+    NotUnaryOperator(&'a Token),
     FuncArgMustBeVar(&'a Node),
     LeftOfBindMustBeVar,
     RightMustBeVar(char),
@@ -34,10 +77,15 @@ impl<'a> fmt::Display for ParserError<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use ParserError::*;
         match self {
-            FuncArgMustBeVar(arg) => write!(
+            Unexpected(tk, t) => write!(f, "Expected `{}`, got `{}`", tk, t),
+            UnexpectedBeforeEnd(tk) => write!(f, "Expected `{}` before end of expression", tk),
+            NotUnaryOperator(t) => {
+                write!(f, "The symbol `{}` cannot be used as a unary operator", t)
+            }
+            FuncArgMustBeVar(a) => write!(
                 f,
                 "Parameter `{}` of function definition must be a variable name (start with $)",
-                arg
+                a
             ),
             LeftOfBindMustBeVar => write!(
                 f,
@@ -52,66 +100,13 @@ impl<'a> fmt::Display for ParserError<'a> {
     }
 }
 
-/// Convenience macro for panicing on errors.
-#[macro_export]
-macro_rules! new_error {
-    ($p:expr, $e:expr) => {
-        panic!("Error at position {}: {}", $p, $e);
-    };
-}
-
-/// Convenience macro for panicing on errors.
-#[macro_export]
-macro_rules! error {
-    ($c:ident, $p:expr $(, $i:expr )*) => {
-        panic!("Error {} at position {}: {}", stringify!($c), $p, $c($($i),*));
-    }
-}
-
-pub fn s0101() -> &'static str {
-    "String literal must be terminated by a matching quote"
-}
-
-pub fn s0102(v: &[u8]) -> String {
-    format!("Number out of range: {}", str::from_utf8(v).unwrap())
-}
-
-pub fn s0103(v: u8) -> String {
-    format!("Unsupported escape sequence: \\{}", v as char)
-}
-
-pub fn s0104() -> &'static str {
-    "The escape sequence \\u must be followed by 4 hex digits"
-}
-
-pub fn s0105() -> &'static str {
-    "Quoted property name must be terminated with a backquote (`)"
-}
-
-pub fn s0106() -> &'static str {
-    "Comment has no closing tag"
-}
-
-pub fn s0202(t1: &TokenKind, t2: &Token) -> String {
-    format!("Expected `{}`, got `{}`", t1, t2)
-}
-
-pub fn s0203(t: &TokenKind) -> String {
-    format!("Expected `{}` before end of expression", t)
-}
-
-pub fn s0211(t: &Token) -> String {
-    format!("The symbol `{}` cannot be used as a unary operator", t)
-}
-
-pub fn s0213(t: &str) -> String {
-    format!(
-        "The literal value `{}` cannot be used as a step within a path expression",
-        t
-    )
-}
-
 // TODO:
+// pub fn s0213(t: &str) -> String {
+//     format!(
+//         "The literal value `{}` cannot be used as a step within a path expression",
+//         t
+//     )
+// }
 //        "S0201": "Syntax error: {{token}}",
 //        "S0204": "Unknown operator: {{token}}",
 //        "S0205": "Unexpected token: {{token}}",

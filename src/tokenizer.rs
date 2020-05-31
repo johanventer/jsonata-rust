@@ -176,7 +176,7 @@ impl<'a> Tokenizer<'a> {
                     self.position += 2;
                     loop {
                         match self.source.as_bytes()[self.position..] {
-                            [] => error!(s0106, comment_start),
+                            [] => error!(comment_start, TokenizerError::CommentNotClosed),
                             [b'*', b'/', ..] => {
                                 self.position += 2;
                                 break;
@@ -220,7 +220,7 @@ impl<'a> Tokenizer<'a> {
                     {
                         break self.emit(Num(number));
                     } else {
-                        error!(s0102, self.position, token);
+                        error!(self.position, TokenizerError::NumberOutOfRange(token));
                     }
                 }
                 [b'.', ..] => op1!(Period),
@@ -257,7 +257,7 @@ impl<'a> Tokenizer<'a> {
                     break loop {
                         match self.source.as_bytes()[self.position..] {
                             // End of string missing
-                            [] => error!(s0101, string_start),
+                            [] => error!(string_start, TokenizerError::StringNotClosed),
                             // Escape sequence
                             [b'\\', escape_char, ..] => {
                                 self.position += 1;
@@ -288,11 +288,13 @@ impl<'a> Tokenizer<'a> {
                                             string.push(character);
                                             self.position += 5;
                                         } else {
-                                            error!(s0104, self.position)
+                                            error!(self.position, TokenizerError::InvalidEscape)
                                         }
                                     }
                                     // Invalid escape sequence
-                                    c => error!(s0103, self.position, c),
+                                    c => {
+                                        error!(self.position, TokenizerError::UnsupportedEscape(c))
+                                    }
                                 }
                             }
                             // Any other char
@@ -331,7 +333,7 @@ impl<'a> Tokenizer<'a> {
                             self.position += value.len() + 1;
                             break self.emit(Name(value));
                         }
-                        None => error!(s0105, self.position),
+                        None => error!(self.position, TokenizerError::BackquoteNotClosed),
                     }
                 }
                 // Names
