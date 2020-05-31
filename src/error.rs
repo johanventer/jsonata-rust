@@ -15,9 +15,50 @@
 //! - `10xx` - Evaluator
 //! - `20xx` - Operators
 //! - `3xxx` - Functions (blocks of 10 for each function)
+use std::fmt;
 use std::str;
 
+use crate::ast::Node;
 use crate::tokenizer::{Token, TokenKind};
+
+pub trait Error {}
+
+pub enum ParserError<'a> {
+    FuncArgMustBeVar(&'a Node),
+    LeftOfBindMustBeVar,
+    RightMustBeVar(char),
+}
+
+impl<'a> Error for ParserError<'a> {}
+impl<'a> fmt::Display for ParserError<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use ParserError::*;
+        match self {
+            FuncArgMustBeVar(arg) => write!(
+                f,
+                "Parameter `{}` of function definition must be a variable name (start with $)",
+                arg
+            ),
+            LeftOfBindMustBeVar => write!(
+                f,
+                "The left side of `:=` must be a variable name (start with $)"
+            ),
+            RightMustBeVar(c) => write!(
+                f,
+                "The right side of `{}` must be a variable name (start with $)",
+                c
+            ),
+        }
+    }
+}
+
+/// Convenience macro for panicing on errors.
+#[macro_export]
+macro_rules! new_error {
+    ($p:expr, $e:expr) => {
+        panic!("Error at position {}: {}", $p, $e);
+    };
+}
 
 /// Convenience macro for panicing on errors.
 #[macro_export]
@@ -59,31 +100,13 @@ pub fn s0203(t: &TokenKind) -> String {
     format!("Expected `{}` before end of expression", t)
 }
 
-pub fn s0208(t: &str) -> String {
-    format!(
-        "Parameter `{}` of function definition must be a variable name (start with $)",
-        t
-    )
-}
-
 pub fn s0211(t: &Token) -> String {
     format!("The symbol `{}` cannot be used as a unary operator", t)
-}
-
-pub fn s0212() -> &'static str {
-    "The left side of `:=` must be a variable name (start with $)"
 }
 
 pub fn s0213(t: &str) -> String {
     format!(
         "The literal value `{}` cannot be used as a step within a path expression",
-        t
-    )
-}
-
-pub fn s0214(t: &'static str) -> String {
-    format!(
-        "The right side of `{}` must be a variable name (start with $)",
         t
     )
 }

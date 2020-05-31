@@ -1,7 +1,7 @@
-use json::stringify_pretty;
+//use json::stringify_pretty;
 use std::env;
 
-use jsonata::JsonAta;
+//use jsonata::JsonAta;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -11,6 +11,6 @@ fn main() {
         return;
     }
 
-    let jsonata = JsonAta::new(&args[1]);
-    println!("{}", stringify_pretty(jsonata.ast(), 2));
+    //  let jsonata = JsonAta::new(&args[1]);
+    // println!("{}", stringify_pretty(jsonata.ast(), 2));
 }

@@ -16,7 +16,7 @@ mod parser;
 mod symbol;
 mod tokenizer;
 
-use ast::NodeMethods;
+// use ast::NodeMethods;
 
 /// A binding in a stack frame
 pub enum Binding<'a> {
@@ -96,7 +96,7 @@ impl<'a> Frame<'a> {
 pub struct JsonAta<'a> {
     expr: String,
     environment: Frame<'a>,
-    ast: Box<ast::Node>,
+    ast: ast::Node,
 }
 
 impl<'a> JsonAta<'a> {
@@ -123,9 +123,9 @@ impl<'a> JsonAta<'a> {
         self.environment.bind(name, value);
     }
 
-    pub fn ast(&self) -> JsonValue {
-        self.ast.to_json()
-    }
+    // pub fn ast(&self) -> JsonValue {
+    //     self.ast.to_json()
+    // }
 }
 
 #[cfg(test)]

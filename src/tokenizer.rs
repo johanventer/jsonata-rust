@@ -8,12 +8,12 @@ pub enum TokenKind {
     End,
     // Double character operators
     Range,
-    Assignment,
+    Bind,
     NotEqual,
     GreaterEqual,
     LessEqual,
     Descendent,
-    ChainFunction,
+    Apply,
     // Named operators
     Or,
     In,
@@ -47,12 +47,12 @@ pub enum TokenKind {
     Tilde,
     // Literal values
     Null,
-    Boolean(bool),
+    Bool(bool),
     Str(String),
-    Number(f64),
+    Num(f64),
     // Identifiers
     Name(String),
-    Variable(String),
+    Var(String),
 }
 
 impl fmt::Display for TokenKind {
@@ -61,12 +61,12 @@ impl fmt::Display for TokenKind {
         let value = match self {
             End => "".to_string(),
             Range => "..".to_string(),
-            Assignment => ":=".to_string(),
+            Bind => ":=".to_string(),
             NotEqual => "!=".to_string(),
             GreaterEqual => ">=".to_string(),
             LessEqual => "<=".to_string(),
             Descendent => "**".to_string(),
-            ChainFunction => "~>".to_string(),
+            Apply => "~>".to_string(),
             Or => "or".to_string(),
             In => "in".to_string(),
             And => "and".to_string(),
@@ -99,9 +99,9 @@ impl fmt::Display for TokenKind {
             Null => "null".to_string(),
             Str(v) => v.to_string(),
             Name(v) => v.to_string(),
-            Variable(v) => v.to_string(),
-            Boolean(v) => format!("{}", v),
-            Number(v) => format!("{}", v),
+            Var(v) => v.to_string(),
+            Bool(v) => format!("{}", v),
+            Num(v) => format!("{}", v),
         };
         write!(f, "{}", value)
     }
@@ -190,12 +190,12 @@ impl<'a> Tokenizer<'a> {
                 // Regex
                 [b'/', ..] if !infix => unimplemented!("regex scanning is not yet implemented"),
                 [b'.', b'.', ..] => op2!(Range),
-                [b':', b'=', ..] => op2!(Assignment),
+                [b':', b'=', ..] => op2!(Bind),
                 [b'!', b'=', ..] => op2!(NotEqual),
                 [b'>', b'=', ..] => op2!(GreaterEqual),
                 [b'<', b'=', ..] => op2!(LessEqual),
                 [b'*', b'*', ..] => op2!(Descendent),
-                [b'~', b'>', ..] => op2!(ChainFunction),
+                [b'~', b'>', ..] => op2!(Apply),
                 // Numbers
                 [b'0'..=b'9', ..] => {
                     let number_start = self.position;
@@ -218,7 +218,7 @@ impl<'a> Tokenizer<'a> {
                         .ok()
                         .and_then(|s| s.parse::<f64>().ok())
                     {
-                        break self.emit(Number(number));
+                        break self.emit(Num(number));
                     } else {
                         error!(s0102, self.position, token);
                     }
@@ -355,7 +355,7 @@ impl<'a> Tokenizer<'a> {
                                     )
                                     .unwrap();
 
-                                    break self.emit(Variable(name));
+                                    break self.emit(Var(name));
                                 } else {
                                     // TODO(johan): This could fail to unwrap
                                     let name = String::from_utf8(
@@ -367,8 +367,8 @@ impl<'a> Tokenizer<'a> {
                                         "or" => self.emit(Or),
                                         "in" => self.emit(In),
                                         "and" => self.emit(And),
-                                        "true" => self.emit(Boolean(true)),
-                                        "false" => self.emit(Boolean(false)),
+                                        "true" => self.emit(Bool(true)),
+                                        "false" => self.emit(Bool(false)),
                                         "null" => self.emit(Null),
                                         _ => self.emit(Name(name)),
                                     };
@@ -447,15 +447,15 @@ mod tests {
         let mut tokenizer = Tokenizer::new("  $one   $two   $three  ");
         assert!(matches!(
             tokenizer.next(false).kind,
-            TokenKind::Variable(s) if s == "one"
+            TokenKind::Var(s) if s == "one"
         ));
         assert!(matches!(
             tokenizer.next(false).kind,
-            TokenKind::Variable(s) if s == "two"
+            TokenKind::Var(s) if s == "two"
         ));
         assert!(matches!(
             tokenizer.next(false).kind,
-            TokenKind::Variable(s) if s == "three"
+            TokenKind::Var(s) if s == "three"
         ));
     }
 
@@ -470,14 +470,8 @@ mod tests {
     #[test]
     fn values() {
         let mut tokenizer = Tokenizer::new("true false null");
-        assert!(matches!(
-            tokenizer.next(false).kind,
-            TokenKind::Boolean(true)
-        ));
-        assert!(matches!(
-            tokenizer.next(false).kind,
-            TokenKind::Boolean(false)
-        ));
+        assert!(matches!(tokenizer.next(false).kind, TokenKind::Bool(true)));
+        assert!(matches!(tokenizer.next(false).kind, TokenKind::Bool(false)));
         assert!(matches!(tokenizer.next(false).kind, TokenKind::Null));
     }
 
@@ -486,39 +480,39 @@ mod tests {
         let mut tokenizer = Tokenizer::new("0 1 0.234 5.678 0e0 1e1 1e-1 1e+1 2.234E-2");
         assert!(matches!(
             tokenizer.next(false).kind,
-            TokenKind::Number(n) if (n - 0.0 as f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (n - 0.0 as f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).kind,
-            TokenKind::Number(n) if (n - 1.0 as f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (n - 1.0 as f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).kind,
-            TokenKind::Number(n) if (n - 0.234 as f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (n - 0.234 as f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).kind,
-            TokenKind::Number(n) if (n - 5.678 as f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (n - 5.678 as f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).kind,
-            TokenKind::Number(n) if (n - 0e0 as f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (n - 0e0 as f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).kind,
-            TokenKind::Number(n) if (n - 1e1 as f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (n - 1e1 as f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).kind,
-            TokenKind::Number(n) if (n - 1e-1 as f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (n - 1e-1 as f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).kind,
-            TokenKind::Number(n) if (n - 1e+1 as f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (n - 1e+1 as f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).kind,
-            TokenKind::Number(n) if (n - 2.234E-2 as f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (n - 2.234E-2 as f64).abs() < f64::EPSILON
         ));
     }
 }
