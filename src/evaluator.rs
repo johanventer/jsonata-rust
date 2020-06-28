@@ -5,7 +5,7 @@ use crate::error::EvaluatorError;
 use crate::error::EvaluatorError::*;
 use json::JsonValue;
 
-type Result = std::result::Result<Option<JsonValue>, EvaluatorError>;
+pub type Result = std::result::Result<Option<JsonValue>, EvaluatorError>;
 
 pub fn evaluate(node: &Node) -> Result {
     match &node.kind {
@@ -46,7 +46,7 @@ fn evaluate_numeric_expression(
     let lhs: f64 = match lhs {
         Some(value) => match value {
             JsonValue::Number(value) => value.into(),
-            _ => return Err(LeftSideMustBeNumber),
+            _ => return Err(LeftSideMustBeNumber(op.clone())),
         },
         None => return Ok(None),
     };
@@ -54,7 +54,7 @@ fn evaluate_numeric_expression(
     let rhs: f64 = match rhs {
         Some(value) => match value {
             JsonValue::Number(value) => value.into(),
-            _ => return Err(RightSideMustBeNumber),
+            _ => return Err(RightSideMustBeNumber(op.clone())),
         },
         None => return Ok(None),
     };
@@ -112,7 +112,7 @@ fn evaluate_comparison_expression(
         })));
     }
 
-    Err(InvalidComparison)
+    Err(InvalidComparison(op.clone()))
 }
 
 fn evaluate_equality_expression(

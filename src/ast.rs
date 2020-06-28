@@ -23,7 +23,7 @@ pub enum UnaryOp {
 }
 
 /// Types of binary expressions.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BinaryOp {
     /// Path operator, e.g. `x.y`.
     Path,
@@ -90,6 +90,40 @@ pub enum BinaryOp {
 
     /// A variable binding, e.g. `$x := 10`.
     Bind,
+}
+
+impl fmt::Display for BinaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use BinaryOp::*;
+        write!(
+            f,
+            "{}",
+            match self {
+                Path => ".",
+                Add => "+",
+                Subtract => "-",
+                Multiply => "*",
+                Divide => "/",
+                Modulus => "%",
+                Equal => "=",
+                NotEqual => "!=",
+                LessThan => "<",
+                LessThanEqual => "<=",
+                GreaterThan => ">",
+                GreaterThanEqual => ">=",
+                Concat => "&",
+                And => "and",
+                Or => "or",
+                In => "in",
+                Range => "..",
+                ContextBind => "@",
+                PositionalBind => "#",
+                ArrayPredicate => "[",
+                Apply => "~>",
+                Bind => ":=",
+            }
+        )
+    }
 }
 
 /// Types of AST nodes.

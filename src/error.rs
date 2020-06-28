@@ -18,7 +18,7 @@
 use std::fmt;
 use std::str;
 
-use crate::ast::Node;
+use crate::ast::{BinaryOp, Node};
 use crate::tokenizer::{Token, TokenKind};
 
 /// Convenience macro for panicing on errors.
@@ -104,9 +104,9 @@ impl<'a> fmt::Display for ParserError<'a> {
 
 #[derive(Debug, Clone)]
 pub enum EvaluatorError {
-    LeftSideMustBeNumber,
-    RightSideMustBeNumber,
-    InvalidComparison,
+    LeftSideMustBeNumber(BinaryOp),
+    RightSideMustBeNumber(BinaryOp),
+    InvalidComparison(BinaryOp),
 }
 
 impl Error for EvaluatorError {}
@@ -114,15 +114,15 @@ impl fmt::Display for EvaluatorError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use EvaluatorError::*;
         match self {
-            LeftSideMustBeNumber => write!(
+            LeftSideMustBeNumber(ref op) => write!(
                 f,
-                "The left side of the {{todo}} operator must evaluate to a number"
+                "The left side of the {} operator must evaluate to a number", op
             ),
-            RightSideMustBeNumber => write!(
+            RightSideMustBeNumber(ref op) => write!(
                 f,
-                "The right side of the {{todo}} operator must evaluate to a number"
+                "The right side of the {} operator must evaluate to a number", op
             ),
-            InvalidComparison => write!(f, "The expressions either side of operator {{todo}} must evaluate to numeric or string values"),
+            InvalidComparison(ref op) => write!(f, "The expressions either side of operator {} must evaluate to numeric or string values", op),
         }
     }
 }

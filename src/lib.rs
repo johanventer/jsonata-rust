@@ -17,10 +17,6 @@ mod parser;
 mod symbol;
 mod tokenizer;
 
-use evaluator::evaluate;
-
-// use ast::NodeMethods;
-
 /// A binding in a stack frame
 pub enum Binding<'a> {
     Variable(JsonValue),
@@ -118,8 +114,8 @@ impl<'a> JsonAta<'a> {
         }
     }
 
-    pub fn evaluate(&self, input: String, bindings: Vec<Binding>) -> JsonValue {
-        evaluate(&self.ast).unwrap().unwrap()
+    pub fn evaluate(&self, input: String, bindings: Vec<Binding>) -> evaluator::Result {
+        evaluator::evaluate(&self.ast)
     }
 
     pub fn assign(&mut self, name: &str, value: Binding<'a>) {
