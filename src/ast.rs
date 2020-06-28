@@ -5,6 +5,7 @@ use std::fmt;
 pub type Object = Vec<(Node, Node)>;
 
 /// Slots are used for resolving path ancestory.
+#[derive(Debug)]
 pub struct Slot {
     pub label: String,
     pub level: u32,
@@ -12,6 +13,7 @@ pub struct Slot {
 }
 
 /// Types of unary expressions.
+#[derive(Debug)]
 pub enum UnaryOp {
     /// Unary numeric minux, e.g. `-1`.
     Minus,
@@ -21,6 +23,7 @@ pub enum UnaryOp {
 }
 
 /// Types of binary expressions.
+#[derive(Debug)]
 pub enum BinaryOp {
     /// Path operator, e.g. `x.y`.
     Path,
@@ -90,6 +93,7 @@ pub enum BinaryOp {
 }
 
 /// Types of AST nodes.
+#[derive(Debug)]
 pub enum NodeKind {
     /// Literal null value, e.g. `null`.
     Null,
@@ -165,6 +169,7 @@ pub enum NodeKind {
 }
 
 /// A node in the parsed AST.
+#[derive(Debug)]
 pub struct Node {
     /// The kind of the node.
     pub kind: NodeKind,
@@ -201,33 +206,11 @@ pub struct Node {
 
 impl Node {
     pub fn new(kind: NodeKind, position: usize) -> Self {
-        Self {
-            kind,
-            position,
-            children: Vec::new(),
-            group_by: None,
-            predicates: None,
-            stages: None,
-            focus: None,
-            index: None,
-            keep_array: false,
-            tuple: false,
-        }
+        Self::new_with_children(kind, position, Vec::new())
     }
 
     pub fn new_with_child(kind: NodeKind, position: usize, child: Node) -> Self {
-        Self {
-            kind,
-            position,
-            children: vec![child],
-            group_by: None,
-            predicates: None,
-            stages: None,
-            focus: None,
-            index: None,
-            keep_array: false,
-            tuple: false,
-        }
+        Self::new_with_children(kind, position, vec![child])
     }
 
     pub fn new_with_children(kind: NodeKind, position: usize, children: Vec<Node>) -> Self {

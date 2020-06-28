@@ -47,8 +47,8 @@ impl<'a> Parser<'a> {
     /// Returns the parsed AST for a given source string.
     pub fn parse(source: &'a str) -> Node {
         let mut parser = Self::new(source);
-        parser.expression(0)
-        //parser.process_ast(ast)
+        let ast = parser.expression(0);
+        parser.process_ast(ast)
     }
 
     /// Create a new parser from a source string slice.
@@ -106,448 +106,416 @@ impl<'a> Parser<'a> {
         left
     }
 
-    //fn process_ast(&mut self, ast: Box<Node>) -> Box<Node> {
-    //    use Node::*;
+    fn process_ast(&mut self, node: Node) -> Node {
+        use NodeKind::*;
+        let mut node = node;
 
-    //    macro_rules! binary {
-    //        ($t:tt, $n:ident) => {{
-    //            let lhs = self.process_ast($n.lhs);
-    //            let rhs = self.process_ast($n.rhs);
-    //            // pushAncestory for both lhs and rhs
-    //            Box::new($t(BinaryNode {
-    //                position: $n.position,
-    //                lhs,
-    //                rhs,
-    //            }))
-    //        }};
-    //    }
+        node
 
-    //    /* Things to cover here:
-    //        [x] PathSeparator
-    //        [x] Name -> Gets wrapped in a path
-    //        [x] Chain -> Returns an Apply node
-    //        [x] ParentOp
-    //        [x] FunctionCall
-    //        [x] PartialFunctionCall
-    //        [x] LambdaFunction
-    //        [x] UnaryMinus
-    //        [x] Block
-    //        [x] Array
-    //        [x] Assignment -> Returns a Bind node
-    //        [x] OrderBy
-    //        [x] Ternary
-    //        [x] Transform
-    //        [x] Object
-    //        [ ] GroupBy
-    //        [ ] ArrayPredicate
-    //        [ ] FocusVariableBind
-    //        [ ] IndexVariableBind
-    //    */
-    //    match *ast {
-    //        ParentOp(node) => {
-    //            let result = Box::new(Parent(ParentNode {
-    //                position: node.position,
-    //                slot: Slot {
-    //                    label: format!("!{}", self.ancestor_label),
-    //                    level: 1,
-    //                    index: self.ancestor_index,
-    //                },
-    //            }));
+        // match &node.kind {
+        //     Parent(..) => {
+        //         node.kind = Parent(Some(Slot {
+        //             label: format!("!{}", self.ancestor_label),
+        //             level: 1,
+        //             index: self.ancestor_index,
+        //         }));
 
-    //            self.ancestor_index += 1;
-    //            self.ancestor_label += 1;
+        //         self.ancestor_index += 1;
+        //         self.ancestor_label += 1;
+        //         node
+        //     }
+        //     // Wrap Name nodes in a Path node
+        //     Name(name) => {
+        //         let keep_array = node.keep_array;
+        //         let mut path = Node::new_with_child(Path, node.position, node);
+        //         path.keep_array = keep_array;
+        //         path
+        //         // TODO: seeking_parent
+        //     }
+        //     Unary(ref op) => match op {
+        //         // Array constructor - process each child
+        //         UnaryOp::Array => {
+        //             // TODO: let consarray = node.consarray;
+        //             node.children = node
+        //                 .children
+        //                 .into_iter()
+        //                 .map(|child| self.process_ast(child))
+        //                 .collect();
+        //             node
+        //         }
+        //         UnaryOp::Minus => {
+        //             let expression = &mut node.children[0];
+        //             // Pre-process unary minus on numbers
+        //             if let Num(ref mut num) = expression.kind {
+        //                 *num = -*num;
+        //             } else {
+        //                 // pushAncestry
+        //             }
+        //             node
+        //         }
+        //     },
+        //     Transform | Object => {
+        //         node.children = node
+        //             .children
+        //             .into_iter()
+        //             .map(|child| self.process_ast(child))
+        //             .collect();
+        //         node
+        //     }
+        //     _ => node,
+        // }
 
-    //            result
-    //        }
-    //        PathSeparator(node) => {
-    //            let mut result: Box<Node>;
-    //            let lhs = self.process_ast(node.lhs);
+        //    macro_rules! binary {
+        //        ($t:tt, $n:ident) => {{
+        //            let lhs = self.process_ast($n.lhs);
+        //            let rhs = self.process_ast($n.rhs);
+        //            // pushAncestory for both lhs and rhs
+        //            Box::new($t(BinaryNode {
+        //                position: $n.position,
+        //                lhs,
+        //                rhs,
+        //            }))
+        //        }};
+        //    }
 
-    //            if let Path(_) = *lhs {
-    //                // Left hand side is a Path, so let's start with that
-    //                result = lhs;
-    //            } else if let Parent(node) = *lhs {
-    //                // Let hand side is a parent, so we will be looking for a parent
-    //                result = Box::new(Path(PathNode {
-    //                    steps: vec![],
-    //                    seeking_parent: vec![node.slot],
-    //                    keep_singleton_array: false,
-    //                }));
-    //            } else {
-    //                // Otherwise we are creating a new path, where the left hand side will be the
-    //                // first step
-    //                result = Box::new(Path(PathNode {
-    //                    steps: vec![lhs],
-    //                    seeking_parent: vec![],
-    //                    keep_singleton_array: false,
-    //                }));
-    //            }
+        //    /* Things to cover here:
+        //        [x] PathSeparator
+        //        [x] Name -> Gets wrapped in a path
+        //        [x] Chain -> Returns an Apply node
+        //        [x] ParentOp
+        //        [x] FunctionCall
+        //        [x] PartialFunctionCall
+        //        [x] LambdaFunction
+        //        [x] UnaryMinus
+        //        [x] Block
+        //        [x] Array
+        //        [x] Assignment -> Returns a Bind node
+        //        [x] OrderBy
+        //        [x] Ternary
+        //        [x] Transform
+        //        [x] Object
+        //        [ ] GroupBy
+        //        [ ] ArrayPredicate
+        //        [ ] FocusVariableBind
+        //        [ ] IndexVariableBind
+        //    */
+        //    match *ast {
+        //        PathSeparator(node) => {
+        //            let mut result: Box<Node>;
+        //            let lhs = self.process_ast(node.lhs);
 
-    //            let mut rhs = self.process_ast(node.rhs);
-    //            /*
-    //             TODO: This needs implementing
-    //                        if (rest.type === 'function' &&
-    //                            rest.procedure.type === 'path' &&
-    //                            rest.procedure.steps.length === 1 &&
-    //                            rest.procedure.steps[0].type === 'name' &&
-    //                            result.steps[result.steps.length - 1].type === 'function') {
-    //                            // next function in chain of functions - will override a thenable
-    //                            result.steps[result.steps.length - 1].nextFunction = rest.procedure.steps[0].value;
-    //                        }
-    //            */
-    //            if let Path(result) = result.as_mut() {
-    //                if let Path(node) = rhs.as_mut() {
-    //                    // Right hand side is a path, so it must be merged with our result
-    //                    result.steps.append(&mut node.steps);
-    //                } else {
-    //                    /*
-    //                    TODO: Figure out what predicate and stages are valid for
-    //                    if(typeof rest.predicate !== 'undefined') {
-    //                        rest.stages = rest.predicate;
-    //                        delete rest.predicate;
-    //                    }
-    //                    */
-    //                    result.steps.push(rhs);
-    //                }
+        //            if let Path(_) = *lhs {
+        //                // Left hand side is a Path, so let's start with that
+        //                result = lhs;
+        //            } else if let Parent(node) = *lhs {
+        //                // Let hand side is a parent, so we will be looking for a parent
+        //                result = Box::new(Path(PathNode {
+        //                    steps: vec![],
+        //                    seeking_parent: vec![node.slot],
+        //                    keep_singleton_array: false,
+        //                }));
+        //            } else {
+        //                // Otherwise we are creating a new path, where the left hand side will be the
+        //                // first step
+        //                result = Box::new(Path(PathNode {
+        //                    steps: vec![lhs],
+        //                    seeking_parent: vec![],
+        //                    keep_singleton_array: false,
+        //                }));
+        //            }
 
-    //                for step in &mut result.steps {
-    //                    let mut replace = false;
-    //                    match step.as_ref() {
-    //                        // Don't allow steps to be numbers, null, or boolean values
-    //                        Number(node) => error!(s0213, node.get_position(), &node.get_value()),
-    //                        Null(node) => error!(s0213, node.get_position(), &node.get_value()),
-    //                        Boolean(node) => error!(s0213, node.get_position(), &node.get_value()),
+        //            let mut rhs = self.process_ast(node.rhs);
+        //            /*
+        //             TODO: This needs implementing
+        //                        if (rest.type === 'function' &&
+        //                            rest.procedure.type === 'path' &&
+        //                            rest.procedure.steps.length === 1 &&
+        //                            rest.procedure.steps[0].type === 'name' &&
+        //                            result.steps[result.steps.length - 1].type === 'function') {
+        //                            // next function in chain of functions - will override a thenable
+        //                            result.steps[result.steps.length - 1].nextFunction = rest.procedure.steps[0].value;
+        //                        }
+        //            */
+        //            if let Path(result) = result.as_mut() {
+        //                if let Path(node) = rhs.as_mut() {
+        //                    // Right hand side is a path, so it must be merged with our result
+        //                    result.steps.append(&mut node.steps);
+        //                } else {
+        //                    /*
+        //                    TODO: Figure out what predicate and stages are valid for
+        //                    if(typeof rest.predicate !== 'undefined') {
+        //                        rest.stages = rest.predicate;
+        //                        delete rest.predicate;
+        //                    }
+        //                    */
+        //                    result.steps.push(rhs);
+        //                }
 
-    //                        // Any steps within a path that are string literals should be changed to names
-    //                        Str(node) => replace = true,
+        //                for step in &mut result.steps {
+        //                    let mut replace = false;
+        //                    match step.as_ref() {
+        //                        // Don't allow steps to be numbers, null, or boolean values
+        //                        Number(node) => error!(s0213, node.get_position(), &node.get_value()),
+        //                        Null(node) => error!(s0213, node.get_position(), &node.get_value()),
+        //                        Boolean(node) => error!(s0213, node.get_position(), &node.get_value()),
 
-    //                        _ => (),
-    //                    }
-    //                    if replace {
-    //                        *step = Box::new(Name(LiteralNode::new(
-    //                            step.get_position(),
-    //                            step.get_value(),
-    //                        )));
-    //                    }
-    //                }
-    //                // Any step that signal keeping a singleton array, should be flagged on the path
-    //                if result.steps.iter().any(|step| match step.as_ref() {
-    //                    Name(node) => node.keep_array,
-    //                    _ => false,
-    //                }) {
-    //                    result.keep_singleton_array = true;
-    //                }
+        //                        // Any steps within a path that are string literals should be changed to names
+        //                        Str(node) => replace = true,
 
-    //                // If first step is a path constructor, flag it for special handling
-    //                if let Some(Array(node)) = result.steps.first_mut().map(|b| b.as_mut()) {
-    //                    node.consarray = true;
-    //                }
-    //                // If last step is a path constructor, flag it for special handling
-    //                if let Some(Array(node)) = result.steps.last_mut().map(|b| b.as_mut()) {
-    //                    node.consarray = true;
-    //                }
+        //                        _ => (),
+        //                    }
+        //                    if replace {
+        //                        *step = Box::new(Name(LiteralNode::new(
+        //                            step.get_position(),
+        //                            step.get_value(),
+        //                        )));
+        //                    }
+        //                }
+        //                // Any step that signal keeping a singleton array, should be flagged on the path
+        //                if result.steps.iter().any(|step| match step.as_ref() {
+        //                    Name(node) => node.keep_array,
+        //                    _ => false,
+        //                }) {
+        //                    result.keep_singleton_array = true;
+        //                }
 
-    //                // self.resolve_ancestry(result);
-    //            }
+        //                // If first step is a path constructor, flag it for special handling
+        //                if let Some(Array(node)) = result.steps.first_mut().map(|b| b.as_mut()) {
+        //                    node.consarray = true;
+        //                }
+        //                // If last step is a path constructor, flag it for special handling
+        //                if let Some(Array(node)) = result.steps.last_mut().map(|b| b.as_mut()) {
+        //                    node.consarray = true;
+        //                }
 
-    //            result
-    //        }
-    //        // Wrap Name nodes in a Path node
-    //        Name(node) => Box::new(Path(PathNode {
-    //            steps: vec![Box::new(Name(LiteralNode {
-    //                position: node.position,
-    //                value: node.value,
-    //                keep_array: node.keep_array,
-    //            }))],
-    //            seeking_parent: vec![],
-    //            keep_singleton_array: node.keep_array,
-    //        })),
-    //        // Array constructor - process each node
-    //        Array(node) => {
-    //            let mut expressions = Vec::new();
-    //            let position = node.get_position();
-    //            for expr in node.expressions {
-    //                let expr = self.process_ast(expr);
-    //                //pushAncestry(result, value);
-    //                expressions.push(expr);
-    //            }
-    //            Box::new(Array(ExpressionsNode {
-    //                position,
-    //                expressions,
-    //                consarray: node.consarray,
-    //            }))
-    //        }
-    //        // Object constructor - process each pair
-    //        Object(node) => {
-    //            let mut lhs = Vec::new();
+        //                // self.resolve_ancestry(result);
+        //            }
 
-    //            for (key, value) in node.lhs {
-    //                let key = self.process_ast(key);
-    //                // pushAncestry
-    //                let value = self.process_ast(value);
-    //                // pushAncestry
-    //                lhs.push((key, value));
-    //            }
+        //            result
+        //        }
+        //        // Block (array of expressions) - process each node
+        //        Block(node) => {
+        //            let mut expressions = Vec::new();
+        //            let mut consarray = false;
+        //            let position = node.get_position();
+        //            for expr in node.expressions {
+        //                let expr = self.process_ast(expr);
+        //                match *expr {
+        //                    Array(ref node) => {
+        //                        if node.consarray {
+        //                            consarray = true;
+        //                        }
+        //                    }
+        //                    Path(ref node) => {
+        //                        if !node.steps.is_empty() {
+        //                            if let Array(ref node) = *node.steps[0] {
+        //                                if node.consarray {
+        //                                    consarray = true
+        //                                }
+        //                            }
+        //                        }
+        //                    }
+        //                    _ => (),
+        //                }
+        //                // pushAncestry(result, value)
+        //                expressions.push(expr);
+        //            }
+        //            Box::new(Block(ExpressionsNode {
+        //                position,
+        //                expressions,
+        //                consarray,
+        //            }))
+        //        }
+        //        // Ternary conditional
+        //        Ternary(node) => {
+        //            let position = node.get_position();
+        //            let condition = self.process_ast(node.condition);
+        //            // pushAncestry(result, result.condition)
+        //            let then = self.process_ast(node.then);
+        //            // pushAncestry(result, result.then)
+        //            let els = match node.els {
+        //                Some(node) => {
+        //                    let node = self.process_ast(node);
+        //                    // pushAncestry(result, node)
+        //                    Some(node)
+        //                }
+        //                None => None,
+        //            };
+        //            Box::new(Ternary(TernaryNode {
+        //                position,
+        //                condition,
+        //                then,
+        //                els,
+        //            }))
+        //        }
+        //        // Assignment
+        //        Assignment(node) => {
+        //            let lhs = self.process_ast(node.lhs);
+        //            let rhs = self.process_ast(node.rhs);
+        //            // pushAncestry(result, result.rhs)
+        //            Box::new(Bind(BindNode {
+        //                position: node.position,
+        //                lhs,
+        //                rhs,
+        //            }))
+        //        }
+        //        // Function application
+        //        Chain(node) => {
+        //            let lhs = self.process_ast(node.lhs);
+        //            let rhs = self.process_ast(node.rhs);
+        //            // pushAncestry(result, result.rhs)
+        //            Box::new(Apply(ApplyNode {
+        //                position: node.position,
+        //                lhs,
+        //                rhs,
+        //            }))
+        //        }
+        //        FunctionCall(node) => {
+        //            let mut arguments = Vec::new();
+        //            for arg in node.arguments {
+        //                let arg = self.process_ast(arg);
+        //                // pushAncestory
+        //                arguments.push(arg);
+        //            }
+        //            let procedure = self.process_ast(node.procedure);
+        //            Box::new(FunctionCall(FunctionCallNode {
+        //                position: node.position,
+        //                arguments,
+        //                procedure,
+        //            }))
+        //        }
+        //        PartialFunctionCall(node) => {
+        //            let mut arguments = Vec::new();
+        //            for arg in node.arguments {
+        //                let arg = self.process_ast(arg);
+        //                // pushAncestory
+        //                arguments.push(arg);
+        //            }
+        //            let procedure = self.process_ast(node.procedure);
+        //            Box::new(PartialFunctionCall(FunctionCallNode {
+        //                position: node.position,
+        //                arguments,
+        //                procedure,
+        //            }))
+        //        }
+        //        LambdaFunction(node) => {
+        //            let body = self.process_ast(node.body);
+        //            Box::new(LambdaFunction(LambdaNode {
+        //                position: node.position,
+        //                arguments: node.arguments,
+        //                body,
+        //            }))
+        //            // TODO: Tail call optimization
+        //        }
+        //        // Order by
+        //        //  LHS is the array to be ordered
+        //        //  RHS defines the terms
+        //        OrderBy(node) => {
+        //            let mut lhs = self.process_ast(node.lhs);
+        //            let mut terms = Vec::new();
 
-    //            Box::new(Object(ObjectNode {
-    //                position: node.position,
-    //                lhs,
-    //            }))
-    //        }
-    //        UnaryMinus(node) => {
-    //            let mut expression = self.process_ast(node.expression);
+        //            for term in node.rhs {
+        //                let expression = self.process_ast(term.expression);
+        //                // pushAncestory
+        //                terms.push(SortTermNode {
+        //                    position: term.position,
+        //                    descending: term.descending,
+        //                    expression,
+        //                })
+        //            }
 
-    //            // Pre-process unary minus on numbers
-    //            if let Number(ref mut number) = *expression {
-    //                number.value = -number.value;
-    //            } else {
-    //                // pushAncestry
-    //            }
+        //            let sort = Box::new(Sort(SortNode {
+        //                position: node.position,
+        //                terms,
+        //            }));
 
-    //            Box::new(UnaryMinus(UnaryNode {
-    //                position: node.position,
-    //                expression,
-    //            }))
-    //        }
-    //        // Block (array of expressions) - process each node
-    //        Block(node) => {
-    //            let mut expressions = Vec::new();
-    //            let mut consarray = false;
-    //            let position = node.get_position();
-    //            for expr in node.expressions {
-    //                let expr = self.process_ast(expr);
-    //                match *expr {
-    //                    Array(ref node) => {
-    //                        if node.consarray {
-    //                            consarray = true;
-    //                        }
-    //                    }
-    //                    Path(ref node) => {
-    //                        if !node.steps.is_empty() {
-    //                            if let Array(ref node) = *node.steps[0] {
-    //                                if node.consarray {
-    //                                    consarray = true
-    //                                }
-    //                            }
-    //                        }
-    //                    }
-    //                    _ => (),
-    //                }
-    //                // pushAncestry(result, value)
-    //                expressions.push(expr);
-    //            }
-    //            Box::new(Block(ExpressionsNode {
-    //                position,
-    //                expressions,
-    //                consarray,
-    //            }))
-    //        }
-    //        // Object transform
-    //        Transform(node) => {
-    //            let position = node.get_position();
-    //            let pattern = self.process_ast(node.pattern);
-    //            let update = self.process_ast(node.update);
-    //            let delete = match node.delete {
-    //                Some(node) => Some(self.process_ast(node)),
-    //                None => None,
-    //            };
-    //            Box::new(Transform(TransformNode {
-    //                position,
-    //                pattern,
-    //                update,
-    //                delete,
-    //            }))
-    //        }
-    //        // Ternary conditional
-    //        Ternary(node) => {
-    //            let position = node.get_position();
-    //            let condition = self.process_ast(node.condition);
-    //            // pushAncestry(result, result.condition)
-    //            let then = self.process_ast(node.then);
-    //            // pushAncestry(result, result.then)
-    //            let els = match node.els {
-    //                Some(node) => {
-    //                    let node = self.process_ast(node);
-    //                    // pushAncestry(result, node)
-    //                    Some(node)
-    //                }
-    //                None => None,
-    //            };
-    //            Box::new(Ternary(TernaryNode {
-    //                position,
-    //                condition,
-    //                then,
-    //                els,
-    //            }))
-    //        }
-    //        // Assignment
-    //        Assignment(node) => {
-    //            let lhs = self.process_ast(node.lhs);
-    //            let rhs = self.process_ast(node.rhs);
-    //            // pushAncestry(result, result.rhs)
-    //            Box::new(Bind(BindNode {
-    //                position: node.position,
-    //                lhs,
-    //                rhs,
-    //            }))
-    //        }
-    //        // Function application
-    //        Chain(node) => {
-    //            let lhs = self.process_ast(node.lhs);
-    //            let rhs = self.process_ast(node.rhs);
-    //            // pushAncestry(result, result.rhs)
-    //            Box::new(Apply(ApplyNode {
-    //                position: node.position,
-    //                lhs,
-    //                rhs,
-    //            }))
-    //        }
-    //        FunctionCall(node) => {
-    //            let mut arguments = Vec::new();
-    //            for arg in node.arguments {
-    //                let arg = self.process_ast(arg);
-    //                // pushAncestory
-    //                arguments.push(arg);
-    //            }
-    //            let procedure = self.process_ast(node.procedure);
-    //            Box::new(FunctionCall(FunctionCallNode {
-    //                position: node.position,
-    //                arguments,
-    //                procedure,
-    //            }))
-    //        }
-    //        PartialFunctionCall(node) => {
-    //            let mut arguments = Vec::new();
-    //            for arg in node.arguments {
-    //                let arg = self.process_ast(arg);
-    //                // pushAncestory
-    //                arguments.push(arg);
-    //            }
-    //            let procedure = self.process_ast(node.procedure);
-    //            Box::new(PartialFunctionCall(FunctionCallNode {
-    //                position: node.position,
-    //                arguments,
-    //                procedure,
-    //            }))
-    //        }
-    //        LambdaFunction(node) => {
-    //            let body = self.process_ast(node.body);
-    //            Box::new(LambdaFunction(LambdaNode {
-    //                position: node.position,
-    //                arguments: node.arguments,
-    //                body,
-    //            }))
-    //            // TODO: Tail call optimization
-    //        }
-    //        // Order by
-    //        //  LHS is the array to be ordered
-    //        //  RHS defines the terms
-    //        OrderBy(node) => {
-    //            let mut lhs = self.process_ast(node.lhs);
-    //            let mut terms = Vec::new();
+        //            if let Path(ref mut node) = lhs.as_mut() {
+        //                node.steps.push(sort);
+        //                lhs
+        //            } else {
+        //                Box::new(Path(PathNode {
+        //                    steps: vec![sort],
+        //                    seeking_parent: vec![],
+        //                    keep_singleton_array: false,
+        //                }))
+        //            }
+        //        }
+        //        // // Positional variable binding
+        //        // IndexVariableBind(node) => {
 
-    //            for term in node.rhs {
-    //                let expression = self.process_ast(term.expression);
-    //                // pushAncestory
-    //                terms.push(SortTermNode {
-    //                    position: term.position,
-    //                    descending: term.descending,
-    //                    expression,
-    //                })
-    //            }
+        //        // },
+        //        // // Context variable binding
+        //        // FocusVariableBind(node) => {
 
-    //            let sort = Box::new(Sort(SortNode {
-    //                position: node.position,
-    //                terms,
-    //            }));
+        //        // }
+        //        // Group by
+        //        //  LHS is a step or a predicated step
+        //        //  RHS is the object constructor expression
+        //        // GroupBy(node) => {
+        //        //     let mut result = self.process_ast(node.lhs);
+        //        //     result
+        //        // }
+        //        // Predicated step:
+        //        //  LHS is a step or a predicated step
+        //        //  RHS is the predicate expression
+        //        //ArrayPredicate(node) => {
+        //        //    let mut result = self.process_ast(node.lhs);
+        //        //    let mut step = &result;
+        //        //    let mut is_stages = false;
 
-    //            if let Path(ref mut node) = lhs.as_mut() {
-    //                node.steps.push(sort);
-    //                lhs
-    //            } else {
-    //                Box::new(Path(PathNode {
-    //                    steps: vec![sort],
-    //                    seeking_parent: vec![],
-    //                    keep_singleton_array: false,
-    //                }))
-    //            }
-    //        }
-    //        // // Positional variable binding
-    //        // IndexVariableBind(node) => {
+        //        //    if let Path(node) = *result {
+        //        //        if node.steps.len() > 0 {
+        //        //            is_stages = true;
+        //        //            step = node.steps.last().unwrap();
+        //        //        }
+        //        //    }
+        //        //    //                         if (typeof step.group !== 'undefined') {
+        //        //    //                             throw {
+        //        //    //                                 code: "S0209",
+        //        //    //                                 stack: (new Error()).stack,
+        //        //    //                                 position: expr.position
+        //        //    //                             };
+        //        //    //                         }
+        //        //    //
+        //        //    //
 
-    //        // },
-    //        // // Context variable binding
-    //        // FocusVariableBind(node) => {
+        //        //    let predicate = self.process_ast(node.rhs);
 
-    //        // }
-    //        // Group by
-    //        //  LHS is a step or a predicated step
-    //        //  RHS is the object constructor expression
-    //        // GroupBy(node) => {
-    //        //     let mut result = self.process_ast(node.lhs);
-    //        //     result
-    //        // }
-    //        // Predicated step:
-    //        //  LHS is a step or a predicated step
-    //        //  RHS is the predicate expression
-    //        //ArrayPredicate(node) => {
-    //        //    let mut result = self.process_ast(node.lhs);
-    //        //    let mut step = &result;
-    //        //    let mut is_stages = false;
-
-    //        //    if let Path(node) = *result {
-    //        //        if node.steps.len() > 0 {
-    //        //            is_stages = true;
-    //        //            step = node.steps.last().unwrap();
-    //        //        }
-    //        //    }
-    //        //    //                         if (typeof step.group !== 'undefined') {
-    //        //    //                             throw {
-    //        //    //                                 code: "S0209",
-    //        //    //                                 stack: (new Error()).stack,
-    //        //    //                                 position: expr.position
-    //        //    //                             };
-    //        //    //                         }
-    //        //    //
-    //        //    //
-
-    //        //    let predicate = self.process_ast(node.rhs);
-
-    //        //    // /*
-    //        //    //                         var predicate = processAST(expr.rhs);
-    //        //    //                         if(typeof predicate.seekingParent !== 'undefined') {
-    //        //    //                             predicate.seekingParent.forEach(slot => {
-    //        //    //                                 if(slot.level === 1) {
-    //        //    //                                     seekParent(step, slot);
-    //        //    //                                 } else {
-    //        //    //                                     slot.level--;
-    //        //    //                                 }
-    //        //    //                             });
-    //        //    //                             pushAncestry(step, predicate);
-    //        //    //                         }
-    //        //    //                         step[type].push({type: 'filter', expr: predicate, position: expr.position});
-    //        //    //                         break;
-    //        //    // // */
-    //        //}
-    //        Add(node) => binary!(Add, node),
-    //        Subtract(node) => binary!(Subtract, node),
-    //        Multiply(node) => binary!(Multiply, node),
-    //        Divide(node) => binary!(Divide, node),
-    //        Modulus(node) => binary!(Modulus, node),
-    //        Equal(node) => binary!(Equal, node),
-    //        LessThan(node) => binary!(LessThan, node),
-    //        GreaterThan(node) => binary!(GreaterThan, node),
-    //        NotEqual(node) => binary!(NotEqual, node),
-    //        LessThanEqual(node) => binary!(LessThanEqual, node),
-    //        GreaterThanEqual(node) => binary!(GreaterThanEqual, node),
-    //        Concat(node) => binary!(Concat, node),
-    //        And(node) => binary!(And, node),
-    //        Or(node) => binary!(Or, node),
-    //        In(node) => binary!(In, node),
-    //        Range(node) => binary!(Range, node),
-    //        _ => ast,
-    //    }
-    //}
+        //        //    // /*
+        //        //    //                         var predicate = processAST(expr.rhs);
+        //        //    //                         if(typeof predicate.seekingParent !== 'undefined') {
+        //        //    //                             predicate.seekingParent.forEach(slot => {
+        //        //    //                                 if(slot.level === 1) {
+        //        //    //                                     seekParent(step, slot);
+        //        //    //                                 } else {
+        //        //    //                                     slot.level--;
+        //        //    //                                 }
+        //        //    //                             });
+        //        //    //                             pushAncestry(step, predicate);
+        //        //    //                         }
+        //        //    //                         step[type].push({type: 'filter', expr: predicate, position: expr.position});
+        //        //    //                         break;
+        //        //    // // */
+        //        //}
+        //        Add(node) => binary!(Add, node),
+        //        Subtract(node) => binary!(Subtract, node),
+        //        Multiply(node) => binary!(Multiply, node),
+        //        Divide(node) => binary!(Divide, node),
+        //        Modulus(node) => binary!(Modulus, node),
+        //        Equal(node) => binary!(Equal, node),
+        //        LessThan(node) => binary!(LessThan, node),
+        //        GreaterThan(node) => binary!(GreaterThan, node),
+        //        NotEqual(node) => binary!(NotEqual, node),
+        //        LessThanEqual(node) => binary!(LessThanEqual, node),
+        //        GreaterThanEqual(node) => binary!(GreaterThanEqual, node),
+        //        Concat(node) => binary!(Concat, node),
+        //        And(node) => binary!(And, node),
+        //        Or(node) => binary!(Or, node),
+        //        In(node) => binary!(In, node),
+        //        Range(node) => binary!(Range, node),
+        //        _ => ast,
+        //    }
+    }
 
     //fn resolve_ancestry(&self, path: &mut PathNode) {
     //    // TODO

@@ -31,6 +31,7 @@ macro_rules! error {
 
 pub trait Error {}
 
+#[derive(Debug)]
 pub enum TokenizerError<'a> {
     StringNotClosed,
     CommentNotClosed,
@@ -63,6 +64,7 @@ impl<'a> fmt::Display for TokenizerError<'a> {
     }
 }
 
+#[derive(Debug)]
 pub enum ParserError<'a> {
     Unexpected(&'a TokenKind, &'a Token),
     UnexpectedBeforeEnd(&'a TokenKind),
@@ -96,6 +98,31 @@ impl<'a> fmt::Display for ParserError<'a> {
                 "The right side of `{}` must be a variable name (start with $)",
                 c
             ),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum EvaluatorError {
+    LeftSideMustBeNumber,
+    RightSideMustBeNumber,
+    InvalidComparison,
+}
+
+impl Error for EvaluatorError {}
+impl fmt::Display for EvaluatorError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use EvaluatorError::*;
+        match self {
+            LeftSideMustBeNumber => write!(
+                f,
+                "The left side of the {{todo}} operator must evaluate to a number"
+            ),
+            RightSideMustBeNumber => write!(
+                f,
+                "The right side of the {{todo}} operator must evaluate to a number"
+            ),
+            InvalidComparison => write!(f, "The expressions either side of operator {{todo}} must evaluate to numeric or string values"),
         }
     }
 }
@@ -135,8 +162,6 @@ impl<'a> fmt::Display for ParserError<'a> {
 //        "T1008": "Attempted to partially apply a non-function",
 //        "D1009": "Multiple key definitions evaluate to same key: {{value}}",
 //        "T1010": "The matcher function argument passed to function {{token}} does not return the correct object structure",
-//        "T2001": "The left side of the {{token}} operator must evaluate to a number",
-//        "T2002": "The right side of the {{token}} operator must evaluate to a number",
 //        "T2003": "The left side of the range operator (..) must evaluate to an integer",
 //        "T2004": "The right side of the range operator (..) must evaluate to an integer",
 //        "D2005": "The left side of := must be a variable name (start with $)",  // defunct - replaced by S0212 parser error
