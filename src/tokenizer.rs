@@ -225,7 +225,9 @@ impl<'a> Tokenizer<'a> {
                     }
                 }
                 // Regex
-                [b'/', ..] if !infix => unimplemented!("regex scanning is not yet implemented"),
+                [b'/', ..] if !infix => {
+                    unimplemented!("TODO: regex scanning is not yet implemented")
+                }
                 [b'.', b'.', ..] => op2!(Range),
                 [b':', b'=', ..] => op2!(Bind),
                 [b'!', b'=', ..] => op2!(NotEqual),
@@ -440,7 +442,7 @@ impl<'a> Tokenizer<'a> {
                             }
                         }
                     };
-                }
+                } //_ => Err(Box::new(S0204 { position: self.position, token: }))
             }
         }
     }

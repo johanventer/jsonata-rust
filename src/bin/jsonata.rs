@@ -15,7 +15,8 @@ fn main() -> JsonAtaResult<()> {
 
     println!("{:#?}", jsonata.ast());
 
-    let result = jsonata.evaluate(args[2].clone());
+    let input = json::parse(&args[2]).unwrap();
+    let result = jsonata.evaluate(Some(&input));
 
     match result {
         Ok(value) => match value {

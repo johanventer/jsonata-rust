@@ -116,10 +116,8 @@ impl JsonAta {
         })
     }
 
-    pub fn evaluate(&self, input: String) -> JsonAtaResult<Option<JsonValue>> {
-        // TODO: What to do about bad JSON?
-        let input = json::parse(&input).unwrap();
-        evaluator::evaluate(&self.ast, &input)
+    pub fn evaluate(&self, input: Option<&JsonValue>) -> JsonAtaResult<Option<JsonValue>> {
+        evaluator::evaluate(&self.ast, input)
     }
 
     // pub fn assign(&mut self, name: &str, value: Binding<'a>) {
@@ -200,91 +198,91 @@ mod evaluator_tests {
     #[test]
     fn add() {
         let jsonata = JsonAta::new("1 + 3").unwrap();
-        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
+        let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(4));
     }
 
     #[test]
     fn sub() {
         let jsonata = JsonAta::new("1 - 3").unwrap();
-        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
+        let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(-2));
     }
 
     #[test]
     fn mul() {
         let jsonata = JsonAta::new("4 * 7").unwrap();
-        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
+        let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(28));
     }
 
     #[test]
     fn div() {
         let jsonata = JsonAta::new("10 / 2").unwrap();
-        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
+        let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(5));
     }
 
     #[test]
     fn modulo() {
         let jsonata = JsonAta::new("10 % 8").unwrap();
-        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
+        let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(2));
     }
 
     #[test]
     fn less_than_num_true() {
         let jsonata = JsonAta::new("3 < 4").unwrap();
-        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
+        let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(true));
     }
 
     #[test]
     fn less_than_num_false() {
         let jsonata = JsonAta::new("4 < 3").unwrap();
-        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
+        let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(false));
     }
 
     #[test]
     fn less_than_str_true() {
         let jsonata = JsonAta::new("\"3\" < \"4\"").unwrap();
-        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
+        let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(true));
     }
 
     #[test]
     fn less_than_str_false() {
         let jsonata = JsonAta::new("\"4\" < \"3\"").unwrap();
-        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
+        let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(false));
     }
 
     #[test]
     fn str_concat() {
         let jsonata = JsonAta::new("\"hello\" & \" world\"").unwrap();
-        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
+        let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from("hello world"));
     }
 
     #[test]
     fn eq() {
         let jsonata = JsonAta::new("1 = 1").unwrap();
-        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
+        let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(true));
     }
 
     #[test]
     fn neq() {
         let jsonata = JsonAta::new("1 != 2").unwrap();
-        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
+        let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(true));
     }
 
     #[test]
     fn math() {
         let jsonata = JsonAta::new("(2 + 3) * 4 + 2").unwrap();
-        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
+        let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(22));
     }
 }

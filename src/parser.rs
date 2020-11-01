@@ -108,6 +108,8 @@ impl<'a> Parser<'a> {
       left = last.led(self, left)?;
     }
 
+    //println!("{:#?}", left);
+
     Ok(left)
   }
 
@@ -115,8 +117,7 @@ impl<'a> Parser<'a> {
     use NodeKind::*;
     match &node.kind {
       // Wrap Name nodes in a Path node
-      Name(name) => Node::new_with_child(Path, node.position, node),
-
+      //Name(name) => Node::new_with_child(Path, node.position, node),
       _ => node,
     }
   }

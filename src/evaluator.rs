@@ -5,7 +5,7 @@ use crate::error::*;
 use crate::JsonAtaResult;
 use json::JsonValue;
 
-pub fn evaluate(node: &Node, input: &JsonValue) -> JsonAtaResult<Option<JsonValue>> {
+pub fn evaluate(node: &Node, input: Option<&JsonValue>) -> JsonAtaResult<Option<JsonValue>> {
     match &node.kind {
         Null => Ok(Some(JsonValue::Null)),
         Bool(value) => Ok(Some(json::from(*value))),
@@ -16,11 +16,11 @@ pub fn evaluate(node: &Node, input: &JsonValue) -> JsonAtaResult<Option<JsonValu
         Binary(_) => evaluate_binary_op(node, input),
         Block => evaluate_block(node, input),
         Ternary => evaluate_ternary(node, input),
-        _ => panic!(format!("node kind not yet supported: {}", node.kind)),
+        _ => unimplemented!("TODO: node kind not yet supported: {}", node.kind),
     }
 }
 
-fn evaluate_ternary(node: &Node, input: &JsonValue) -> JsonAtaResult<Option<JsonValue>> {
+fn evaluate_ternary(node: &Node, input: Option<&JsonValue>) -> JsonAtaResult<Option<JsonValue>> {
     if let Ternary = &node.kind {
         let condition = evaluate(&node.children[0], input)?;
         if boolean(condition.as_ref()) {
@@ -33,7 +33,7 @@ fn evaluate_ternary(node: &Node, input: &JsonValue) -> JsonAtaResult<Option<Json
     }
 }
 
-fn evaluate_name(node: &Node, input: &JsonValue) -> JsonAtaResult<Option<JsonValue>> {
+fn evaluate_name(node: &Node, input: Option<&JsonValue>) -> JsonAtaResult<Option<JsonValue>> {
     if let Name(value) = &node.kind {
         Ok(lookup(input, value))
     } else {
@@ -41,7 +41,7 @@ fn evaluate_name(node: &Node, input: &JsonValue) -> JsonAtaResult<Option<JsonVal
     }
 }
 
-fn evaluate_block(node: &Node, input: &JsonValue) -> JsonAtaResult<Option<JsonValue>> {
+fn evaluate_block(node: &Node, input: Option<&JsonValue>) -> JsonAtaResult<Option<JsonValue>> {
     if let Block = &node.kind {
         // TODO: block frame
         let mut result: JsonAtaResult<Option<JsonValue>> = Ok(None);
@@ -56,7 +56,7 @@ fn evaluate_block(node: &Node, input: &JsonValue) -> JsonAtaResult<Option<JsonVa
     }
 }
 
-fn evaluate_unary_op(node: &Node, input: &JsonValue) -> JsonAtaResult<Option<JsonValue>> {
+fn evaluate_unary_op(node: &Node, input: Option<&JsonValue>) -> JsonAtaResult<Option<JsonValue>> {
     if let Unary(ref op) = &node.kind {
         match op {
             UnaryOp::Minus => {
@@ -78,20 +78,19 @@ fn evaluate_unary_op(node: &Node, input: &JsonValue) -> JsonAtaResult<Option<Jso
             UnaryOp::Array => {
                 let mut result = JsonValue::new_array();
                 for child in &node.children {
-                    // TODO: What to do about bad JSON?
                     result.push(evaluate(child, input)?).unwrap();
                 }
                 Ok(Some(result))
                 // TODO: consarray
             }
-            UnaryOp::Object => panic!("TODO: object constructors not yet supported"),
+            UnaryOp::Object => unimplemented!("TODO: object constructors not yet supported"),
         }
     } else {
         unreachable!();
     }
 }
 
-fn evaluate_binary_op(node: &Node, input: &JsonValue) -> JsonAtaResult<Option<JsonValue>> {
+fn evaluate_binary_op(node: &Node, input: Option<&JsonValue>) -> JsonAtaResult<Option<JsonValue>> {
     if let Binary(ref op) = &node.kind {
         let lhs = evaluate(&node.children[0], input)?;
         let rhs = evaluate(&node.children[1], input)?;
@@ -104,7 +103,7 @@ fn evaluate_binary_op(node: &Node, input: &JsonValue) -> JsonAtaResult<Option<Js
             }
             Equal | NotEqual => evaluate_equality_expression(lhs, rhs, op),
             Concat => evaluate_string_concat(lhs, rhs),
-            _ => Ok(None),
+            _ => unimplemented!("TODO: Binary op {:?} not yet supported", op),
         }
     } else {
         unreachable!()
@@ -171,6 +170,13 @@ fn evaluate_comparison_expression(
         None => return Ok(None),
     };
 
+    if !((lhs.is_number() || lhs.is_string()) && (rhs.is_number() || rhs.is_string())) {
+        return Err(Box::new(T2010 {
+            position: node.position,
+            op: op.to_string(),
+        }));
+    }
+
     if lhs.is_number() && rhs.is_number() {
         let lhs = lhs.as_f64().unwrap();
         let rhs = rhs.as_f64().unwrap();
@@ -197,8 +203,10 @@ fn evaluate_comparison_expression(
         })));
     }
 
-    Err(Box::new(T2010 {
+    Err(Box::new(T2009 {
         position: node.position,
+        lhs: lhs.to_string(),
+        rhs: rhs.to_string(),
         op: op.to_string(),
     }))
 }
@@ -243,14 +251,20 @@ fn evaluate_string_concat(
     Ok(Some(result.into()))
 }
 
-fn lookup(input: &JsonValue, key: &str) -> Option<JsonValue> {
-    if input.is_array() {
-        // TODO
-        return None;
-    } else if input.is_object() && input.has_key(key) {
-        return Some(input[key].clone());
+fn lookup(input: Option<&JsonValue>, key: &str) -> Option<JsonValue> {
+    match input {
+        Some(input) => {
+            if input.is_array() {
+                // TODO
+                None
+            } else if input.is_object() && input.has_key(key) {
+                Some(input[key].clone())
+            } else {
+                None
+            }
+        }
+        _ => None,
     }
-    None
 }
 
 fn boolean(arg: Option<&JsonValue>) -> bool {

@@ -74,7 +74,7 @@ define_error!(S0106, "Comment has no closing tag");
 // "S0201": "Syntax error: {{token}}",
 define_error!(S0202, "Expected `{}`, got `{}`", expected, actual);
 define_error!(S0203, "Expected `{}` before end of expression", expected);
-// "S0204": "Unknown operator: {{token}}",
+//define_error!(S0204, "Unknown operator: `{}`", token);
 // "S0205": "Unexpected token: {{token}}",
 // "S0206": "Unknown expression type: {{token}}",
 // "S0207": "Unexpected end of expression",
@@ -85,7 +85,6 @@ define_error!(
 );
 // "S0209": "A predicate cannot follow a grouping expression in a step",
 // "S0210": "Each step can only have one grouping expression",
-// "S0211": "The symbol {{token}} cannot be used as a unary operator",
 define_error!(
     S0211,
     "The symbol `{}` cannot be used as a unary operator",
@@ -139,7 +138,13 @@ define_error!(
 // "T2006": "The right side of the function application operator ~> must be a function",
 // "T2007": "Type mismatch when comparing values {{value}} and {{value2}} in order-by clause",
 // "T2008": "The expressions within an order-by clause must evaluate to numeric or string values",
-// "T2009": "The values {{value}} and {{value2}} either side of operator {{token}} must be of the same data type",
+define_error!(
+    T2009,
+    "The values {} and {} either side of operator {} must be of the same data type",
+    lhs,
+    rhs,
+    op
+);
 define_error!(
     T2010,
     "The expressions either side of operator `{}` must evaluate to numeric or string values",

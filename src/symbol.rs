@@ -235,7 +235,7 @@ impl Symbol for Token {
 
                 // If the name of the function is 'function' or λ, then this is a function definition (lambda function)
                 if let N::Name(ref name) = left.kind {
-                    if name == "function" || name == "\x03BB" {
+                    if name == "function" || name == "λ" {
                         is_function_def = true;
 
                         // All of the args must be Variable nodes
