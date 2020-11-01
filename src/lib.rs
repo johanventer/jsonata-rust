@@ -5,9 +5,9 @@
 #![allow(unused_variables)]
 #![allow(dead_code)]
 
-use chrono::{DateTime, Utc};
-use json::JsonValue;
-use std::collections::HashMap;
+// use chrono::{DateTime, Utc};
+// use json::JsonValue;
+// use std::collections::HashMap;
 
 #[macro_use]
 mod error;
@@ -17,110 +17,111 @@ mod parser;
 mod symbol;
 mod tokenizer;
 
-/// A binding in a stack frame
-pub enum Binding<'a> {
-    Variable(JsonValue),
-    Function(&'a dyn Fn(Vec<&JsonValue>) -> JsonValue, &'a str),
-}
+// /// A binding in a stack frame
+// pub enum Binding<'a> {
+//     Variable(JsonValue),
+//     Function(&'a dyn Fn(Vec<&JsonValue>) -> JsonValue, &'a str),
+// }
 
-impl Binding<'_> {
-    pub fn as_var(&self) -> &JsonValue {
-        match self {
-            Binding::Variable(value) => &value,
-            _ => panic!("Binding is not a variable"),
-        }
-    }
+// impl Binding<'_> {
+//     pub fn as_var(&self) -> &JsonValue {
+//         match self {
+//             Binding::Variable(value) => &value,
+//             _ => panic!("Binding is not a variable"),
+//         }
+//     }
 
-    pub fn as_func(&self) -> &dyn Fn(Vec<&JsonValue>) -> JsonValue {
-        match self {
-            Binding::Function(func, _) => func,
-            _ => panic!("Binding is not a function"),
-        }
-    }
-}
+//     pub fn as_func(&self) -> &dyn Fn(Vec<&JsonValue>) -> JsonValue {
+//         match self {
+//             Binding::Function(func, _) => func,
+//             _ => panic!("Binding is not a function"),
+//         }
+//     }
+// }
 
-fn sum(args: Vec<&JsonValue>) -> JsonValue {
-    json::from("todo")
-}
+// fn sum(args: Vec<&JsonValue>) -> JsonValue {
+//     json::from("todo")
+// }
 
-/// A stack frame of the expression evaluation
-struct Frame<'a> {
-    /// Stores the bindings for the frame
-    bindings: HashMap<String, Binding<'a>>,
+// /// A stack frame of the expression evaluation
+// struct Frame<'a> {
+//     /// Stores the bindings for the frame
+//     bindings: HashMap<String, Binding<'a>>,
 
-    /// The parent frame of this frame
-    parent_frame: Option<&'a Frame<'a>>,
+//     /// The parent frame of this frame
+//     parent_frame: Option<&'a Frame<'a>>,
 
-    /// The local timestamp in this frame
-    timestamp: DateTime<Utc>,
-    // TODO: async, global
-}
+//     /// The local timestamp in this frame
+//     timestamp: DateTime<Utc>,
+//     // TODO: async, global
+// }
 
-impl<'a> Frame<'a> {
-    /// Creates a new empty frame
-    fn new() -> Self {
-        Self {
-            bindings: HashMap::new(),
-            parent_frame: None,
-            timestamp: Utc::now(),
-        }
-    }
+// impl<'a> Frame<'a> {
+//     /// Creates a new empty frame
+//     fn new() -> Self {
+//         Self {
+//             bindings: HashMap::new(),
+//             parent_frame: None,
+//             timestamp: Utc::now(),
+//         }
+//     }
 
-    /// Creates a new empty frame, with a parent frame for lookups
-    fn new_from(parent_frame: &'a Frame<'a>) -> Self {
-        Self {
-            bindings: HashMap::new(),
-            parent_frame: Some(parent_frame),
-            timestamp: parent_frame.timestamp.clone(),
-        }
-    }
+//     /// Creates a new empty frame, with a parent frame for lookups
+//     fn new_from(parent_frame: &'a Frame<'a>) -> Self {
+//         Self {
+//             bindings: HashMap::new(),
+//             parent_frame: Some(parent_frame),
+//             timestamp: parent_frame.timestamp.clone(),
+//         }
+//     }
 
-    /// Bind a value to a name in a frame
-    fn bind(&mut self, name: &str, value: Binding<'a>) {
-        &self.bindings.insert(name.to_string(), value);
-    }
+//     /// Bind a value to a name in a frame
+//     fn bind(&mut self, name: &str, value: Binding<'a>) {
+//         &self.bindings.insert(name.to_string(), value);
+//     }
 
-    /// Lookup a value by name in a frame
-    fn lookup(&self, name: &str) -> Option<&Binding> {
-        match &self.bindings.get(name) {
-            Some(value) => Some(value),
-            None => match &self.parent_frame {
-                Some(parent) => parent.lookup(name),
-                None => None,
-            },
-        }
-    }
-}
+//     /// Lookup a value by name in a frame
+//     fn lookup(&self, name: &str) -> Option<&Binding> {
+//         match &self.bindings.get(name) {
+//             Some(value) => Some(value),
+//             None => match &self.parent_frame {
+//                 Some(parent) => parent.lookup(name),
+//                 None => None,
+//             },
+//         }
+//     }
+// }
 
-pub struct JsonAta<'a> {
+pub struct JsonAta {
     expr: String,
-    environment: Frame<'a>,
+    // environment: Frame<'a>,
     ast: ast::Node,
 }
 
-impl<'a> JsonAta<'a> {
-    pub fn new(expr: &'a str) -> Self {
-        let mut environment = Frame::new();
+impl JsonAta {
+    pub fn new(expr: &str) -> Self {
+        // let mut environment = Frame::new();
 
-        // TODO: Apply statics to the environment
-        environment.bind("sum", Binding::Function(&sum, "<a<n>:n>"));
+        // // TODO: Apply statics to the environment
+        // environment.bind("sum", Binding::Function(&sum, "<a<n>:n>"));
 
         // TODO: Probably could just do this once somewhere to avoid doing it every time
 
         Self {
             expr: expr.to_string(),
-            environment,
+            // environment,
             ast: parser::parse(expr),
         }
     }
 
-    pub fn evaluate(&self, input: String, bindings: Vec<Binding>) -> evaluator::Result {
-        evaluator::evaluate(&self.ast)
+    pub fn evaluate(&self, input: String) -> evaluator::Result {
+        let input = json::parse(&input)?;
+        evaluator::evaluate(&self.ast, &input)
     }
 
-    pub fn assign(&mut self, name: &str, value: Binding<'a>) {
-        self.environment.bind(name, value);
-    }
+    // pub fn assign(&mut self, name: &str, value: Binding<'a>) {
+    //     self.environment.bind(name, value);
+    // }
 
     // pub fn ast(&self) -> JsonValue {
     //     self.ast.to_json()

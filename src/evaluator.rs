@@ -7,21 +7,95 @@ use json::JsonValue;
 
 pub type Result = std::result::Result<Option<JsonValue>, EvaluatorError>;
 
-pub fn evaluate(node: &Node) -> Result {
+pub fn evaluate(node: &Node, input: &JsonValue) -> Result {
     match &node.kind {
         Null => Ok(Some(JsonValue::Null)),
         Bool(value) => Ok(Some(json::from(*value))),
         Str(value) => Ok(Some(json::from(value.clone()))),
         Num(value) => Ok(Some(json::from(*value))),
-        Binary(ref op) => evaluate_binary_expression(node),
+        Name(_) => evaluate_name(node, input),
+        Unary(_) => evaluate_unary_op(node, input),
+        Binary(_) => evaluate_binary_op(node, input),
+        Block => evaluate_block(node, input),
+        Ternary => evaluate_ternary(node, input),
         _ => Ok(None),
     }
 }
 
-fn evaluate_binary_expression(node: &Node) -> Result {
+fn evaluate_ternary(node: &Node, input: &JsonValue) -> Result {
+    if let Ternary = &node.kind {
+        let condition = evaluate(&node.children[0], input)?;
+        if boolean(condition.as_ref()) {
+            evaluate(&node.children[1], input)
+        } else {
+            evaluate(&node.children[2], input)
+        }
+    } else {
+        unreachable!()
+    }
+}
+
+fn evaluate_name(node: &Node, input: &JsonValue) -> Result {
+    if let Name(value) = &node.kind {
+        Ok(lookup(input, value))
+    } else {
+        unreachable!()
+    }
+}
+
+fn evaluate_block(node: &Node, input: &JsonValue) -> Result {
+    if let Block = &node.kind {
+        // TODO: block frame
+        let mut result: Result = Ok(None);
+
+        for child in &node.children {
+            result = evaluate(child, input);
+        }
+
+        result
+    } else {
+        unreachable!();
+    }
+}
+
+fn evaluate_unary_op(node: &Node, input: &JsonValue) -> Result {
+    if let Unary(ref op) = &node.kind {
+        match op {
+            UnaryOp::Minus => {
+                let value = evaluate(&node.children[0], input)?;
+                match value {
+                    Some(value) => {
+                        if let Some(value) = value.as_f64() {
+                            Ok(Some((-value).into()))
+                        } else {
+                            Err(NonNumericNegation(value))
+                        }
+                    }
+                    None => Ok(None),
+                }
+            }
+            UnaryOp::Array => {
+                let mut result = JsonValue::new_array();
+                for child in &node.children {
+                    result.push(evaluate(child, input)?)?;
+                }
+                Ok(Some(result))
+                // TODO: consarray
+            }
+            UnaryOp::Object => {
+                // TODO
+                Ok(None)
+            }
+        }
+    } else {
+        unreachable!();
+    }
+}
+
+fn evaluate_binary_op(node: &Node, input: &JsonValue) -> Result {
     if let Binary(ref op) = &node.kind {
-        let lhs = evaluate(&node.children[0])?;
-        let rhs = evaluate(&node.children[1])?;
+        let lhs = evaluate(&node.children[0], input)?;
+        let rhs = evaluate(&node.children[1], input)?;
         match op {
             Add | Subtract | Multiply | Divide | Modulus => {
                 evaluate_numeric_expression(lhs, rhs, op)
@@ -150,4 +224,36 @@ fn evaluate_string_concat(lhs: Option<JsonValue>, rhs: Option<JsonValue>) -> Res
     };
     let result = lhs + &rhs;
     Ok(Some(result.into()))
+}
+
+fn lookup(input: &JsonValue, key: &str) -> Option<JsonValue> {
+    if input.is_array() {
+        // TODO
+        return None;
+    } else if input.is_object() && input.has_key(key) {
+        return Some(input[key].clone());
+    }
+    None
+}
+
+fn boolean(arg: Option<&JsonValue>) -> bool {
+    match arg {
+        None => false,
+        Some(arg) => match arg {
+            JsonValue::Null => false,
+            JsonValue::Short(ref arg) => arg.len() > 0,
+            JsonValue::String(ref arg) => arg.len() > 0,
+            JsonValue::Number(ref arg) => !arg.is_zero(),
+            JsonValue::Boolean(ref arg) => *arg,
+            JsonValue::Object(ref arg) => arg.len() > 0,
+            JsonValue::Array(ref arg) => match arg.len() {
+                0 => false,
+                1 => boolean(Some(&arg[0])),
+                _ => {
+                    let trues: Vec<_> = arg.into_iter().filter(|x| boolean(Some(&x))).collect();
+                    trues.len() > 0
+                }
+            },
+        },
+    }
 }

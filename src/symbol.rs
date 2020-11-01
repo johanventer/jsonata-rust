@@ -127,7 +127,7 @@ impl Symbol for Token {
             T::LeftBrace => {
                 let mut children = Vec::new();
                 object_parse(parser, &mut children);
-                Node::new_with_children(N::Object, p, children)
+                Node::new_with_children(N::Unary(UnaryOp::Object), p, children)
             }
 
             // Object transformer
@@ -334,7 +334,7 @@ impl Symbol for Token {
             T::LeftBrace => {
                 let mut children = vec![left];
                 object_parse(parser, &mut children);
-                Node::new_with_children(N::ObjectGroup, p, children)
+                Node::new_with_children(N::Unary(UnaryOp::Object), p, children)
             }
 
             // Array predicate or index

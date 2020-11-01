@@ -48,7 +48,8 @@ impl<'a> Parser<'a> {
     pub fn parse(source: &'a str) -> Node {
         let mut parser = Self::new(source);
         let ast = parser.expression(0);
-        parser.process_ast(ast)
+        ast
+        // parser.process_ast(ast)
     }
 
     /// Create a new parser from a source string slice.
@@ -91,13 +92,13 @@ impl<'a> Parser<'a> {
         self.next(infix);
     }
 
-    /// Parse an expression, with a specified right binding power.
-    pub fn expression(&mut self, rbp: u32) -> Node {
+    /// Parse an expression, with a specified minimum binding power.
+    pub fn expression(&mut self, bp: u32) -> Node {
         let mut last = self.token.clone();
         self.next(true);
         let mut left = last.nud(self);
 
-        while rbp < self.token.lbp() {
+        while bp < self.token.lbp() {
             last = self.token.clone();
             self.next(false);
             left = last.led(self, left)
@@ -106,64 +107,62 @@ impl<'a> Parser<'a> {
         left
     }
 
-    fn process_ast(&mut self, node: Node) -> Node {
-        use NodeKind::*;
-        let mut node = node;
+    // fn process_ast(&mut self, node: Node) -> Node {
+    //     use NodeKind::*;
+    //     let mut node = node;
 
-        node
+    //     match &node.kind {
+    //         Parent(..) => {
+    //             node.kind = Parent(Some(Slot {
+    //                 label: format!("!{}", self.ancestor_label),
+    //                 level: 1,
+    //                 index: self.ancestor_index,
+    //             }));
 
-        // match &node.kind {
-        //     Parent(..) => {
-        //         node.kind = Parent(Some(Slot {
-        //             label: format!("!{}", self.ancestor_label),
-        //             level: 1,
-        //             index: self.ancestor_index,
-        //         }));
-
-        //         self.ancestor_index += 1;
-        //         self.ancestor_label += 1;
-        //         node
-        //     }
-        //     // Wrap Name nodes in a Path node
-        //     Name(name) => {
-        //         let keep_array = node.keep_array;
-        //         let mut path = Node::new_with_child(Path, node.position, node);
-        //         path.keep_array = keep_array;
-        //         path
-        //         // TODO: seeking_parent
-        //     }
-        //     Unary(ref op) => match op {
-        //         // Array constructor - process each child
-        //         UnaryOp::Array => {
-        //             // TODO: let consarray = node.consarray;
-        //             node.children = node
-        //                 .children
-        //                 .into_iter()
-        //                 .map(|child| self.process_ast(child))
-        //                 .collect();
-        //             node
-        //         }
-        //         UnaryOp::Minus => {
-        //             let expression = &mut node.children[0];
-        //             // Pre-process unary minus on numbers
-        //             if let Num(ref mut num) = expression.kind {
-        //                 *num = -*num;
-        //             } else {
-        //                 // pushAncestry
-        //             }
-        //             node
-        //         }
-        //     },
-        //     Transform | Object => {
-        //         node.children = node
-        //             .children
-        //             .into_iter()
-        //             .map(|child| self.process_ast(child))
-        //             .collect();
-        //         node
-        //     }
-        //     _ => node,
-        // }
+    //             self.ancestor_index += 1;
+    //             self.ancestor_label += 1;
+    //             node
+    //         }
+    //         // Wrap Name nodes in a Path node
+    //         Name(name) => {
+    //             let keep_array = node.keep_array;
+    //             let mut path = Node::new_with_child(Path, node.position, node);
+    //             path.keep_array = keep_array;
+    //             path
+    //             // TODO: seeking_parent
+    //         }
+    //         Unary(ref op) => match op {
+    //             // Array constructor - process each child
+    //             UnaryOp::Array => {
+    //                 // TODO: let consarray = node.consarray;
+    //                 node.children = node
+    //                     .children
+    //                     .into_iter()
+    //                     .map(|child| self.process_ast(child))
+    //                     .collect();
+    //                 node
+    //             }
+    //             UnaryOp::Minus => {
+    //                 let expression = &mut node.children[0];
+    //                 // Pre-process unary minus on numbers
+    //                 if let Num(ref mut num) = expression.kind {
+    //                     *num = -*num;
+    //                 } else {
+    //                     // pushAncestry
+    //                 }
+    //                 node
+    //             }
+    //         },
+    //         Transform | Object => {
+    //             node.children = node
+    //                 .children
+    //                 .into_iter()
+    //                 .map(|child| self.process_ast(child))
+    //                 .collect();
+    //             node
+    //         }
+    //         _ => node,
+    //     }
 
         //    macro_rules! binary {
         //        ($t:tt, $n:ident) => {{
@@ -513,9 +512,9 @@ impl<'a> Parser<'a> {
         //        Or(node) => binary!(Or, node),
         //        In(node) => binary!(In, node),
         //        Range(node) => binary!(Range, node),
-        //        _ => ast,
-        //    }
-    }
+               // _ => node,
+           // }
+    // }
 
     //fn resolve_ancestry(&self, path: &mut PathNode) {
     //    // TODO

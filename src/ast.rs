@@ -20,6 +20,9 @@ pub enum UnaryOp {
 
     /// Array constructor, e.g. `[1, 2, 3]`.
     Array,
+
+    /// An object constructor, e.g. `{ key1: value1, key2: value2 }`.
+    Object,
 }
 
 /// Types of binary expressions.
@@ -191,12 +194,6 @@ pub enum NodeKind {
 
     /// An object transform expression.
     Transform,
-
-    /// An object definition.
-    Object,
-
-    /// An object grouping expression.
-    ObjectGroup,
 
     /// A path consisting of multiple steps.
     Path,

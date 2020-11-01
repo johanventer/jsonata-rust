@@ -1,20 +1,6 @@
 //! Defines all the errors that the tokenizer, parser and evaluator can fail with.
-//!
-//! They are separated into a number of categories and identified by a code.
-//!
-//! The general format of the codes is:
-//! - `sxxxx` - Static errors (compile time)
-//! - `txxxx` - Type errors
-//! - `dxxxx` - Dynamic errors (evaluate time)
-//!
-//! The xxxx is a number which indicates where an error occurred, they are defined as:
-//! - `01xx` - Tokenizer
-//! - `02xx` - Parser
-//! - `03xx` - Regex parser
-//! - `04xx` - Function signature parser/evaluator
-//! - `10xx` - Evaluator
-//! - `20xx` - Operators
-//! - `3xxx` - Functions (blocks of 10 for each function)
+use json;
+use json::JsonValue;
 use std::fmt;
 use std::str;
 
@@ -104,25 +90,36 @@ impl<'a> fmt::Display for ParserError<'a> {
 
 #[derive(Debug, Clone)]
 pub enum EvaluatorError {
+    JsonError(String),
     LeftSideMustBeNumber(BinaryOp),
     RightSideMustBeNumber(BinaryOp),
     InvalidComparison(BinaryOp),
+    NonNumericNegation(JsonValue),
 }
 
 impl Error for EvaluatorError {}
+
+impl From<json::Error> for EvaluatorError {
+    fn from(error: json::Error) -> Self {
+        EvaluatorError::JsonError(error.to_string())
+    }
+}
+
 impl fmt::Display for EvaluatorError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use EvaluatorError::*;
         match self {
+            JsonError(ref error) => write!(f, "Unexpected JSON error: {}", error),
             LeftSideMustBeNumber(ref op) => write!(
                 f,
-                "The left side of the {} operator must evaluate to a number", op
+                "The left side of the `{}` operator must evaluate to a number", op
             ),
             RightSideMustBeNumber(ref op) => write!(
                 f,
-                "The right side of the {} operator must evaluate to a number", op
+                "The right side of the `{}` operator must evaluate to a number", op
             ),
-            InvalidComparison(ref op) => write!(f, "The expressions either side of operator {} must evaluate to numeric or string values", op),
+            InvalidComparison(ref op) => write!(f, "The expressions either side of operator `{}` must evaluate to numeric or string values", op),
+            NonNumericNegation(ref value) => write!(f, "Cannot negate a non-numeric value `{}`", value)
         }
     }
 }

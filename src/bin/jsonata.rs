@@ -12,7 +12,7 @@ fn main() {
     }
 
     let jsonata = JsonAta::new(&args[1]);
-    let result = jsonata.evaluate(args[2].clone(), Vec::new());
+    let result = jsonata.evaluate(args[2].clone());
 
     match result {
         Ok(value) => match value {
