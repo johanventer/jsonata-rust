@@ -310,14 +310,38 @@ impl<'a> Tokenizer<'a> {
 
                                 match escape_char {
                                     // Basic escape sequence
-                                    b'"' => string.push('"'),
-                                    b'\\' => string.push('\\'),
-                                    b'/' => string.push('/'),
-                                    b'b' => string.push('\x08'),
-                                    b'f' => string.push('\x0c'),
-                                    b'n' => string.push('\n'),
-                                    b'r' => string.push('\r'),
-                                    b't' => string.push('\t'),
+                                    b'"' => {
+                                        string.push('"');
+                                        self.position.advance_1();
+                                    }
+                                    b'\\' => {
+                                        string.push('\\');
+                                        self.position.advance_1();
+                                    }
+                                    b'/' => {
+                                        string.push('/');
+                                        self.position.advance_1();
+                                    }
+                                    b'b' => {
+                                        string.push('\x08');
+                                        self.position.advance_1();
+                                    }
+                                    b'f' => {
+                                        string.push('\x0c');
+                                        self.position.advance_1();
+                                    }
+                                    b'n' => {
+                                        string.push('\n');
+                                        self.position.advance_1();
+                                    }
+                                    b'r' => {
+                                        string.push('\r');
+                                        self.position.advance_1();
+                                    }
+                                    b't' => {
+                                        string.push('\t');
+                                        self.position.advance_1();
+                                    }
                                     // Unicode escape sequence
                                     b'u' => {
                                         // \u should be followed by 4 hex digits, which needs to
