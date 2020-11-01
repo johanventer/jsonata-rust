@@ -1,13 +1,11 @@
 use crate::ast::BinaryOp::*;
 use crate::ast::NodeKind::*;
 use crate::ast::*;
-use crate::error::EvaluatorError;
-use crate::error::EvaluatorError::*;
+use crate::error::*;
+use crate::JsonAtaResult;
 use json::JsonValue;
 
-pub type Result = std::result::Result<Option<JsonValue>, EvaluatorError>;
-
-pub fn evaluate(node: &Node, input: &JsonValue) -> Result {
+pub fn evaluate(node: &Node, input: &JsonValue) -> JsonAtaResult<Option<JsonValue>> {
     match &node.kind {
         Null => Ok(Some(JsonValue::Null)),
         Bool(value) => Ok(Some(json::from(*value))),
@@ -18,11 +16,11 @@ pub fn evaluate(node: &Node, input: &JsonValue) -> Result {
         Binary(_) => evaluate_binary_op(node, input),
         Block => evaluate_block(node, input),
         Ternary => evaluate_ternary(node, input),
-        _ => Ok(None),
+        _ => panic!(format!("node kind not yet supported: {}", node.kind)),
     }
 }
 
-fn evaluate_ternary(node: &Node, input: &JsonValue) -> Result {
+fn evaluate_ternary(node: &Node, input: &JsonValue) -> JsonAtaResult<Option<JsonValue>> {
     if let Ternary = &node.kind {
         let condition = evaluate(&node.children[0], input)?;
         if boolean(condition.as_ref()) {
@@ -35,7 +33,7 @@ fn evaluate_ternary(node: &Node, input: &JsonValue) -> Result {
     }
 }
 
-fn evaluate_name(node: &Node, input: &JsonValue) -> Result {
+fn evaluate_name(node: &Node, input: &JsonValue) -> JsonAtaResult<Option<JsonValue>> {
     if let Name(value) = &node.kind {
         Ok(lookup(input, value))
     } else {
@@ -43,10 +41,10 @@ fn evaluate_name(node: &Node, input: &JsonValue) -> Result {
     }
 }
 
-fn evaluate_block(node: &Node, input: &JsonValue) -> Result {
+fn evaluate_block(node: &Node, input: &JsonValue) -> JsonAtaResult<Option<JsonValue>> {
     if let Block = &node.kind {
         // TODO: block frame
-        let mut result: Result = Ok(None);
+        let mut result: JsonAtaResult<Option<JsonValue>> = Ok(None);
 
         for child in &node.children {
             result = evaluate(child, input);
@@ -58,7 +56,7 @@ fn evaluate_block(node: &Node, input: &JsonValue) -> Result {
     }
 }
 
-fn evaluate_unary_op(node: &Node, input: &JsonValue) -> Result {
+fn evaluate_unary_op(node: &Node, input: &JsonValue) -> JsonAtaResult<Option<JsonValue>> {
     if let Unary(ref op) = &node.kind {
         match op {
             UnaryOp::Minus => {
@@ -68,7 +66,10 @@ fn evaluate_unary_op(node: &Node, input: &JsonValue) -> Result {
                         if let Some(value) = value.as_f64() {
                             Ok(Some((-value).into()))
                         } else {
-                            Err(NonNumericNegation(value))
+                            Err(Box::new(D1002 {
+                                position: node.position,
+                                value: value.to_string(),
+                            }))
                         }
                     }
                     None => Ok(None),
@@ -77,31 +78,29 @@ fn evaluate_unary_op(node: &Node, input: &JsonValue) -> Result {
             UnaryOp::Array => {
                 let mut result = JsonValue::new_array();
                 for child in &node.children {
-                    result.push(evaluate(child, input)?)?;
+                    // TODO: What to do about bad JSON?
+                    result.push(evaluate(child, input)?).unwrap();
                 }
                 Ok(Some(result))
                 // TODO: consarray
             }
-            UnaryOp::Object => {
-                // TODO
-                Ok(None)
-            }
+            UnaryOp::Object => panic!("TODO: object constructors not yet supported"),
         }
     } else {
         unreachable!();
     }
 }
 
-fn evaluate_binary_op(node: &Node, input: &JsonValue) -> Result {
+fn evaluate_binary_op(node: &Node, input: &JsonValue) -> JsonAtaResult<Option<JsonValue>> {
     if let Binary(ref op) = &node.kind {
         let lhs = evaluate(&node.children[0], input)?;
         let rhs = evaluate(&node.children[1], input)?;
         match op {
             Add | Subtract | Multiply | Divide | Modulus => {
-                evaluate_numeric_expression(lhs, rhs, op)
+                evaluate_numeric_expression(node, lhs, rhs, op)
             }
             LessThan | LessThanEqual | GreaterThan | GreaterThanEqual => {
-                evaluate_comparison_expression(lhs, rhs, op)
+                evaluate_comparison_expression(node, lhs, rhs, op)
             }
             Equal | NotEqual => evaluate_equality_expression(lhs, rhs, op),
             Concat => evaluate_string_concat(lhs, rhs),
@@ -113,14 +112,20 @@ fn evaluate_binary_op(node: &Node, input: &JsonValue) -> Result {
 }
 
 fn evaluate_numeric_expression(
+    node: &Node,
     lhs: Option<JsonValue>,
     rhs: Option<JsonValue>,
     op: &BinaryOp,
-) -> Result {
+) -> JsonAtaResult<Option<JsonValue>> {
     let lhs: f64 = match lhs {
         Some(value) => match value {
             JsonValue::Number(value) => value.into(),
-            _ => return Err(LeftSideMustBeNumber(op.clone())),
+            _ => {
+                return Err(Box::new(T2001 {
+                    position: node.position,
+                    op: op.to_string(),
+                }))
+            }
         },
         None => return Ok(None),
     };
@@ -128,7 +133,12 @@ fn evaluate_numeric_expression(
     let rhs: f64 = match rhs {
         Some(value) => match value {
             JsonValue::Number(value) => value.into(),
-            _ => return Err(RightSideMustBeNumber(op.clone())),
+            _ => {
+                return Err(Box::new(T2002 {
+                    position: node.position,
+                    op: op.to_string(),
+                }))
+            }
         },
         None => return Ok(None),
     };
@@ -146,10 +156,11 @@ fn evaluate_numeric_expression(
 }
 
 fn evaluate_comparison_expression(
+    node: &Node,
     lhs: Option<JsonValue>,
     rhs: Option<JsonValue>,
     op: &BinaryOp,
-) -> Result {
+) -> JsonAtaResult<Option<JsonValue>> {
     let lhs = match lhs {
         Some(value) => value,
         None => return Ok(None),
@@ -186,14 +197,17 @@ fn evaluate_comparison_expression(
         })));
     }
 
-    Err(InvalidComparison(op.clone()))
+    Err(Box::new(T2010 {
+        position: node.position,
+        op: op.to_string(),
+    }))
 }
 
 fn evaluate_equality_expression(
     lhs: Option<JsonValue>,
     rhs: Option<JsonValue>,
     op: &BinaryOp,
-) -> Result {
+) -> JsonAtaResult<Option<JsonValue>> {
     if lhs.is_none() && rhs.is_none() {
         return Ok(Some(true.into()));
     }
@@ -210,7 +224,10 @@ fn evaluate_equality_expression(
     Ok(Some(result.into()))
 }
 
-fn evaluate_string_concat(lhs: Option<JsonValue>, rhs: Option<JsonValue>) -> Result {
+fn evaluate_string_concat(
+    lhs: Option<JsonValue>,
+    rhs: Option<JsonValue>,
+) -> JsonAtaResult<Option<JsonValue>> {
     // TODO: FIXME: This needs lots of work, jsonata has some automatic stringification rules which need
     // implementing, so this will fail if you don't provide two JsonValue::Strings. Also, there's
     // too much string copying going on.
@@ -241,17 +258,17 @@ fn boolean(arg: Option<&JsonValue>) -> bool {
         None => false,
         Some(arg) => match arg {
             JsonValue::Null => false,
-            JsonValue::Short(ref arg) => arg.len() > 0,
-            JsonValue::String(ref arg) => arg.len() > 0,
+            JsonValue::Short(ref arg) => !arg.is_empty(),
+            JsonValue::String(ref arg) => !arg.is_empty(),
             JsonValue::Number(ref arg) => !arg.is_zero(),
             JsonValue::Boolean(ref arg) => *arg,
-            JsonValue::Object(ref arg) => arg.len() > 0,
+            JsonValue::Object(ref arg) => !arg.is_empty(),
             JsonValue::Array(ref arg) => match arg.len() {
                 0 => false,
                 1 => boolean(Some(&arg[0])),
                 _ => {
-                    let trues: Vec<_> = arg.into_iter().filter(|x| boolean(Some(&x))).collect();
-                    trues.len() > 0
+                    let trues: Vec<_> = arg.iter().filter(|x| boolean(Some(&x))).collect();
+                    !trues.is_empty()
                 }
             },
         },

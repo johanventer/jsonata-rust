@@ -6,7 +6,7 @@
 #![allow(dead_code)]
 
 // use chrono::{DateTime, Utc};
-// use json::JsonValue;
+use json::JsonValue;
 // use std::collections::HashMap;
 
 #[macro_use]
@@ -16,6 +16,8 @@ mod evaluator;
 mod parser;
 mod symbol;
 mod tokenizer;
+
+pub type JsonAtaResult<T> = std::result::Result<T, Box<dyn error::JsonAtaError>>;
 
 // /// A binding in a stack frame
 // pub enum Binding<'a> {
@@ -99,7 +101,7 @@ pub struct JsonAta {
 }
 
 impl JsonAta {
-    pub fn new(expr: &str) -> Self {
+    pub fn new(expr: &str) -> JsonAtaResult<Self> {
         // let mut environment = Frame::new();
 
         // // TODO: Apply statics to the environment
@@ -107,21 +109,26 @@ impl JsonAta {
 
         // TODO: Probably could just do this once somewhere to avoid doing it every time
 
-        Self {
+        Ok(Self {
             expr: expr.to_string(),
             // environment,
-            ast: parser::parse(expr),
-        }
+            ast: parser::parse(expr)?,
+        })
     }
 
-    pub fn evaluate(&self, input: String) -> evaluator::Result {
-        let input = json::parse(&input)?;
+    pub fn evaluate(&self, input: String) -> JsonAtaResult<Option<JsonValue>> {
+        // TODO: What to do about bad JSON?
+        let input = json::parse(&input).unwrap();
         evaluator::evaluate(&self.ast, &input)
     }
 
     // pub fn assign(&mut self, name: &str, value: Binding<'a>) {
     //     self.environment.bind(name, value);
     // }
+
+    pub fn ast(&self) -> &ast::Node {
+        &self.ast
+    }
 
     // pub fn ast(&self) -> JsonValue {
     //     self.ast.to_json()
@@ -192,92 +199,92 @@ mod evaluator_tests {
 
     #[test]
     fn add() {
-        let jsonata = JsonAta::new("1 + 3");
-        let result = jsonata.evaluate("".to_string(), Vec::new());
+        let jsonata = JsonAta::new("1 + 3").unwrap();
+        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
         assert_eq!(result, json::from(4));
     }
 
     #[test]
     fn sub() {
-        let jsonata = JsonAta::new("1 - 3");
-        let result = jsonata.evaluate("".to_string(), Vec::new());
+        let jsonata = JsonAta::new("1 - 3").unwrap();
+        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
         assert_eq!(result, json::from(-2));
     }
 
     #[test]
     fn mul() {
-        let jsonata = JsonAta::new("4 * 7");
-        let result = jsonata.evaluate("".to_string(), Vec::new());
+        let jsonata = JsonAta::new("4 * 7").unwrap();
+        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
         assert_eq!(result, json::from(28));
     }
 
     #[test]
     fn div() {
-        let jsonata = JsonAta::new("10 / 2");
-        let result = jsonata.evaluate("".to_string(), Vec::new());
+        let jsonata = JsonAta::new("10 / 2").unwrap();
+        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
         assert_eq!(result, json::from(5));
     }
 
     #[test]
     fn modulo() {
-        let jsonata = JsonAta::new("10 % 8");
-        let result = jsonata.evaluate("".to_string(), Vec::new());
+        let jsonata = JsonAta::new("10 % 8").unwrap();
+        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
         assert_eq!(result, json::from(2));
     }
 
     #[test]
     fn less_than_num_true() {
-        let jsonata = JsonAta::new("3 < 4");
-        let result = jsonata.evaluate("".to_string(), Vec::new());
+        let jsonata = JsonAta::new("3 < 4").unwrap();
+        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
         assert_eq!(result, json::from(true));
     }
 
     #[test]
     fn less_than_num_false() {
-        let jsonata = JsonAta::new("4 < 3");
-        let result = jsonata.evaluate("".to_string(), Vec::new());
+        let jsonata = JsonAta::new("4 < 3").unwrap();
+        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
         assert_eq!(result, json::from(false));
     }
 
     #[test]
     fn less_than_str_true() {
-        let jsonata = JsonAta::new("\"3\" < \"4\"");
-        let result = jsonata.evaluate("".to_string(), Vec::new());
+        let jsonata = JsonAta::new("\"3\" < \"4\"").unwrap();
+        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
         assert_eq!(result, json::from(true));
     }
 
     #[test]
     fn less_than_str_false() {
-        let jsonata = JsonAta::new("\"4\" < \"3\"");
-        let result = jsonata.evaluate("".to_string(), Vec::new());
+        let jsonata = JsonAta::new("\"4\" < \"3\"").unwrap();
+        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
         assert_eq!(result, json::from(false));
     }
 
     #[test]
     fn str_concat() {
-        let jsonata = JsonAta::new("\"hello\" & \" world\"");
-        let result = jsonata.evaluate("".to_string(), Vec::new());
+        let jsonata = JsonAta::new("\"hello\" & \" world\"").unwrap();
+        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
         assert_eq!(result, json::from("hello world"));
     }
 
     #[test]
     fn eq() {
-        let jsonata = JsonAta::new("1 = 1");
-        let result = jsonata.evaluate("".to_string(), Vec::new());
+        let jsonata = JsonAta::new("1 = 1").unwrap();
+        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
         assert_eq!(result, json::from(true));
     }
 
     #[test]
     fn neq() {
-        let jsonata = JsonAta::new("1 != 2");
-        let result = jsonata.evaluate("".to_string(), Vec::new());
+        let jsonata = JsonAta::new("1 != 2").unwrap();
+        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
         assert_eq!(result, json::from(true));
     }
 
-    // #[test]
-    // fn math() {
-    //     let jsonata = JsonAta::new("(2 + 3) * 4 + 2");
-    //     let result = jsonata.evaluate("".to_string(), Vec::new());
-    //     assert_eq!(result, json::from(26));
-    // }
+    #[test]
+    fn math() {
+        let jsonata = JsonAta::new("(2 + 3) * 4 + 2").unwrap();
+        let result = jsonata.evaluate("true".to_string()).unwrap().unwrap();
+        assert_eq!(result, json::from(22));
+    }
 }

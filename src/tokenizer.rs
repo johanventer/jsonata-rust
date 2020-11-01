@@ -2,6 +2,35 @@ use std::fmt;
 use std::{char, str};
 
 use crate::error::*;
+use crate::JsonAtaResult;
+
+#[derive(Copy, Clone, Debug)]
+pub struct Position {
+    pub line: usize,
+    pub column: usize,
+    pub source_pos: usize,
+}
+
+impl Position {
+    pub fn advance_x(&mut self, x: usize) {
+        self.column += x;
+        self.source_pos += x;
+    }
+
+    pub fn advance_line(&mut self) {
+        self.line += 1;
+        self.column = 0;
+        self.source_pos += 1;
+    }
+
+    pub fn advance_1(&mut self) {
+        self.advance_x(1);
+    }
+
+    pub fn advance_2(&mut self) {
+        self.advance_x(2);
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
@@ -110,11 +139,11 @@ impl fmt::Display for TokenKind {
 #[derive(Debug, Clone)]
 pub struct Token {
     pub kind: TokenKind,
-    pub position: usize,
+    pub position: Position,
 }
 
 impl Token {
-    fn new(kind: TokenKind, position: usize) -> Self {
+    fn new(kind: TokenKind, position: Position) -> Self {
         Self { kind, position }
     }
 }
@@ -126,30 +155,34 @@ impl fmt::Display for Token {
 }
 
 pub struct Tokenizer<'a> {
-    position: usize,
+    position: Position,
     source: &'a str,
 }
 
 impl<'a> Tokenizer<'a> {
     pub fn new(source: &'a str) -> Self {
         Self {
-            position: 0,
+            position: Position {
+                source_pos: 0,
+                line: 0,
+                column: 0,
+            },
             source,
         }
     }
 
-    fn emit(&self, kind: TokenKind) -> Token {
-        Token::new(kind, self.position)
+    fn emit(&self, kind: TokenKind) -> JsonAtaResult<Token> {
+        Ok(Token::new(kind, self.position))
     }
 
     /// Returns the next token in the stream and its position as a tuple
-    pub fn next(&mut self, infix: bool) -> Token {
+    pub fn next(&mut self, infix: bool) -> JsonAtaResult<Token> {
         use TokenKind::*;
 
         // Convenience for single character operators
         macro_rules! op1 {
             ($t:tt) => {{
-                self.position += 1;
+                self.position.advance_1();
                 break self.emit($t);
             }};
         }
@@ -157,32 +190,36 @@ impl<'a> Tokenizer<'a> {
         // Convenience for double character operators
         macro_rules! op2 {
             ($t:tt) => {{
-                self.position += 2;
+                self.position.advance_2();
                 break self.emit($t);
             }};
         }
 
         loop {
-            match self.source.as_bytes()[self.position..] {
+            match self.source.as_bytes()[self.position.source_pos..] {
                 [] => break self.emit(End),
                 // Skip whitespace
                 [b' ' | b'\r' | b'\n' | b'\t' | b'\x0b', ..] => {
-                    self.position += 1;
+                    self.position.advance_1();
                     continue;
                 }
                 // Skip comments
                 [b'/', b'*', ..] => {
                     let comment_start = self.position;
-                    self.position += 2;
+                    self.position.advance_2();
                     loop {
-                        match self.source.as_bytes()[self.position..] {
-                            [] => error!(comment_start, TokenizerError::CommentNotClosed),
+                        match self.source.as_bytes()[self.position.source_pos..] {
+                            [] => {
+                                return Err(Box::new(S0106 {
+                                    position: comment_start,
+                                }))
+                            }
                             [b'*', b'/', ..] => {
-                                self.position += 2;
+                                self.position.advance_2();
                                 break;
                             }
                             _ => {
-                                self.position += 1;
+                                self.position.advance_1();
                             }
                         }
                     }
@@ -198,29 +235,32 @@ impl<'a> Tokenizer<'a> {
                 [b'~', b'>', ..] => op2!(Apply),
                 // Numbers
                 [b'0'..=b'9', ..] => {
-                    let number_start = self.position;
-                    self.position += 1;
+                    let number_start = self.position.source_pos;
+                    self.position.advance_1();
                     // TODO(johan): Improve this lexing, it's pretty ordinary and allows all sorts
                     // of invalid stuff
                     loop {
-                        match self.source.as_bytes()[self.position..] {
+                        match self.source.as_bytes()[self.position.source_pos..] {
                             // Range operator
                             [b'.', b'.', ..] => break,
                             [b'0'..=b'9' | b'.' | b'e' | b'E' | b'-' | b'+', ..] => {
-                                self.position += 1;
+                                self.position.advance_1();
                             }
                             _ => break,
                         }
                     }
 
-                    let token = &self.source.as_bytes()[number_start..self.position];
+                    let token = &self.source.as_bytes()[number_start..self.position.source_pos];
                     if let Some(number) = str::from_utf8(token)
                         .ok()
                         .and_then(|s| s.parse::<f64>().ok())
                     {
                         break self.emit(Num(number));
                     } else {
-                        error!(self.position, TokenizerError::NumberOutOfRange(token));
+                        break Err(Box::new(S0102 {
+                            position: self.position,
+                            number: str::from_utf8(token).unwrap().to_string(),
+                        }));
                     }
                 }
                 [b'.', ..] => op1!(Period),
@@ -251,49 +291,58 @@ impl<'a> Tokenizer<'a> {
                 [b'~', ..] => op1!(Tilde),
                 // String literals
                 [quote_type @ (b'\'' | b'"'), ..] => {
-                    self.position += 1;
+                    self.position.advance_1();
                     let mut string = String::new();
                     let string_start = self.position;
                     break loop {
-                        match self.source.as_bytes()[self.position..] {
+                        match self.source.as_bytes()[self.position.source_pos..] {
                             // End of string missing
-                            [] => error!(string_start, TokenizerError::StringNotClosed),
+                            [] => {
+                                break Err(Box::new(S0101 {
+                                    position: string_start,
+                                }))
+                            }
                             // Escape sequence
                             [b'\\', escape_char, ..] => {
-                                self.position += 1;
+                                self.position.advance_1();
 
                                 match escape_char {
                                     // Basic escape sequence
-                                    b'"' => string.push_str("\""),
-                                    b'\\' => string.push_str("\\"),
-                                    b'/' => string.push_str("/"),
-                                    b'b' => string.push_str("\x08"),
-                                    b'f' => string.push_str("\x0c"),
-                                    b'n' => string.push_str("\n"),
-                                    b'r' => string.push_str("\r"),
-                                    b't' => string.push_str("\t"),
+                                    b'"' => string.push('"'),
+                                    b'\\' => string.push('\\'),
+                                    b'/' => string.push('/'),
+                                    b'b' => string.push('\x08'),
+                                    b'f' => string.push('\x0c'),
+                                    b'n' => string.push('\n'),
+                                    b'r' => string.push('\r'),
+                                    b't' => string.push('\t'),
                                     // Unicode escape sequence
                                     b'u' => {
                                         // \u should be followed by 4 hex digits, which needs to
                                         // parsed to a codepoint and then turned into a char to be
                                         // appended
                                         if let Some(character) = str::from_utf8(
-                                            &self.source.as_bytes()
-                                                [self.position + 1..self.position + 5],
+                                            &self.source.as_bytes()[self.position.source_pos + 1
+                                                ..self.position.source_pos + 5],
                                         )
                                         .ok()
                                         .and_then(|octets| u32::from_str_radix(octets, 16).ok())
                                         .and_then(char::from_u32)
                                         {
                                             string.push(character);
-                                            self.position += 5;
+                                            self.position.advance_x(5);
                                         } else {
-                                            error!(self.position, TokenizerError::InvalidEscape)
+                                            break Err(Box::new(S0104 {
+                                                position: self.position,
+                                            }));
                                         }
                                     }
                                     // Invalid escape sequence
                                     c => {
-                                        error!(self.position, TokenizerError::UnsupportedEscape(c))
+                                        break Err(Box::new(S0103 {
+                                            position: self.position,
+                                            escape_char: c.to_string(),
+                                        }))
                                     }
                                 }
                             }
@@ -301,7 +350,7 @@ impl<'a> Tokenizer<'a> {
                             [c, ..] => {
                                 // Check for the end of the string
                                 if c == quote_type {
-                                    self.position += 1;
+                                    self.position.advance_1();
                                     break self.emit(Str(string));
                                 }
 
@@ -309,7 +358,7 @@ impl<'a> Tokenizer<'a> {
                                 // TODO(johan): This method of building strings byte by byte is
                                 // probably slow
                                 string.push_str(&String::from_utf8(vec![c]).unwrap());
-                                self.position += 1;
+                                self.position.advance_1();
                                 continue;
                             }
                         }
@@ -317,30 +366,35 @@ impl<'a> Tokenizer<'a> {
                 }
                 // Quoted names (backticks)
                 [b'`', ..] => {
-                    self.position += 1;
+                    self.position.advance_1();
                     // Find the closing backtick and convert to a string
-                    match self.source.as_bytes()[self.position..]
+                    match self.source.as_bytes()[self.position.source_pos..]
                         .iter()
                         .position(|byte| *byte == b'`')
                         .and_then(|index| {
                             String::from_utf8(
-                                self.source.as_bytes()[self.position..self.position + index]
+                                self.source.as_bytes()
+                                    [self.position.source_pos..self.position.source_pos + index]
                                     .to_vec(),
                             )
                             .ok()
                         }) {
                         Some(value) => {
-                            self.position += value.len() + 1;
+                            self.position.advance_x(value.len() + 1);
                             break self.emit(Name(value));
                         }
-                        None => error!(self.position, TokenizerError::BackquoteNotClosed),
+                        None => {
+                            break Err(Box::new(S0105 {
+                                position: self.position,
+                            }))
+                        }
                     }
                 }
                 // Names
                 [c, ..] => {
-                    let name_start = self.position;
+                    let name_start = self.position.source_pos;
                     break loop {
-                        match self.source.as_bytes()[self.position..] {
+                        match self.source.as_bytes()[self.position.source_pos..] {
                             // Match end of source, whitespace characters or a single-char operator
                             // to find the end of the name
                             []
@@ -352,7 +406,8 @@ impl<'a> Tokenizer<'a> {
                                     // Variable reference
                                     // TODO(johan): This could fail to unwrap
                                     let name = String::from_utf8(
-                                        self.source.as_bytes()[name_start + 1..self.position]
+                                        self.source.as_bytes()
+                                            [name_start + 1..self.position.source_pos]
                                             .to_vec(),
                                     )
                                     .unwrap();
@@ -361,7 +416,9 @@ impl<'a> Tokenizer<'a> {
                                 } else {
                                     // TODO(johan): This could fail to unwrap
                                     let name = String::from_utf8(
-                                        self.source.as_bytes()[name_start..self.position].to_vec(),
+                                        self.source.as_bytes()
+                                            [name_start..self.position.source_pos]
+                                            .to_vec(),
                                     )
                                     .unwrap();
 
@@ -379,7 +436,7 @@ impl<'a> Tokenizer<'a> {
                                 }
                             }
                             _ => {
-                                self.position += 1;
+                                self.position.advance_1();
                             }
                         }
                     };
@@ -396,28 +453,46 @@ mod tests {
     #[test]
     fn operators() {
         let mut tokenizer = Tokenizer::new("  @   # +  <=>= /* This is a comment */ ? -*");
-        assert!(matches!(tokenizer.next(false).kind, TokenKind::At));
-        assert!(matches!(tokenizer.next(false).kind, TokenKind::Hash));
-        assert!(matches!(tokenizer.next(false).kind, TokenKind::Plus));
-        assert!(matches!(tokenizer.next(false).kind, TokenKind::LessEqual));
+        assert!(matches!(tokenizer.next(false).unwrap().kind, TokenKind::At));
         assert!(matches!(
-            tokenizer.next(false).kind,
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Hash
+        ));
+        assert!(matches!(
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Plus
+        ));
+        assert!(matches!(
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::LessEqual
+        ));
+        assert!(matches!(
+            tokenizer.next(false).unwrap().kind,
             TokenKind::GreaterEqual
         ));
-        assert!(matches!(tokenizer.next(false).kind, TokenKind::Question));
-        assert!(matches!(tokenizer.next(false).kind, TokenKind::Minus));
-        assert!(matches!(tokenizer.next(false).kind, TokenKind::Wildcard));
+        assert!(matches!(
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Question
+        ));
+        assert!(matches!(
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Minus
+        ));
+        assert!(matches!(
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Wildcard
+        ));
     }
 
     #[test]
     fn strings() {
         let mut tokenizer = Tokenizer::new("\"There's a string here\" 'and another here'");
         assert!(matches!(
-            tokenizer.next(false).kind,
+            tokenizer.next(false).unwrap().kind,
             TokenKind::Str(s) if s == "There's a string here"
         ));
         assert!(matches!(
-            tokenizer.next(false).kind,
+            tokenizer.next(false).unwrap().kind,
             TokenKind::Str(s) if s == "and another here"
         ));
     }
@@ -426,7 +501,7 @@ mod tests {
     fn unicode_escapes() {
         let mut tokenizer = Tokenizer::new("\"\\u2d63\\u2d53\\u2d4d\"");
         assert!(matches!(
-            tokenizer.next(false).kind,
+            tokenizer.next(false).unwrap().kind,
             TokenKind::Str(s) if s ==  "ⵣⵓⵍ"
         ));
     }
@@ -435,11 +510,11 @@ mod tests {
     fn backtick_names() {
         let mut tokenizer = Tokenizer::new("  `hello`    `world`");
         assert!(matches!(
-            tokenizer.next(false).kind,
+            tokenizer.next(false).unwrap().kind,
             TokenKind::Name(s) if s == "hello"
         ));
         assert!(matches!(
-            tokenizer.next(false).kind,
+            tokenizer.next(false).unwrap().kind,
             TokenKind::Name(s) if s == "world"
         ));
     }
@@ -448,15 +523,15 @@ mod tests {
     fn variables() {
         let mut tokenizer = Tokenizer::new("  $one   $two   $three  ");
         assert!(matches!(
-            tokenizer.next(false).kind,
+            tokenizer.next(false).unwrap().kind,
             TokenKind::Var(s) if s == "one"
         ));
         assert!(matches!(
-            tokenizer.next(false).kind,
+            tokenizer.next(false).unwrap().kind,
             TokenKind::Var(s) if s == "two"
         ));
         assert!(matches!(
-            tokenizer.next(false).kind,
+            tokenizer.next(false).unwrap().kind,
             TokenKind::Var(s) if s == "three"
         ));
     }
@@ -464,56 +539,68 @@ mod tests {
     #[test]
     fn name_operators() {
         let mut tokenizer = Tokenizer::new("or in and");
-        assert!(matches!(tokenizer.next(false).kind, TokenKind::Or));
-        assert!(matches!(tokenizer.next(false).kind, TokenKind::In));
-        assert!(matches!(tokenizer.next(false).kind, TokenKind::And));
+        assert!(matches!(tokenizer.next(false).unwrap().kind, TokenKind::Or));
+        assert!(matches!(tokenizer.next(false).unwrap().kind, TokenKind::In));
+        assert!(matches!(
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::And
+        ));
     }
 
     #[test]
     fn values() {
         let mut tokenizer = Tokenizer::new("true false null");
-        assert!(matches!(tokenizer.next(false).kind, TokenKind::Bool(true)));
-        assert!(matches!(tokenizer.next(false).kind, TokenKind::Bool(false)));
-        assert!(matches!(tokenizer.next(false).kind, TokenKind::Null));
+        assert!(matches!(
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Bool(true)
+        ));
+        assert!(matches!(
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Bool(false)
+        ));
+        assert!(matches!(
+            tokenizer.next(false).unwrap().kind,
+            TokenKind::Null
+        ));
     }
 
     #[test]
     fn numbers() {
         let mut tokenizer = Tokenizer::new("0 1 0.234 5.678 0e0 1e1 1e-1 1e+1 2.234E-2");
         assert!(matches!(
-            tokenizer.next(false).kind,
+            tokenizer.next(false).unwrap().kind,
             TokenKind::Num(n) if (n - 0.0 as f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
-            tokenizer.next(false).kind,
+            tokenizer.next(false).unwrap().kind,
             TokenKind::Num(n) if (n - 1.0 as f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
-            tokenizer.next(false).kind,
+            tokenizer.next(false).unwrap().kind,
             TokenKind::Num(n) if (n - 0.234 as f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
-            tokenizer.next(false).kind,
+            tokenizer.next(false).unwrap().kind,
             TokenKind::Num(n) if (n - 5.678 as f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
-            tokenizer.next(false).kind,
+            tokenizer.next(false).unwrap().kind,
             TokenKind::Num(n) if (n - 0e0 as f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
-            tokenizer.next(false).kind,
+            tokenizer.next(false).unwrap().kind,
             TokenKind::Num(n) if (n - 1e1 as f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
-            tokenizer.next(false).kind,
+            tokenizer.next(false).unwrap().kind,
             TokenKind::Num(n) if (n - 1e-1 as f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
-            tokenizer.next(false).kind,
+            tokenizer.next(false).unwrap().kind,
             TokenKind::Num(n) if (n - 1e+1 as f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
-            tokenizer.next(false).kind,
+            tokenizer.next(false).unwrap().kind,
             TokenKind::Num(n) if (n - 2.234E-2 as f64).abs() < f64::EPSILON
         ));
     }

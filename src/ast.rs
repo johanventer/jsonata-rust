@@ -1,5 +1,6 @@
-// use json::{array, object, JsonValue};
 use std::fmt;
+
+use crate::tokenizer::Position;
 
 /// An object is represented as a list of (key, value) tuples
 pub type Object = Vec<(Node, Node)>;
@@ -23,6 +24,21 @@ pub enum UnaryOp {
 
     /// An object constructor, e.g. `{ key1: value1, key2: value2 }`.
     Object,
+}
+
+impl fmt::Display for UnaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use UnaryOp::*;
+        write!(
+            f,
+            "{}",
+            match self {
+                Minus => "-",
+                Array => "[",
+                Object => "{",
+            }
+        )
+    }
 }
 
 /// Types of binary expressions.
@@ -199,6 +215,40 @@ pub enum NodeKind {
     Path,
 }
 
+impl fmt::Display for NodeKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use NodeKind::*;
+        write!(
+            f,
+            "{}",
+            match self {
+                Null => "Null".to_owned(),
+                Bool(ref v) => format!("Bool({})", v),
+                Str(ref v) => format!("Str({})", v),
+                Num(ref v) => format!("Num({})", v),
+                Name(ref v) => format!("Name({})", v),
+                Var(ref v) => format!("Var({})", v),
+                Unary(ref v) => format!("Unary({})", v),
+                Binary(ref v) => format!("Binary({})", v),
+                Wildcard => "Wildcard".to_string(),
+                Descendent => "Descendent".to_string(),
+                Parent(_) => "Parent".to_string(),
+                Function(ref v) => format!("Function({})", v),
+                PartialArg => "PartialArg".to_string(),
+                Lambda => "Lambda".to_string(),
+                Block => "Block".to_string(),
+                Sort => "Sort".to_string(),
+                SortTerm(ref v) => format!("SortTerm({})", v),
+                Filter => "Filter".to_string(),
+                Index => "Index".to_string(),
+                Ternary => "Ternary".to_string(),
+                Transform => "Transform".to_string(),
+                Path => "Path".to_string(),
+            }
+        )
+    }
+}
+
 /// A node in the parsed AST.
 #[derive(Debug)]
 pub struct Node {
@@ -206,7 +256,7 @@ pub struct Node {
     pub kind: NodeKind,
 
     /// The position in the input source expression.
-    pub position: usize,
+    pub position: Position,
 
     /// A general list of child nodes, could represent lhs/rhs, update/transform/delete,
     /// condition/then/else, procedure/arguments etc.
@@ -236,15 +286,15 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn new(kind: NodeKind, position: usize) -> Self {
+    pub fn new(kind: NodeKind, position: Position) -> Self {
         Self::new_with_children(kind, position, Vec::new())
     }
 
-    pub fn new_with_child(kind: NodeKind, position: usize, child: Node) -> Self {
+    pub fn new_with_child(kind: NodeKind, position: Position, child: Node) -> Self {
         Self::new_with_children(kind, position, vec![child])
     }
 
-    pub fn new_with_children(kind: NodeKind, position: usize, children: Vec<Node>) -> Self {
+    pub fn new_with_children(kind: NodeKind, position: Position, children: Vec<Node>) -> Self {
         Self {
             kind,
             position,
@@ -262,7 +312,13 @@ impl Node {
 
 impl fmt::Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TODO")
+        writeln!(f, "{}", self.kind)?;
+        if !self.children.is_empty() {
+            for child in &self.children {
+                writeln!(f, "  {}", child)?;
+            }
+        }
+        Ok(())
     }
 }
 
