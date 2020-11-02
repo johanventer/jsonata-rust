@@ -33,9 +33,9 @@ use crate::tokenizer::*;
 use crate::JsonAtaResult;
 
 /// An instance of a parser.
-pub struct Parser<'a> {
+pub struct Parser {
   /// The tokenizer which will produce the tokens for parsing.
-  tokenizer: Tokenizer<'a>,
+  tokenizer: Tokenizer,
 
   /// The last token obtained from the tokenizer.
   token: Token,
@@ -44,16 +44,16 @@ pub struct Parser<'a> {
   ancestor_index: u32,
 }
 
-impl<'a> Parser<'a> {
+impl Parser {
   /// Returns the parsed AST for a given source string.
-  pub fn parse(source: &'a str) -> JsonAtaResult<Node> {
+  pub fn parse(source: &str) -> JsonAtaResult<Node> {
     let mut parser = Self::new(source)?;
     let ast = parser.expression(0)?;
     Ok(parser.process_ast(ast))
   }
 
   /// Create a new parser from a source string slice.
-  pub fn new(source: &'a str) -> JsonAtaResult<Self> {
+  pub fn new(source: &str) -> JsonAtaResult<Self> {
     let mut tokenizer = Tokenizer::new(source);
     Ok(Self {
       token: tokenizer.next(false)?,

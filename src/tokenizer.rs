@@ -1,4 +1,5 @@
 use std::fmt;
+use std::iter::FromIterator;
 use std::{char, str};
 
 use crate::error::*;
@@ -154,20 +155,20 @@ impl fmt::Display for Token {
     }
 }
 
-pub struct Tokenizer<'a> {
+pub struct Tokenizer {
     position: Position,
-    source: &'a str,
+    chars: Vec<char>,
 }
 
-impl<'a> Tokenizer<'a> {
-    pub fn new(source: &'a str) -> Self {
+impl Tokenizer {
+    pub fn new(source: &str) -> Self {
         Self {
             position: Position {
                 source_pos: 0,
                 line: 0,
                 column: 0,
             },
-            source,
+            chars: source.chars().collect(),
         }
     }
 
@@ -196,25 +197,25 @@ impl<'a> Tokenizer<'a> {
         }
 
         loop {
-            match self.source.as_bytes()[self.position.source_pos..] {
+            match self.chars[self.position.source_pos..] {
                 [] => break self.emit(End),
                 // Skip whitespace
-                [b' ' | b'\r' | b'\n' | b'\t' | b'\x0b', ..] => {
+                [' ' | '\r' | '\n' | '\t' | '\x0b', ..] => {
                     self.position.advance_1();
                     continue;
                 }
                 // Skip comments
-                [b'/', b'*', ..] => {
+                ['/', '*', ..] => {
                     let comment_start = self.position;
                     self.position.advance_2();
                     loop {
-                        match self.source.as_bytes()[self.position.source_pos..] {
+                        match self.chars[self.position.source_pos..] {
                             [] => {
                                 return Err(Box::new(S0106 {
                                     position: comment_start,
                                 }))
                             }
-                            [b'*', b'/', ..] => {
+                            ['*', '/', ..] => {
                                 self.position.advance_2();
                                 break;
                             }
@@ -225,79 +226,77 @@ impl<'a> Tokenizer<'a> {
                     }
                 }
                 // Regex
-                [b'/', ..] if !infix => {
+                ['/', ..] if !infix => {
                     unimplemented!("TODO: regex scanning is not yet implemented")
                 }
-                [b'.', b'.', ..] => op2!(Range),
-                [b':', b'=', ..] => op2!(Bind),
-                [b'!', b'=', ..] => op2!(NotEqual),
-                [b'>', b'=', ..] => op2!(GreaterEqual),
-                [b'<', b'=', ..] => op2!(LessEqual),
-                [b'*', b'*', ..] => op2!(Descendent),
-                [b'~', b'>', ..] => op2!(Apply),
+                ['.', '.', ..] => op2!(Range),
+                [':', '=', ..] => op2!(Bind),
+                ['!', '=', ..] => op2!(NotEqual),
+                ['>', '=', ..] => op2!(GreaterEqual),
+                ['<', '=', ..] => op2!(LessEqual),
+                ['*', '*', ..] => op2!(Descendent),
+                ['~', '>', ..] => op2!(Apply),
                 // Numbers
-                [b'0'..=b'9', ..] => {
+                ['0'..='9', ..] => {
                     let number_start = self.position.source_pos;
                     self.position.advance_1();
                     // TODO(johan): Improve this lexing, it's pretty ordinary and allows all sorts
                     // of invalid stuff
                     loop {
-                        match self.source.as_bytes()[self.position.source_pos..] {
+                        match self.chars[self.position.source_pos..] {
                             // Range operator
-                            [b'.', b'.', ..] => break,
-                            [b'0'..=b'9' | b'.' | b'e' | b'E' | b'-' | b'+', ..] => {
+                            ['.', '.', ..] => break,
+                            ['0'..='9' | '.' | 'e' | 'E' | '-' | '+', ..] => {
                                 self.position.advance_1();
                             }
                             _ => break,
                         }
                     }
 
-                    let token = &self.source.as_bytes()[number_start..self.position.source_pos];
-                    if let Some(number) = str::from_utf8(token)
-                        .ok()
-                        .and_then(|s| s.parse::<f64>().ok())
-                    {
+                    let token = &self.chars[number_start..self.position.source_pos];
+                    let number = String::from_iter(token);
+                    if let Ok(number) = number.parse::<f64>() {
                         break self.emit(Num(number));
                     } else {
                         break Err(Box::new(S0102 {
                             position: self.position,
-                            number: str::from_utf8(token).unwrap().to_string(),
+                            number,
                         }));
                     }
                 }
-                [b'.', ..] => op1!(Period),
-                [b'[', ..] => op1!(LeftBracket),
-                [b']', ..] => op1!(RightBracket),
-                [b'{', ..] => op1!(LeftBrace),
-                [b'}', ..] => op1!(RightBrace),
-                [b'(', ..] => op1!(LeftParen),
-                [b')', ..] => op1!(RightParen),
-                [b',', ..] => op1!(Comma),
-                [b'@', ..] => op1!(At),
-                [b'#', ..] => op1!(Hash),
-                [b';', ..] => op1!(SemiColon),
-                [b':', ..] => op1!(Colon),
-                [b'?', ..] => op1!(Question),
-                [b'+', ..] => op1!(Plus),
-                [b'-', ..] => op1!(Minus),
-                [b'*', ..] => op1!(Wildcard),
-                [b'/', ..] => op1!(ForwardSlash),
-                [b'%', ..] => op1!(Percent),
-                [b'|', ..] => op1!(Pipe),
-                [b'=', ..] => op1!(Equal),
-                [b'<', ..] => op1!(LeftCaret),
-                [b'>', ..] => op1!(RightCaret),
-                [b'^', ..] => op1!(Caret),
-                [b'&', ..] => op1!(Ampersand),
-                [b'!', ..] => op1!(Not),
-                [b'~', ..] => op1!(Tilde),
+                ['.', ..] => op1!(Period),
+                ['[', ..] => op1!(LeftBracket),
+                [']', ..] => op1!(RightBracket),
+                ['{', ..] => op1!(LeftBrace),
+                ['}', ..] => op1!(RightBrace),
+                ['(', ..] => op1!(LeftParen),
+                [')', ..] => op1!(RightParen),
+                [',', ..] => op1!(Comma),
+                ['@', ..] => op1!(At),
+                ['#', ..] => op1!(Hash),
+                [';', ..] => op1!(SemiColon),
+                [':', ..] => op1!(Colon),
+                ['?', ..] => op1!(Question),
+                ['+', ..] => op1!(Plus),
+                ['-', ..] => op1!(Minus),
+                ['*', ..] => op1!(Wildcard),
+                ['/', ..] => op1!(ForwardSlash),
+                ['%', ..] => op1!(Percent),
+                ['|', ..] => op1!(Pipe),
+                ['=', ..] => op1!(Equal),
+                ['<', ..] => op1!(LeftCaret),
+                ['>', ..] => op1!(RightCaret),
+                ['^', ..] => op1!(Caret),
+                ['&', ..] => op1!(Ampersand),
+                ['!', ..] => op1!(Not),
+                ['~', ..] => op1!(Tilde),
                 // String literals
-                [quote_type @ (b'\'' | b'"'), ..] => {
+                [quote_type @ ('\'' | '"'), ..] => {
                     self.position.advance_1();
                     let mut string = String::new();
                     let string_start = self.position;
                     break loop {
-                        match self.source.as_bytes()[self.position.source_pos..] {
+                        match self.chars[self.position.source_pos..] {
                             // End of string missing
                             [] => {
                                 break Err(Box::new(S0101 {
@@ -305,55 +304,59 @@ impl<'a> Tokenizer<'a> {
                                 }))
                             }
                             // Escape sequence
-                            [b'\\', escape_char, ..] => {
+                            ['\\', escape_char, ..] => {
                                 self.position.advance_1();
 
                                 match escape_char {
                                     // Basic escape sequence
-                                    b'"' => {
+                                    '"' => {
                                         string.push('"');
                                         self.position.advance_1();
                                     }
-                                    b'\\' => {
+                                    '\\' => {
                                         string.push('\\');
                                         self.position.advance_1();
                                     }
-                                    b'/' => {
+                                    '/' => {
                                         string.push('/');
                                         self.position.advance_1();
                                     }
-                                    b'b' => {
+                                    'b' => {
                                         string.push('\x08');
                                         self.position.advance_1();
                                     }
-                                    b'f' => {
+                                    'f' => {
                                         string.push('\x0c');
                                         self.position.advance_1();
                                     }
-                                    b'n' => {
+                                    'n' => {
                                         string.push('\n');
                                         self.position.advance_1();
                                     }
-                                    b'r' => {
+                                    'r' => {
                                         string.push('\r');
                                         self.position.advance_1();
                                     }
-                                    b't' => {
+                                    't' => {
                                         string.push('\t');
                                         self.position.advance_1();
                                     }
                                     // Unicode escape sequence
-                                    b'u' => {
+                                    'u' => {
                                         // \u should be followed by 4 hex digits, which needs to
                                         // parsed to a codepoint and then turned into a char to be
                                         // appended
-                                        if let Some(character) = str::from_utf8(
-                                            &self.source.as_bytes()[self.position.source_pos + 1
-                                                ..self.position.source_pos + 5],
-                                        )
-                                        .ok()
-                                        .and_then(|octets| u32::from_str_radix(octets, 16).ok())
-                                        .and_then(char::from_u32)
+                                        let chars: &String = &self.chars[self.position.source_pos
+                                            + 1
+                                            ..self.position.source_pos + 5]
+                                            .iter()
+                                            .cloned()
+                                            .collect::<String>();
+
+                                        if let Some(character) = str::from_utf8(chars.as_bytes())
+                                            .ok()
+                                            .and_then(|octets| u32::from_str_radix(octets, 16).ok())
+                                            .and_then(char::from_u32)
                                         {
                                             string.push(character);
                                             self.position.advance_x(5);
@@ -383,7 +386,7 @@ impl<'a> Tokenizer<'a> {
                                 // Otherwise add to the string
                                 // TODO(johan): This method of building strings byte by byte is
                                 // probably slow
-                                string.push_str(&String::from_utf8(vec![c]).unwrap());
+                                string.push(c);
                                 self.position.advance_1();
                                 continue;
                             }
@@ -391,19 +394,17 @@ impl<'a> Tokenizer<'a> {
                     };
                 }
                 // Quoted names (backticks)
-                [b'`', ..] => {
+                ['`', ..] => {
                     self.position.advance_1();
                     // Find the closing backtick and convert to a string
-                    match self.source.as_bytes()[self.position.source_pos..]
+                    match self.chars[self.position.source_pos..]
                         .iter()
-                        .position(|byte| *byte == b'`')
-                        .and_then(|index| {
-                            String::from_utf8(
-                                self.source.as_bytes()
-                                    [self.position.source_pos..self.position.source_pos + index]
-                                    .to_vec(),
-                            )
-                            .ok()
+                        .position(|c| *c == '`')
+                        .map(|index| {
+                            self.chars[self.position.source_pos..self.position.source_pos + index]
+                                .iter()
+                                .cloned()
+                                .collect::<String>()
                         }) {
                         Some(value) => {
                             self.position.advance_x(value.len() + 1);
@@ -420,33 +421,27 @@ impl<'a> Tokenizer<'a> {
                 [c, ..] => {
                     let name_start = self.position.source_pos;
                     break loop {
-                        match self.source.as_bytes()[self.position.source_pos..] {
+                        match self.chars[self.position.source_pos..] {
                             // Match end of source, whitespace characters or a single-char operator
                             // to find the end of the name
                             []
-                            | [b' ' | b'\r' | b'\n' | b'\t' | b'\x0b', ..]
-                            | [b'.' | b'[' | b']' | b'{' | b'}' | b'(' | b')' | b',' | b'@' | b'#'
-                            | b';' | b':' | b'?' | b'+' | b'-' | b'*' | b'/' | b'%' | b'|'
-                            | b'=' | b'<' | b'>' | b'^' | b'&' | b'!' | b'~', ..] => {
-                                if c == b'$' {
+                            | [' ' | '\r' | '\n' | '\t' | '\x0b', ..]
+                            | ['.' | '[' | ']' | '{' | '}' | '(' | ')' | ',' | '@' | '#' | ';'
+                            | ':' | '?' | '+' | '-' | '*' | '/' | '%' | '|' | '=' | '<' | '>'
+                            | '^' | '&' | '!' | '~', ..] => {
+                                if c == '$' {
                                     // Variable reference
-                                    // TODO(johan): This could fail to unwrap
-                                    let name = String::from_utf8(
-                                        self.source.as_bytes()
-                                            [name_start + 1..self.position.source_pos]
-                                            .to_vec(),
-                                    )
-                                    .unwrap();
+                                    let name = self.chars[name_start + 1..self.position.source_pos]
+                                        .iter()
+                                        .cloned()
+                                        .collect::<String>();
 
                                     break self.emit(Var(name));
                                 } else {
-                                    // TODO(johan): This could fail to unwrap
-                                    let name = String::from_utf8(
-                                        self.source.as_bytes()
-                                            [name_start..self.position.source_pos]
-                                            .to_vec(),
-                                    )
-                                    .unwrap();
+                                    let name = self.chars[name_start..self.position.source_pos]
+                                        .iter()
+                                        .cloned()
+                                        .collect::<String>();
 
                                     let token = match &name[..] {
                                         "or" => self.emit(Or),

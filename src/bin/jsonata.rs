@@ -13,7 +13,7 @@ fn main() -> JsonAtaResult<()> {
 
     let jsonata = JsonAta::new(&args[1])?;
 
-    println!("{:#?}", jsonata.ast());
+    //println!("{:#?}", jsonata.ast());
 
     let input = json::parse(&args[2]).unwrap();
     let result = jsonata.evaluate(Some(&input));
