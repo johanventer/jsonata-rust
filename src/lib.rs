@@ -1,108 +1,31 @@
-#![allow(incomplete_features)] // For const_generics
 #![feature(or_patterns)]
-#![feature(const_generics)]
 // TODO: Disable these
-#![allow(unused_variables)]
-#![allow(dead_code)]
+//#![allow(unused_variables)]
+//#![allow(dead_code)]
 
-// use chrono::{DateTime, Utc};
 use json::JsonValue;
-// use std::collections::HashMap;
 
 #[macro_use]
 mod error;
 mod ast;
 mod evaluator;
+mod frame;
 mod parser;
 mod symbol;
 mod tokenizer;
 
+pub use frame::Binding;
+
 pub type JsonAtaResult<T> = std::result::Result<T, Box<dyn error::JsonAtaError>>;
 
-// /// A binding in a stack frame
-// pub enum Binding<'a> {
-//     Variable(JsonValue),
-//     Function(&'a dyn Fn(Vec<&JsonValue>) -> JsonValue, &'a str),
-// }
-
-// impl Binding<'_> {
-//     pub fn as_var(&self) -> &JsonValue {
-//         match self {
-//             Binding::Variable(value) => &value,
-//             _ => panic!("Binding is not a variable"),
-//         }
-//     }
-
-//     pub fn as_func(&self) -> &dyn Fn(Vec<&JsonValue>) -> JsonValue {
-//         match self {
-//             Binding::Function(func, _) => func,
-//             _ => panic!("Binding is not a function"),
-//         }
-//     }
-// }
-
-// fn sum(args: Vec<&JsonValue>) -> JsonValue {
-//     json::from("todo")
-// }
-
-// /// A stack frame of the expression evaluation
-// struct Frame<'a> {
-//     /// Stores the bindings for the frame
-//     bindings: HashMap<String, Binding<'a>>,
-
-//     /// The parent frame of this frame
-//     parent_frame: Option<&'a Frame<'a>>,
-
-//     /// The local timestamp in this frame
-//     timestamp: DateTime<Utc>,
-//     // TODO: async, global
-// }
-
-// impl<'a> Frame<'a> {
-//     /// Creates a new empty frame
-//     fn new() -> Self {
-//         Self {
-//             bindings: HashMap::new(),
-//             parent_frame: None,
-//             timestamp: Utc::now(),
-//         }
-//     }
-
-//     /// Creates a new empty frame, with a parent frame for lookups
-//     fn new_from(parent_frame: &'a Frame<'a>) -> Self {
-//         Self {
-//             bindings: HashMap::new(),
-//             parent_frame: Some(parent_frame),
-//             timestamp: parent_frame.timestamp.clone(),
-//         }
-//     }
-
-//     /// Bind a value to a name in a frame
-//     fn bind(&mut self, name: &str, value: Binding<'a>) {
-//         &self.bindings.insert(name.to_string(), value);
-//     }
-
-//     /// Lookup a value by name in a frame
-//     fn lookup(&self, name: &str) -> Option<&Binding> {
-//         match &self.bindings.get(name) {
-//             Some(value) => Some(value),
-//             None => match &self.parent_frame {
-//                 Some(parent) => parent.lookup(name),
-//                 None => None,
-//             },
-//         }
-//     }
-// }
-
-pub struct JsonAta {
-    expr: String,
-    // environment: Frame<'a>,
+pub struct JsonAta<'a> {
+    root_frame: frame::Frame<'a>,
     ast: ast::Node,
 }
 
-impl JsonAta {
+impl<'a> JsonAta<'a> {
     pub fn new(expr: &str) -> JsonAtaResult<Self> {
-        // let mut environment = Frame::new();
+        let root_frame = frame::Frame::new();
 
         // // TODO: Apply statics to the environment
         // environment.bind("sum", Binding::Function(&sum, "<a<n>:n>"));
@@ -110,19 +33,18 @@ impl JsonAta {
         // TODO: Probably could just do this once somewhere to avoid doing it every time
 
         Ok(Self {
-            expr: expr.to_string(),
-            // environment,
+            root_frame,
             ast: parser::parse(expr)?,
         })
     }
 
-    pub fn evaluate(&self, input: Option<&JsonValue>) -> JsonAtaResult<Option<JsonValue>> {
-        evaluator::evaluate(&self.ast, input)
+    pub fn evaluate(&mut self, input: Option<&JsonValue>) -> JsonAtaResult<Option<JsonValue>> {
+        evaluator::evaluate(&self.ast, input, &mut self.root_frame)
     }
 
-    // pub fn assign(&mut self, name: &str, value: Binding<'a>) {
-    //     self.environment.bind(name, value);
-    // }
+    pub fn assign(&mut self, name: &str, value: Binding) {
+        self.root_frame.bind(name, value);
+    }
 
     pub fn ast(&self) -> &ast::Node {
         &self.ast
@@ -197,91 +119,91 @@ mod evaluator_tests {
 
     #[test]
     fn add() {
-        let jsonata = JsonAta::new("1 + 3").unwrap();
+        let mut jsonata = JsonAta::new("1 + 3").unwrap();
         let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(4));
     }
 
     #[test]
     fn sub() {
-        let jsonata = JsonAta::new("1 - 3").unwrap();
+        let mut jsonata = JsonAta::new("1 - 3").unwrap();
         let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(-2));
     }
 
     #[test]
     fn mul() {
-        let jsonata = JsonAta::new("4 * 7").unwrap();
+        let mut jsonata = JsonAta::new("4 * 7").unwrap();
         let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(28));
     }
 
     #[test]
     fn div() {
-        let jsonata = JsonAta::new("10 / 2").unwrap();
+        let mut jsonata = JsonAta::new("10 / 2").unwrap();
         let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(5));
     }
 
     #[test]
     fn modulo() {
-        let jsonata = JsonAta::new("10 % 8").unwrap();
+        let mut jsonata = JsonAta::new("10 % 8").unwrap();
         let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(2));
     }
 
     #[test]
     fn less_than_num_true() {
-        let jsonata = JsonAta::new("3 < 4").unwrap();
+        let mut jsonata = JsonAta::new("3 < 4").unwrap();
         let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(true));
     }
 
     #[test]
     fn less_than_num_false() {
-        let jsonata = JsonAta::new("4 < 3").unwrap();
+        let mut jsonata = JsonAta::new("4 < 3").unwrap();
         let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(false));
     }
 
     #[test]
     fn less_than_str_true() {
-        let jsonata = JsonAta::new("\"3\" < \"4\"").unwrap();
+        let mut jsonata = JsonAta::new("\"3\" < \"4\"").unwrap();
         let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(true));
     }
 
     #[test]
     fn less_than_str_false() {
-        let jsonata = JsonAta::new("\"4\" < \"3\"").unwrap();
+        let mut jsonata = JsonAta::new("\"4\" < \"3\"").unwrap();
         let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(false));
     }
 
     #[test]
     fn str_concat() {
-        let jsonata = JsonAta::new("\"hello\" & \" world\"").unwrap();
+        let mut jsonata = JsonAta::new("\"hello\" & \" world\"").unwrap();
         let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from("hello world"));
     }
 
     #[test]
     fn eq() {
-        let jsonata = JsonAta::new("1 = 1").unwrap();
+        let mut jsonata = JsonAta::new("1 = 1").unwrap();
         let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(true));
     }
 
     #[test]
     fn neq() {
-        let jsonata = JsonAta::new("1 != 2").unwrap();
+        let mut jsonata = JsonAta::new("1 != 2").unwrap();
         let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(true));
     }
 
     #[test]
     fn math() {
-        let jsonata = JsonAta::new("(2 + 3) * 4 + 2").unwrap();
+        let mut jsonata = JsonAta::new("(2 + 3) * 4 + 2").unwrap();
         let result = jsonata.evaluate(None).unwrap().unwrap();
         assert_eq!(result, json::from(22));
     }

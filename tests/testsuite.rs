@@ -6,7 +6,7 @@ use std::fs;
 use std::path;
 use test_generator::test_resources;
 
-use jsonata::JsonAta;
+use jsonata::{Binding, JsonAta};
 
 #[test_resources("tests/testsuite/groups/*/*.json")]
 fn t(resource: &str) {
@@ -46,8 +46,13 @@ fn t(resource: &str) {
         let jsonata = JsonAta::new(&expr);
 
         match jsonata {
-            Ok(jsonata) => {
+            Ok(mut jsonata) => {
+                for (key, value) in case["bindings"].entries() {
+                    jsonata.assign(key, Binding::Var(value.clone()));
+                }
+
                 let result = jsonata.evaluate(data.as_ref());
+
                 match result {
                     Ok(result) => {
                         if case["undefinedResult"].is_boolean() && case["undefinedResult"] == true {

@@ -109,7 +109,6 @@ impl Symbol for Token {
                     loop {
                         let mut item = parser.expression(0)?;
                         if parser.token().kind == T::Range {
-                            let position = parser.token().position;
                             parser.expect(T::Range, false)?;
                             item = Node::new_with_children(
                                 N::Binary(BinaryOp::Range),

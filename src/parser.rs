@@ -39,9 +39,8 @@ pub struct Parser {
 
   /// The last token obtained from the tokenizer.
   token: Token,
-
-  ancestor_label: u32,
-  ancestor_index: u32,
+  // ancestor_label: u32,
+  // ancestor_index: u32,
 }
 
 impl Parser {
@@ -58,8 +57,8 @@ impl Parser {
     Ok(Self {
       token: tokenizer.next(false)?,
       tokenizer,
-      ancestor_index: 0,
-      ancestor_label: 0,
+      // ancestor_index: 0,
+      // ancestor_label: 0,
     })
   }
 
@@ -781,7 +780,7 @@ mod tests {
     "#
   )]
   fn parser_tests(source: &str) {
-    let ast = Parser::parse(source);
+    let _ast = Parser::parse(source);
     // use json::stringify_pretty;
     // println!("{}", stringify_pretty(ast.to_json(), 4));
   }

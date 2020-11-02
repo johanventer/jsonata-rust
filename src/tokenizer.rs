@@ -346,6 +346,12 @@ impl Tokenizer {
                                         // \u should be followed by 4 hex digits, which needs to
                                         // parsed to a codepoint and then turned into a char to be
                                         // appended
+                                        if self.chars.len() < self.position.source_pos + 5 {
+                                            break Err(Box::new(S0104 {
+                                                position: self.position,
+                                            }));
+                                        }
+
                                         let chars: &String = &self.chars[self.position.source_pos
                                             + 1
                                             ..self.position.source_pos + 5]
