@@ -211,9 +211,9 @@ impl Tokenizer {
                     loop {
                         match self.chars[self.position.source_pos..] {
                             [] => {
-                                return Err(Box::new(S0106 {
+                                return Err(box S0106 {
                                     position: comment_start,
-                                }))
+                                })
                             }
                             ['*', '/', ..] => {
                                 self.position.advance_2();
@@ -258,10 +258,10 @@ impl Tokenizer {
                     if let Ok(number) = number.parse::<f64>() {
                         break self.emit(Num(number));
                     } else {
-                        break Err(Box::new(S0102 {
+                        break Err(box S0102 {
                             position: self.position,
                             number,
-                        }));
+                        });
                     }
                 }
                 ['.', ..] => op1!(Period),
@@ -299,9 +299,9 @@ impl Tokenizer {
                         match self.chars[self.position.source_pos..] {
                             // End of string missing
                             [] => {
-                                break Err(Box::new(S0101 {
+                                break Err(box S0101 {
                                     position: string_start,
-                                }))
+                                })
                             }
                             // Escape sequence
                             ['\\', escape_char, ..] => {
@@ -347,9 +347,9 @@ impl Tokenizer {
                                         // parsed to a codepoint and then turned into a char to be
                                         // appended
                                         if self.chars.len() < self.position.source_pos + 5 {
-                                            break Err(Box::new(S0104 {
+                                            break Err(box S0104 {
                                                 position: self.position,
-                                            }));
+                                            });
                                         }
 
                                         let chars: &String = &self.chars[self.position.source_pos
@@ -367,17 +367,17 @@ impl Tokenizer {
                                             string.push(character);
                                             self.position.advance_x(5);
                                         } else {
-                                            break Err(Box::new(S0104 {
+                                            break Err(box S0104 {
                                                 position: self.position,
-                                            }));
+                                            });
                                         }
                                     }
                                     // Invalid escape sequence
                                     c => {
-                                        break Err(Box::new(S0103 {
+                                        break Err(box S0103 {
                                             position: self.position,
                                             escape_char: c.to_string(),
-                                        }))
+                                        })
                                     }
                                 }
                             }
@@ -417,9 +417,9 @@ impl Tokenizer {
                             break self.emit(Name(value));
                         }
                         None => {
-                            break Err(Box::new(S0105 {
+                            break Err(box S0105 {
                                 position: self.position,
-                            }))
+                            })
                         }
                     }
                 }

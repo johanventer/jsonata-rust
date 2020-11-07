@@ -94,7 +94,11 @@ define_error!(
     S0212,
     "The left side of `:=` must be a variable name (start with $)"
 );
-// "S0213": "The literal value {{value}} cannot be used as a step within a path expression",
+define_error!(
+    S0213,
+    "The literal value `{}` cannot be used as a step within a path expression",
+    value
+);
 define_error!(
     S0214,
     "The right side of `{}` must be a variable name (start with $)",

@@ -46,14 +46,14 @@ impl<'a> Frame<'a> {
         }
     }
 
-    /// Creates a new empty frame, with a parent frame for lookups
-    pub fn new_from(parent_frame: &'a Frame) -> Self {
-        Self {
-            bindings: HashMap::new(),
-            parent_frame: Some(parent_frame),
-            //timestamp: parent_frame.timestamp.clone(),
-        }
-    }
+    ///// Creates a new empty frame, with a parent frame for lookups
+    //pub fn new_from(parent_frame: &'a Frame) -> Self {
+    //    Self {
+    //        bindings: HashMap::new(),
+    //        parent_frame: Some(parent_frame),
+    //        //timestamp: parent_frame.timestamp.clone(),
+    //    }
+    //}
 
     /// Bind a value to a name in a frame
     pub fn bind(&mut self, name: &str, value: Binding) {

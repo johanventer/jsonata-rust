@@ -1,29 +1,128 @@
-use crate::ast::BinaryOp::*;
-use crate::ast::NodeKind::*;
 use crate::ast::*;
 use crate::error::*;
 use crate::frame::{Binding, Frame};
 use crate::JsonAtaResult;
-use json::JsonValue;
+use json::{array, JsonValue};
 
 pub fn evaluate(
     node: &Node,
     input: Option<&JsonValue>,
     frame: &mut Frame,
 ) -> JsonAtaResult<Option<JsonValue>> {
-    match &node.kind {
-        Null => Ok(Some(JsonValue::Null)),
-        Bool(ref value) => Ok(Some(json::from(*value))),
-        Str(ref value) => Ok(Some(json::from(value.clone()))),
-        Num(ref value) => Ok(Some(json::from(*value))),
-        Name(_) => evaluate_name(node, input),
-        Unary(_) => evaluate_unary_op(node, input, frame),
-        Binary(_) => evaluate_binary_op(node, input, frame),
-        Block => evaluate_block(node, input, frame),
-        Ternary => evaluate_ternary(node, input, frame),
-        Var(ref name) => evaluate_variable(name, frame),
+    let result = match &node.kind {
+        NodeKind::Null => Some(JsonValue::Null),
+        NodeKind::Bool(ref value) => Some(json::from(*value)),
+        NodeKind::Str(ref value) => Some(json::from(value.clone())),
+        NodeKind::Num(ref value) => Some(json::from(*value)),
+        NodeKind::Name(_) => evaluate_name(node, input)?,
+        NodeKind::Unary(_) => evaluate_unary_op(node, input, frame)?,
+        NodeKind::Binary(_) => evaluate_binary_op(node, input, frame)?,
+        NodeKind::Block => evaluate_block(node, input, frame)?,
+        NodeKind::Ternary => evaluate_ternary(node, input, frame)?,
+        NodeKind::Var(ref name) => evaluate_variable(name, frame)?,
+        NodeKind::Path => evaluate_path(node, input, frame)?,
         _ => unimplemented!("TODO: node kind not yet supported: {}", node.kind),
+    };
+
+    // TODO: Predicate and grouping (jsonata.js:127)
+
+    if let Some(mut result) = result {
+        if result.is_array() {
+            // TODO: Keep singleton (jsonata.js:143)
+
+            if result.len() == 0 {
+                return Ok(None);
+            }
+
+            if result.len() == 1 {
+                return Ok(Some(result[0].take()));
+            }
+        }
+
+        Ok(Some(result))
+    } else {
+        Ok(None)
     }
+}
+
+fn evaluate_path(
+    node: &Node,
+    input: Option<&JsonValue>,
+    frame: &mut Frame,
+) -> JsonAtaResult<Option<JsonValue>> {
+    match input {
+        None => Ok(None),
+        Some(mut input) => {
+            // TODO: Tuple, singleton array, group expressions (jsonata.js:164)
+
+            let mut result: Option<JsonValue> = None;
+
+            for (step_index, step) in node.children.iter().enumerate() {
+                result = evaluate_step(step, input, frame, step_index == input.len() - 1)?;
+
+                match result {
+                    None => break,
+                    Some(ref result) => {
+                        if result.is_empty() {
+                            break;
+                        } else {
+                            input = result;
+                        }
+                    }
+                }
+            }
+
+            Ok(result)
+        }
+    }
+}
+
+fn evaluate_step(
+    node: &Node,
+    input: &JsonValue,
+    frame: &mut Frame,
+    last_step: bool,
+) -> JsonAtaResult<Option<JsonValue>> {
+    // TODO: Sorting (jsonata.js:253)
+
+    let mut result = array![];
+
+    let mut evaluate_input = |input: &JsonValue| -> JsonAtaResult<Option<JsonValue>> {
+        let input_result = evaluate(node, Some(input), frame)?;
+
+        // TODO: Filtering (jsonata.js:267)
+
+        if let Some(input_result) = input_result {
+            result.push(input_result).unwrap();
+        }
+
+        Ok(None)
+    };
+
+    if input.is_array() {
+        for input in input.members() {
+            evaluate_input(input)?;
+        }
+    } else {
+        evaluate_input(input)?;
+    }
+
+    return if last_step && result.len() == 1 && result[0].is_array() {
+        Ok(Some(result[0].clone()))
+    } else {
+        // Flatten the sequence
+        let mut flat_result = array![];
+        result.members().for_each(|member| {
+            if !member.is_array() {
+                flat_result.push(member.clone()).unwrap();
+            } else {
+                member
+                    .members()
+                    .for_each(|member| flat_result.push(member.clone()).unwrap());
+            }
+        });
+        Ok(Some(flat_result))
+    };
 }
 
 fn evaluate_variable(name: &str, frame: &Frame) -> JsonAtaResult<Option<JsonValue>> {
@@ -41,7 +140,7 @@ fn evaluate_ternary(
     input: Option<&JsonValue>,
     frame: &mut Frame,
 ) -> JsonAtaResult<Option<JsonValue>> {
-    if let Ternary = &node.kind {
+    if let NodeKind::Ternary = &node.kind {
         let condition = evaluate(&node.children[0], input, frame)?;
         if boolean(condition.as_ref()) {
             evaluate(&node.children[1], input, frame)
@@ -54,7 +153,7 @@ fn evaluate_ternary(
 }
 
 fn evaluate_name(node: &Node, input: Option<&JsonValue>) -> JsonAtaResult<Option<JsonValue>> {
-    if let Name(value) = &node.kind {
+    if let NodeKind::Name(value) = &node.kind {
         Ok(lookup(input, value))
     } else {
         unreachable!()
@@ -66,7 +165,7 @@ fn evaluate_block(
     input: Option<&JsonValue>,
     frame: &mut Frame,
 ) -> JsonAtaResult<Option<JsonValue>> {
-    if let Block = &node.kind {
+    if let NodeKind::Block = &node.kind {
         // TODO: block frame
         let mut result: JsonAtaResult<Option<JsonValue>> = Ok(None);
 
@@ -85,7 +184,7 @@ fn evaluate_unary_op(
     input: Option<&JsonValue>,
     frame: &mut Frame,
 ) -> JsonAtaResult<Option<JsonValue>> {
-    if let Unary(ref op) = &node.kind {
+    if let NodeKind::Unary(ref op) = &node.kind {
         match op {
             UnaryOp::Minus => {
                 let value = evaluate(&node.children[0], input, frame)?;
@@ -123,7 +222,8 @@ fn evaluate_binary_op(
     input: Option<&JsonValue>,
     frame: &mut Frame,
 ) -> JsonAtaResult<Option<JsonValue>> {
-    if let Binary(ref op) = &node.kind {
+    use BinaryOp::*;
+    if let NodeKind::Binary(ref op) = &node.kind {
         match op {
             Add | Subtract | Multiply | Divide | Modulus => {
                 evaluate_numeric_expression(node, input, frame, op)
@@ -150,7 +250,7 @@ fn evaluate_bind_expression(
 ) -> JsonAtaResult<Option<JsonValue>> {
     let name = &node.children[0];
     let value = evaluate(&node.children[1], input, frame)?.unwrap();
-    if let Var(name) = &name.kind {
+    if let NodeKind::Var(name) = &name.kind {
         frame.bind(name, Binding::Var(value));
     }
     Ok(None)
@@ -192,11 +292,11 @@ fn evaluate_numeric_expression(
     };
 
     let result = match op {
-        Add => lhs + rhs,
-        Subtract => lhs - rhs,
-        Multiply => lhs * rhs,
-        Divide => lhs / rhs,
-        Modulus => lhs % rhs,
+        BinaryOp::Add => lhs + rhs,
+        BinaryOp::Subtract => lhs - rhs,
+        BinaryOp::Multiply => lhs * rhs,
+        BinaryOp::Divide => lhs / rhs,
+        BinaryOp::Modulus => lhs % rhs,
         _ => unreachable!(),
     };
 
@@ -234,10 +334,10 @@ fn evaluate_comparison_expression(
         let rhs = rhs.as_f64().unwrap();
 
         return Ok(Some(json::from(match op {
-            LessThan => lhs < rhs,
-            LessThanEqual => lhs <= rhs,
-            GreaterThan => lhs > rhs,
-            GreaterThanEqual => lhs >= rhs,
+            BinaryOp::LessThan => lhs < rhs,
+            BinaryOp::LessThanEqual => lhs <= rhs,
+            BinaryOp::GreaterThan => lhs > rhs,
+            BinaryOp::GreaterThanEqual => lhs >= rhs,
             _ => unreachable!(),
         })));
     }
@@ -247,10 +347,10 @@ fn evaluate_comparison_expression(
         let rhs = rhs.as_str().unwrap();
 
         return Ok(Some(json::from(match op {
-            LessThan => lhs < rhs,
-            LessThanEqual => lhs <= rhs,
-            GreaterThan => lhs > rhs,
-            GreaterThanEqual => lhs >= rhs,
+            BinaryOp::LessThan => lhs < rhs,
+            BinaryOp::LessThanEqual => lhs <= rhs,
+            BinaryOp::GreaterThan => lhs > rhs,
+            BinaryOp::GreaterThanEqual => lhs >= rhs,
             _ => unreachable!(),
         })));
     }
@@ -276,8 +376,8 @@ fn evaluate_boolean_expression(
     let right_bool = boolean(rhs.as_ref());
 
     let result = match op {
-        And => left_bool && right_bool,
-        Or => left_bool || right_bool,
+        BinaryOp::And => left_bool && right_bool,
+        BinaryOp::Or => left_bool || right_bool,
         _ => unreachable!(),
     };
 
@@ -328,8 +428,8 @@ fn evaluate_equality_expression(
     let rhs = rhs.unwrap();
 
     let result = match op {
-        Equal => lhs == rhs,
-        NotEqual => lhs != rhs,
+        BinaryOp::Equal => lhs == rhs,
+        BinaryOp::NotEqual => lhs != rhs,
         _ => unreachable!(),
     };
 

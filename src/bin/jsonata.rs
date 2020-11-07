@@ -13,7 +13,7 @@ fn main() -> JsonAtaResult<()> {
 
     match JsonAta::new(&args[1]) {
         Ok(mut jsonata) => {
-            // println!("{:#?}", jsonata.ast());
+            println!("{:#?}", jsonata.ast());
 
             let input = if args.len() > 2 && !args[2].is_empty() {
                 Some(json::parse(&args[2]).unwrap())

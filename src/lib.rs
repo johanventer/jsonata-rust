@@ -1,7 +1,5 @@
 #![feature(or_patterns)]
-// TODO: Disable these
-//#![allow(unused_variables)]
-//#![allow(dead_code)]
+#![feature(box_syntax)]
 
 use json::JsonValue;
 

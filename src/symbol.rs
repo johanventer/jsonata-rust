@@ -10,11 +10,11 @@ pub trait Symbol {
     /// Returns the left binding power for the symbol.
     fn lbp(&self) -> u32;
 
-    /// Returns the `null denotation` for the symbol, essentially this is the AST created when this
+    /// Returns the `null denotation` for the symbol, this is the AST created when this
     /// symbol is treated as a prefix (and doesn't care about tokens to the left of it).
     fn nud(&self, parser: &mut Parser) -> JsonAtaResult<Node>;
 
-    /// Returns the `left denotation` for the symbol, essentially this is the AST created when this
+    /// Returns the `left denotation` for the symbol, this is the AST created when this
     /// symbol is treated as infix (and cares about tokens to the left of it).
     fn led(&self, parser: &mut Parser, left: Node) -> JsonAtaResult<Node>;
 }
@@ -84,7 +84,7 @@ impl Symbol for Token {
             )),
             T::Wildcard => Ok(Node::new(N::Wildcard, p)),
             T::Descendent => Ok(Node::new(N::Descendent, p)),
-            T::Percent => Ok(Node::new(N::Parent(None), p)),
+            T::Percent => Ok(Node::new(N::Parent, p)),
 
             // Block of expressions
             T::LeftParen => {
@@ -163,10 +163,10 @@ impl Symbol for Token {
                 Ok(Node::new_with_children(N::Transform, p, children))
             }
 
-            _ => Err(Box::new(S0211 {
+            _ => Err(box S0211 {
                 position: p,
                 symbol: self.to_string(),
-            })),
+            }),
         }
     }
 
@@ -242,10 +242,10 @@ impl Symbol for Token {
                             match arg.kind {
                                 N::Var(..) => (),
                                 _ => {
-                                    return Err(Box::new(S0208 {
+                                    return Err(box S0208 {
                                         position: arg.position,
                                         arg: arg.to_string(),
-                                    }))
+                                    })
                                 }
                             }
                         }
@@ -278,9 +278,9 @@ impl Symbol for Token {
                 match left.kind {
                     N::Var(..) => (),
                     _ => {
-                        return Err(Box::new(S0212 {
+                        return Err(box S0212 {
                             position: left.position,
-                        }))
+                        })
                     }
                 }
 
@@ -327,10 +327,10 @@ impl Symbol for Token {
                 match rhs.kind {
                     N::Var(..) => (),
                     _ => {
-                        return Err(Box::new(S0214 {
+                        return Err(box S0214 {
                             position: rhs.position,
                             op: '@'.to_string(),
-                        }))
+                        })
                     }
                 }
 
@@ -347,10 +347,10 @@ impl Symbol for Token {
                 match rhs.kind {
                     N::Var(..) => (),
                     _ => {
-                        return Err(Box::new(S0214 {
+                        return Err(box S0214 {
                             position: rhs.position,
                             op: '#'.to_string(),
-                        }))
+                        })
                     }
                 }
 
@@ -397,7 +397,7 @@ impl Symbol for Token {
                         step = &mut step.children[0]
                     }
 
-                    step.keep_array = true;
+                    //step.keep_array = true;
                     parser.expect(T::RightBracket, false)?;
                     Ok(left)
                 } else {
