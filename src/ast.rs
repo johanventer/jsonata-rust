@@ -261,6 +261,9 @@ pub struct Node {
     /// A general list of child nodes, could represent lhs/rhs, update/transform/delete,
     /// condition/then/else, procedure/arguments etc.
     pub children: Vec<Node>,
+
+    /// Indicates that this node should not be flattened.
+    pub keep_array: bool,
     // /// An optional group by expression, represented as an object.
     // pub group_by: Option<Object>,
 
@@ -276,10 +279,6 @@ pub struct Node {
 
     // /// Indicates if this node has an indexed variable binding.
     // pub index: Option<String>,
-
-    // /// Indicates whether the name indicated by this node should be kept as a singleton array.
-    // pub keep_array: bool,
-
     // /// TODO: I'm not really sure what this indicates, yet, but it is used during evaluation.
     // pub tuple: bool,
 }
@@ -298,12 +297,12 @@ impl Node {
             kind,
             position,
             children,
+            keep_array: false,
             // group_by: None,
             // predicates: None,
             // stages: None,
             // focus: None,
             // index: None,
-            // keep_array: false,
             // tuple: false,
         }
     }
@@ -321,6 +320,7 @@ impl Clone for Node {
             kind: self.kind.clone(),
             position: self.position,
             children: cloned_children,
+            keep_array: self.keep_array,
         }
     }
 }

@@ -1,13 +1,14 @@
 #![feature(or_patterns)]
 #![feature(box_syntax)]
 
-use json::JsonValue;
+use json::{array, JsonValue};
 
 #[macro_use]
 mod error;
 mod ast;
 mod evaluator;
 mod frame;
+mod functions;
 mod parser;
 mod symbol;
 mod tokenizer;
@@ -37,7 +38,39 @@ impl<'a> JsonAta<'a> {
     }
 
     pub fn evaluate(&mut self, input: Option<&JsonValue>) -> JsonAtaResult<Option<JsonValue>> {
-        evaluator::evaluate(&self.ast, input, &mut self.root_frame)
+        // TODO: This is bad, too much cloning of stuff
+
+        let input = match input {
+            None => evaluator::Input::Undefined,
+            Some(input) => evaluator::Input::Value(input.clone()),
+        };
+
+        let evaluated = evaluator::evaluate(&self.ast, &input, &mut self.root_frame)?;
+
+        println!("{:#?}", evaluated);
+
+        match evaluated {
+            evaluator::Input::Undefined => Ok(None),
+            evaluator::Input::Value(value) => Ok(Some(value.clone())),
+            evaluator::Input::Sequence(seq, ..) => {
+                fn collapse(output: &mut JsonValue, input: &evaluator::Input) {
+                    match input {
+                        evaluator::Input::Undefined => (),
+                        evaluator::Input::Value(value) => {
+                            output.push(value.clone()).unwrap();
+                        }
+                        evaluator::Input::Sequence(seq, ..) => {
+                            seq.iter().for_each(|v| collapse(output, v))
+                        }
+                    }
+                }
+
+                let mut output = array![];
+                seq.iter().for_each(|v| collapse(&mut output, v));
+
+                Ok(Some(output))
+            }
+        }
     }
 
     pub fn assign(&mut self, name: &str, value: Binding) {

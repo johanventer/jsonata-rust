@@ -154,18 +154,28 @@ fn process_binary_node(node: &Node, op: &BinaryOp) -> JsonAtaResult<Node> {
                 result.children.push(rhs);
             }
 
-            // Path steps that are string literals should be changed to Name nodes, and should not
-            // be number's or other literal values
-            for step in &mut result.children {
+            let last_index = result.children.len() - 1;
+
+            for (step_index, step) in result.children.iter_mut().enumerate() {
                 match step.kind {
+                    // Steps cannot be literal values
                     N::Num(..) | N::Bool(..) | N::Null => {
                         return Err(box S0213 {
                             position: step.position,
                             value: step.kind.to_string(),
                         })
                     }
+                    // Steps that are string literals should be switched to Name
                     N::Str(ref v) => {
                         step.kind = N::Name(v.clone());
+                    }
+                    // If first or last step is an array constructor, it shouldn't be flattened
+                    N::Unary(ref op) => {
+                        if let UnaryOp::Array = op {
+                            if step_index == 0 || step_index == last_index {
+                                step.keep_array = true;
+                            }
+                        }
                     }
                     _ => (),
                 }
