@@ -1,6 +1,7 @@
 use json::{array, JsonValue};
-use std::ops::Index;
+use std::ops::{Index, RangeBounds};
 use std::slice::Iter;
+use std::vec::Drain;
 
 use crate::ast::*;
 use crate::error::*;
@@ -9,135 +10,233 @@ use crate::functions::*;
 use crate::JsonAtaResult;
 
 #[derive(Clone, Debug)]
-pub enum Input {
+pub enum Value {
     Undefined,
-    Value(JsonValue),
-    Sequence(Vec<Input>, bool),
+    Raw(JsonValue),
+    Array {
+        arr: Vec<Value>,
+        is_seq: bool,
+        keep_array: bool,
+    },
 }
 
-impl Input {
-    pub fn new_seq(keep_array: bool) -> Self {
-        Input::Sequence(Vec::new(), keep_array)
-    }
-
-    pub fn seq_from(value: &JsonValue) -> Self {
-        if value.is_array() {
-            Input::Sequence(
-                value.members().cloned().map(|v| Input::Value(v)).collect(),
-                false,
-            )
-        } else {
-            Input::Sequence(vec![Input::Value(value.clone())], false)
+impl Value {
+    pub fn new(raw: Option<&JsonValue>) -> Self {
+        match raw {
+            None => Self::Undefined,
+            Some(raw) => match raw {
+                JsonValue::Array(arr) => Self::Array {
+                    arr: arr.iter().map(|v| Self::new(Some(v))).collect(),
+                    is_seq: false,
+                    keep_array: false,
+                },
+                _ => Self::Raw(raw.clone()),
+            },
         }
     }
 
-    pub fn iter(&self) -> Iter<'_, Input> {
-        match self {
-            Input::Sequence(ref seq, ..) => seq.iter(),
-            _ => panic!("Only Input::Sequence can be iterated over"),
+    pub fn new_array() -> Self {
+        Self::Array {
+            arr: vec![],
+            is_seq: false,
+            keep_array: false,
         }
     }
 
-    pub fn push(&mut self, result: Input) {
-        match self {
-            Input::Sequence(ref mut seq, ..) => seq.push(result),
-            _ => panic!("Only Input::Sequence can be pushed to"),
+    pub fn new_seq() -> Self {
+        Self::Array {
+            arr: vec![],
+            is_seq: true,
+            keep_array: false,
         }
     }
 
-    pub fn len(&mut self) -> usize {
-        match self {
-            Input::Sequence(ref mut seq, ..) => seq.len(),
-            _ => panic!("Only Input::Sequence has a length"),
+    pub fn new_seq_from(value: &Value) -> Self {
+        Self::Array {
+            arr: vec![value.clone()],
+            is_seq: true,
+            keep_array: false,
         }
     }
 
-    pub fn as_value(&self) -> &JsonValue {
+    pub fn is_undef(&self) -> bool {
         match self {
-            Input::Value(ref value) => value,
-            _ => panic!("not an Input::Value"),
-        }
-    }
-
-    pub fn as_value_mut(&mut self) -> &mut JsonValue {
-        match self {
-            Input::Value(ref mut value) => value,
-            _ => panic!("not an Input::Value"),
-        }
-    }
-
-    pub fn as_seq_mut(&mut self) -> &mut Vec<Input> {
-        match self {
-            Input::Sequence(ref mut seq, ..) => seq,
-            _ => panic!("not an Input::Sequence"),
-        }
-    }
-
-    pub fn is_undefined(&self) -> bool {
-        match self {
-            Input::Undefined => true,
+            Value::Undefined => true,
             _ => false,
         }
     }
 
-    pub fn is_value(&self) -> bool {
+    pub fn is_raw(&self) -> bool {
         match self {
-            Input::Value(..) => true,
+            Value::Raw(..) => true,
             _ => false,
         }
     }
 
-    pub fn is_sequence(&self) -> bool {
+    pub fn is_array(&self) -> bool {
         match self {
-            Input::Sequence(..) => true,
+            Value::Array { .. } => true,
             _ => false,
         }
     }
-}
 
-impl From<Option<JsonValue>> for Input {
-    fn from(value: Option<JsonValue>) -> Self {
-        match value {
-            None => Input::Undefined,
-            Some(value) => Input::Value(value),
+    pub fn is_seq(&self) -> bool {
+        match self {
+            Value::Array { is_seq, .. } => *is_seq,
+            _ => false,
+        }
+    }
+
+    pub fn as_raw(&self) -> &JsonValue {
+        match self {
+            Value::Raw(value) => &value,
+            _ => panic!("unexpected Value type"),
+        }
+    }
+
+    pub fn as_array_mut(&mut self) -> &mut Vec<Value> {
+        match self {
+            Value::Array { arr, .. } => arr,
+            _ => panic!("unexpected Value type"),
+        }
+    }
+
+    pub fn keep_array(&self) -> bool {
+        match self {
+            Value::Array { keep_array, .. } => *keep_array,
+            _ => false,
+        }
+    }
+
+    pub fn set_keep_array(&mut self) {
+        match self {
+            Value::Array { keep_array, .. } => *keep_array = true,
+            _ => panic!("unexpected Value type"),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Value::Array { arr, .. } => arr.is_empty(),
+            _ => panic!("unexpected Value type"),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            Value::Array { arr, .. } => arr.len(),
+            _ => panic!("unexpected Value type"),
+        }
+    }
+
+    pub fn iter(&self) -> Iter<'_, Value> {
+        match self {
+            Value::Array { arr, .. } => arr.iter(),
+            _ => panic!("unexpected Value type"),
+        }
+    }
+
+    pub fn push(&mut self, value: Value) {
+        match self {
+            Value::Array { arr, .. } => arr.push(value),
+            _ => panic!("unexpected Value type"),
+        }
+    }
+
+    pub fn drain<R>(&mut self, range: R) -> Drain<'_, Value>
+    where
+        R: RangeBounds<usize>,
+    {
+        match self {
+            Value::Array { arr, .. } => arr.drain(range),
+            _ => panic!("unexpected Value type"),
+        }
+    }
+
+    pub fn take(&mut self) -> JsonValue {
+        match self {
+            Value::Raw(raw) => raw.take(),
+            _ => panic!("unexpected Value type"),
+        }
+    }
+
+    pub fn to_json(mut self) -> Option<JsonValue> {
+        match self {
+            Value::Undefined => None,
+            Value::Raw(raw) => Some(raw),
+            Value::Array { .. } => Some(JsonValue::Array(
+                self.drain(..)
+                    .filter(|v| !v.is_undef())
+                    .map(|v| v.to_json().unwrap())
+                    .collect(),
+            )),
         }
     }
 }
 
-impl Index<usize> for Input {
-    type Output = Input;
+impl Index<usize> for Value {
+    type Output = Value;
 
     fn index(&self, index: usize) -> &Self::Output {
         match self {
-            Input::Sequence(ref seq, ..) => &seq[index],
-            _ => panic!("Only Input::Sequence can be indexed"),
+            Value::Array { arr, .. } => &arr[index],
+            _ => panic!("unexpected Value type"),
         }
     }
 }
 
-pub fn evaluate(node: &Node, input: &Input, frame: &mut Frame) -> JsonAtaResult<Input> {
+impl From<Value> for Option<JsonValue> {
+    fn from(value: Value) -> Self {
+        value.to_json()
+    }
+}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        if self.is_undef() && other.is_undef() {
+            true
+        } else if self.is_raw() && other.is_raw() {
+            self.as_raw() == other.as_raw()
+        } else if self.is_array() && other.is_array() {
+            if self.len() != other.len() {
+                false
+            } else {
+                for i in 0..self.len() - 1 {
+                    if self[i] != other[i] {
+                        return false;
+                    }
+                }
+                true
+            }
+        } else {
+            false
+        }
+    }
+}
+
+pub fn evaluate(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
     let mut result = match &node.kind {
-        NodeKind::Null => Input::Value(JsonValue::Null),
-        NodeKind::Bool(ref value) => Input::Value(json::from(*value)),
-        NodeKind::Str(ref value) => Input::Value(json::from(value.clone())),
-        NodeKind::Num(ref value) => Input::Value(json::from(*value)),
+        NodeKind::Null => Value::Raw(JsonValue::Null),
+        NodeKind::Bool(value) => Value::Raw(json::from(*value)),
+        NodeKind::Str(value) => Value::Raw(json::from(value.clone())),
+        NodeKind::Num(value) => Value::Raw(json::from(*value)),
         NodeKind::Name(_) => evaluate_name(node, input)?,
         NodeKind::Unary(_) => evaluate_unary_op(node, input, frame)?,
         NodeKind::Binary(_) => evaluate_binary_op(node, input, frame)?,
         NodeKind::Block => evaluate_block(node, input, frame)?,
         NodeKind::Ternary => evaluate_ternary(node, input, frame)?,
-        NodeKind::Var(ref name) => evaluate_variable(name, frame)?,
+        NodeKind::Var(name) => evaluate_variable(name, frame)?,
         NodeKind::Path => evaluate_path(node, input, frame)?,
         _ => unimplemented!("TODO: node kind not yet supported: {}", node.kind),
     };
 
     // TODO: Predicate and grouping (jsonata.js:127)
 
-    if result.is_sequence() {
+    if result.is_seq() {
         if result.len() == 0 {
-            Ok(Input::Undefined)
+            Ok(Value::Undefined)
         } else if result.len() == 1 {
-            Ok(result.as_seq_mut().swap_remove(0))
+            Ok(result.as_array_mut().swap_remove(0))
         } else {
             Ok(result)
         }
@@ -146,154 +245,27 @@ pub fn evaluate(node: &Node, input: &Input, frame: &mut Frame) -> JsonAtaResult<
     }
 }
 
-fn evaluate_path(node: &Node, input: &Input, frame: &mut Frame) -> JsonAtaResult<Input> {
-    Ok(match input {
-        Input::Undefined => Input::Undefined,
-        Input::Sequence(..) => panic!("`input` was a Input::Sequence, which is unexpected"),
-        Input::Value(input) => {
-            let mut input_seq = Input::seq_from(input);
-
-            // TODO: Tuple, singleton array, group expressions (jsonata.js:164)
-
-            let mut result = Input::Undefined;
-
-            for (step_index, step) in node.children.iter().enumerate() {
-                result = evaluate_step(
-                    step,
-                    &input_seq,
-                    frame,
-                    step_index == node.children.len() - 1,
-                )?;
-
-                match result {
-                    Input::Undefined => break,
-                    Input::Value(..) => {
-                        result = Input::Sequence(vec![result], false);
-                        input_seq = result.clone();
-                    }
-                    Input::Sequence(ref seq, ..) => {
-                        if seq.is_empty() {
-                            break;
-                        } else {
-                            input_seq = result.clone();
-                        }
-                    }
-                }
-            }
-
-            result
-        }
-    })
-}
-
-fn evaluate_step(
-    node: &Node,
-    input_seq: &Input,
-    frame: &mut Frame,
-    last_step: bool,
-) -> JsonAtaResult<Input> {
-    // TODO: Sorting (jsonata.js:253)
-
-    let mut result_seq = Input::new_seq(false);
-
-    for input in input_seq.iter() {
-        let result = evaluate(node, input, frame)?;
-
-        // TODO: Filtering (jsonata.js:267)
-
-        match result {
-            Input::Undefined => (),
-            _ => result_seq.push(result),
-        }
-    }
-
-    return if last_step
-        && result_seq.len() == 1
-        && result_seq[0].is_value()
-        && result_seq[0].as_value().is_array()
-    {
-        Ok(Input::Value(result_seq[0].as_value().clone()))
-    } else {
-        // Flatten the result
-        let mut flat_result = Input::new_seq(false);
-        result_seq.iter().cloned().for_each(|v| match v {
-            Input::Undefined => (),
-            Input::Value(..) => {
-                flat_result.push(v);
-            }
-            Input::Sequence(ref seq, keep_array) => {
-                if keep_array {
-                    flat_result.push(v);
-                } else {
-                    seq.iter().cloned().for_each(|v| flat_result.push(v));
-                }
-            }
-        });
-        Ok(flat_result)
-    };
-}
-
-fn evaluate_variable(name: &str, frame: &Frame) -> JsonAtaResult<Input> {
-    // TODO: Something special happens when value == ""
-    if let Some(binding) = frame.lookup(name) {
-        // TODO: I don't like this clone
-        Ok(Input::Value(binding.as_var().clone()))
-    } else {
-        Ok(Input::Undefined)
-    }
-}
-
-fn evaluate_ternary(node: &Node, input: &Input, frame: &mut Frame) -> JsonAtaResult<Input> {
-    if let NodeKind::Ternary = &node.kind {
-        let condition = evaluate(&node.children[0], input, frame)?;
-        if boolean(&condition) {
-            evaluate(&node.children[1], input, frame)
-        } else if node.children.len() > 2 {
-            evaluate(&node.children[2], input, frame)
-        } else {
-            Ok(Input::Undefined)
-        }
-    } else {
-        panic!("`node` should be a NodeKind::Ternary")
-    }
-}
-
-fn evaluate_name(node: &Node, input: &Input) -> JsonAtaResult<Input> {
+fn evaluate_name(node: &Node, input: &Value) -> JsonAtaResult<Value> {
     if let NodeKind::Name(key) = &node.kind {
-        Ok(lookup(input.as_value(), key))
+        Ok(lookup(input, key))
     } else {
         unreachable!()
     }
 }
 
-fn evaluate_block(node: &Node, input: &Input, frame: &mut Frame) -> JsonAtaResult<Input> {
-    if let NodeKind::Block = &node.kind {
-        let mut frame = Frame::new_with_parent(frame);
-        let mut result: Input = Input::Undefined;
-
-        for child in &node.children {
-            result = evaluate(child, input, &mut frame)?;
-        }
-
-        Ok(result)
-    } else {
-        panic!("`node` should be a NodeKind::Block");
-    }
-}
-
-fn evaluate_unary_op(node: &Node, input: &Input, frame: &mut Frame) -> JsonAtaResult<Input> {
-    if let NodeKind::Unary(ref op) = &node.kind {
+fn evaluate_unary_op(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
+    if let NodeKind::Unary(op) = &node.kind {
         match op {
             UnaryOp::Minus => {
                 let result = evaluate(&node.children[0], input, frame)?;
                 match result {
-                    Input::Value(value) => {
-                        if let Some(value) = value.as_f64() {
-                            Ok(Input::Value((-value).into()))
+                    Value::Raw(raw) => {
+                        if let Some(raw) = raw.as_f64() {
+                            Ok(Value::Raw((-raw).into()))
                         } else {
                             Err(Box::new(D1002 {
                                 position: node.position,
-                                value: value.to_string(),
+                                value: raw.to_string(),
                             }))
                         }
                     }
@@ -301,17 +273,19 @@ fn evaluate_unary_op(node: &Node, input: &Input, frame: &mut Frame) -> JsonAtaRe
                 }
             }
             UnaryOp::Array => {
-                let mut result = Input::Value(array![]);
+                let mut result = Value::new_array();
                 for child in &node.children {
                     let value = evaluate(child, input, frame)?;
-                    if let NodeKind::Unary(UnaryOp::Array) = child.kind {
-                        result
-                            .as_value_mut()
-                            .push(value.as_value().clone())
-                            .unwrap();
-                    } else {
-                        result = append(result, value);
+                    if !value.is_undef() {
+                        if let NodeKind::Unary(UnaryOp::Array) = child.kind {
+                            result.push(value)
+                        } else {
+                            result = append(result, value);
+                        }
                     }
+                }
+                if node.keep_array {
+                    result.set_keep_array();
                 }
                 Ok(result)
             }
@@ -322,9 +296,9 @@ fn evaluate_unary_op(node: &Node, input: &Input, frame: &mut Frame) -> JsonAtaRe
     }
 }
 
-fn evaluate_binary_op(node: &Node, input: &Input, frame: &mut Frame) -> JsonAtaResult<Input> {
+fn evaluate_binary_op(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
     use BinaryOp::*;
-    if let NodeKind::Binary(ref op) = &node.kind {
+    if let NodeKind::Binary(op) = &node.kind {
         match op {
             Add | Subtract | Multiply | Divide | Modulus => {
                 evaluate_numeric_expression(node, input, frame, op)
@@ -344,25 +318,29 @@ fn evaluate_binary_op(node: &Node, input: &Input, frame: &mut Frame) -> JsonAtaR
     }
 }
 
-fn evaluate_bind_expression(node: &Node, input: &Input, frame: &mut Frame) -> JsonAtaResult<Input> {
+fn evaluate_bind_expression(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
     let name = &node.children[0];
     let value = evaluate(&node.children[1], input, frame)?;
-    if let NodeKind::Var(name) = &name.kind {
-        frame.bind(name, Binding::Var(value.as_value().clone()));
+
+    if !value.is_undef() {
+        if let NodeKind::Var(name) = &name.kind {
+            frame.bind(name, Binding::Var(value.to_json().unwrap()));
+        }
     }
-    Ok(Input::Undefined)
+
+    Ok(Value::Undefined)
 }
 
 fn evaluate_numeric_expression(
     node: &Node,
-    input: &Input,
+    input: &Value,
     frame: &mut Frame,
     op: &BinaryOp,
-) -> JsonAtaResult<Input> {
+) -> JsonAtaResult<Value> {
     let lhs = evaluate(&node.children[0], input, frame)?;
     let rhs = evaluate(&node.children[1], input, frame)?;
 
-    let lhs: f64 = match lhs.as_value() {
+    let lhs: f64 = match lhs.as_raw() {
         JsonValue::Number(value) => value.clone().into(),
         _ => {
             return Err(Box::new(T2001 {
@@ -372,7 +350,7 @@ fn evaluate_numeric_expression(
         }
     };
 
-    let rhs: f64 = match rhs.as_value() {
+    let rhs: f64 = match rhs.as_raw() {
         JsonValue::Number(value) => value.clone().into(),
         _ => {
             return Err(Box::new(T2002 {
@@ -391,26 +369,26 @@ fn evaluate_numeric_expression(
         _ => unreachable!(),
     };
 
-    Ok(Input::Value(result.into()))
+    Ok(Value::Raw(result.into()))
 }
 
 fn evaluate_comparison_expression(
     node: &Node,
-    input: &Input,
+    input: &Value,
     frame: &mut Frame,
     op: &BinaryOp,
-) -> JsonAtaResult<Input> {
+) -> JsonAtaResult<Value> {
     let lhs = evaluate(&node.children[0], input, frame)?;
     let rhs = evaluate(&node.children[1], input, frame)?;
 
     let lhs = match lhs {
-        Input::Undefined => return Ok(Input::Undefined),
-        _ => lhs.as_value(),
+        Value::Undefined => return Ok(Value::Undefined),
+        _ => lhs.as_raw(),
     };
 
     let rhs = match rhs {
-        Input::Undefined => return Ok(Input::Undefined),
-        _ => rhs.as_value(),
+        Value::Undefined => return Ok(Value::Undefined),
+        _ => rhs.as_raw(),
     };
 
     if !((lhs.is_number() || lhs.is_string()) && (rhs.is_number() || rhs.is_string())) {
@@ -424,7 +402,7 @@ fn evaluate_comparison_expression(
         let lhs = lhs.as_f64().unwrap();
         let rhs = rhs.as_f64().unwrap();
 
-        return Ok(Input::Value(json::from(match op {
+        return Ok(Value::Raw(json::from(match op {
             BinaryOp::LessThan => lhs < rhs,
             BinaryOp::LessThanEqual => lhs <= rhs,
             BinaryOp::GreaterThan => lhs > rhs,
@@ -437,7 +415,7 @@ fn evaluate_comparison_expression(
         let lhs = lhs.as_str().unwrap();
         let rhs = rhs.as_str().unwrap();
 
-        return Ok(Input::Value(json::from(match op {
+        return Ok(Value::Raw(json::from(match op {
             BinaryOp::LessThan => lhs < rhs,
             BinaryOp::LessThanEqual => lhs <= rhs,
             BinaryOp::GreaterThan => lhs > rhs,
@@ -456,10 +434,10 @@ fn evaluate_comparison_expression(
 
 fn evaluate_boolean_expression(
     node: &Node,
-    input: &Input,
+    input: &Value,
     frame: &mut Frame,
     op: &BinaryOp,
-) -> JsonAtaResult<Input> {
+) -> JsonAtaResult<Value> {
     let lhs = evaluate(&node.children[0], input, frame)?;
     let rhs = evaluate(&node.children[1], input, frame)?;
 
@@ -472,74 +450,163 @@ fn evaluate_boolean_expression(
         _ => unreachable!(),
     };
 
-    Ok(Input::Value(result.into()))
+    Ok(Value::Raw(result.into()))
 }
 
 fn evaluate_includes_expression(
     node: &Node,
-    input: &Input,
+    input: &Value,
     frame: &mut Frame,
-) -> JsonAtaResult<Input> {
+) -> JsonAtaResult<Value> {
     let lhs = evaluate(&node.children[0], input, frame)?;
     let rhs = evaluate(&node.children[1], input, frame)?;
 
-    if lhs.is_value() && rhs.is_value() {
-        if !rhs.as_value().is_array() {
-            return Ok(Input::Value((lhs.as_value() == rhs.as_value()).into()));
-        }
+    if !rhs.is_array() {
+        return Ok(Value::Raw((lhs.as_raw() == rhs.as_raw()).into()));
+    }
 
-        for item in rhs.as_value().members() {
-            if lhs.as_value() == item {
-                return Ok(Input::Value(true.into()));
-            }
+    for item in rhs.iter() {
+        if item.is_raw() && lhs.as_raw() == item.as_raw() {
+            return Ok(Value::Raw(true.into()));
         }
     }
 
-    return Ok(Input::Value(false.into()));
+    return Ok(Value::Raw(false.into()));
 }
 
 fn evaluate_equality_expression(
     node: &Node,
-    input: &Input,
+    input: &Value,
     frame: &mut Frame,
     op: &BinaryOp,
-) -> JsonAtaResult<Input> {
+) -> JsonAtaResult<Value> {
     let lhs = evaluate(&node.children[0], input, frame)?;
     let rhs = evaluate(&node.children[1], input, frame)?;
 
-    if lhs.is_undefined() && rhs.is_undefined() {
-        return Ok(Input::Value(true.into()));
-    }
-
     let result = match op {
-        BinaryOp::Equal => lhs.as_value() == rhs.as_value(),
-        BinaryOp::NotEqual => lhs.as_value() != rhs.as_value(),
+        BinaryOp::Equal => lhs == rhs,
+        BinaryOp::NotEqual => lhs != rhs,
         _ => unreachable!(),
     };
 
-    Ok(Input::Value(result.into()))
+    Ok(Value::Raw(result.into()))
 }
 
-fn evaluate_string_concat(node: &Node, input: &Input, frame: &mut Frame) -> JsonAtaResult<Input> {
+fn evaluate_string_concat(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
     let lhs = evaluate(&node.children[0], input, frame)?;
     let rhs = evaluate(&node.children[1], input, frame)?;
 
-    // TODO: This is broken, it needs the stringification rules from JSONata for numbers and such
+    let mut lstr = string(lhs).unwrap();
+    let rstr = string(rhs).unwrap();
 
-    let lstr = if lhs.is_value() {
-        lhs.as_value().as_str().unwrap_or("")
+    lstr.push_str(&rstr);
+
+    Ok(Value::Raw(lstr.into()))
+}
+
+fn evaluate_path(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
+    let mut input = if input.is_array() {
+        input.clone()
     } else {
-        ""
+        Value::new_seq_from(input)
     };
 
-    let rstr = if rhs.is_value() {
-        rhs.as_value().as_str().unwrap_or("")
+    // TODO: Tuple, singleton array, group expressions (jsonata.js:164)
+
+    let mut result = Value::Undefined;
+
+    for (step_index, step) in node.children.iter().enumerate() {
+        result = evaluate_step(step, &input, frame, step_index == node.children.len() - 1)?;
+
+        match result {
+            Value::Undefined => break,
+            Value::Raw(..) => panic!("unexpected Value::Raw"),
+            Value::Array { .. } => {
+                if result.is_empty() {
+                    break;
+                }
+
+                input = result.clone();
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+fn evaluate_step(
+    node: &Node,
+    input: &Value,
+    frame: &mut Frame,
+    last_step: bool,
+) -> JsonAtaResult<Value> {
+    // TODO: Sorting (jsonata.js:253)
+
+    let mut result = Value::new_seq();
+
+    for input in input.iter() {
+        let res = evaluate(node, input, frame)?;
+
+        // TODO: Filtering (jsonata.js:267)
+
+        if !res.is_undef() {
+            result.push(res);
+        }
+    }
+
+    //println!("evaluate_step RESULT: {:#?}", result);
+
+    if last_step && result.len() == 1 && result[0].is_array() && !result[0].is_seq() {
+        Ok(result[0].clone())
     } else {
-        ""
-    };
+        // Flatten the result
+        let mut flattened = Value::new_seq();
+        result.iter().cloned().for_each(|v| {
+            if !v.is_array() || v.keep_array() {
+                flattened.push(v.clone())
+            } else {
+                v.iter().cloned().for_each(|v| flattened.push(v.clone()))
+            }
+        });
+        Ok(flattened)
+    }
+}
 
-    let mut result = lstr.to_owned();
-    result.push_str(&rstr);
+fn evaluate_block(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
+    if let NodeKind::Block = &node.kind {
+        let mut frame = Frame::new_with_parent(frame);
+        let mut result = Value::Undefined;
 
-    Ok(Input::Value(result.into()))
+        for child in &node.children {
+            result = evaluate(child, input, &mut frame)?;
+        }
+
+        Ok(result)
+    } else {
+        panic!("`node` should be a NodeKind::Block");
+    }
+}
+
+fn evaluate_ternary(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
+    if let NodeKind::Ternary = &node.kind {
+        let condition = evaluate(&node.children[0], input, frame)?;
+        if boolean(&condition) {
+            evaluate(&node.children[1], input, frame)
+        } else if node.children.len() > 2 {
+            evaluate(&node.children[2], input, frame)
+        } else {
+            Ok(Value::Undefined)
+        }
+    } else {
+        panic!("`node` should be a NodeKind::Ternary")
+    }
+}
+
+fn evaluate_variable(name: &str, frame: &Frame) -> JsonAtaResult<Value> {
+    // TODO: Handle empty var name for $ context (jsonata.js:1143)
+    if let Some(binding) = frame.lookup(name) {
+        Ok(Value::Raw(binding.as_var().clone()))
+    } else {
+        Ok(Value::Undefined)
+    }
 }

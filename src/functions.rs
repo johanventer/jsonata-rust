@@ -1,90 +1,96 @@
-use json::{array, JsonValue};
+use json::{stringify, JsonValue};
 
-use crate::evaluator::Input;
+use crate::evaluator::Value;
 
-pub fn lookup(input: &JsonValue, key: &str) -> Input {
-    if input.is_array() {
-        let mut values: Vec<Input> = Vec::new();
-        values.reserve(input.len());
+pub fn lookup(input: &Value, key: &str) -> Value {
+    let result = if input.is_array() {
+        let mut result = Value::new_seq();
 
-        for value in input.members() {
+        for value in input.iter() {
             let mut res = lookup(value, key);
-            match &mut res {
-                Input::Undefined => (),
-                Input::Value(ref value) => {
-                    if value.is_array() {
-                        value
-                            .members()
-                            .cloned()
-                            .for_each(|v| values.push(Input::Value(v)));
-                    } else {
-                        values.push(res);
-                    }
+
+            if !res.is_undef() {
+                if res.is_array() {
+                    res.drain(..).for_each(|v| result.push(v));
+                } else {
+                    result.push(res);
                 }
-                Input::Sequence(ref mut seq, ..) => {
-                    values.append(seq);
-                }
-            };
+            }
         }
 
-        Input::Sequence(values, false)
-    } else if input.is_object() && input.has_key(key) {
-        Input::Value(input[key].clone())
+        result
+    } else if input.is_raw() && input.as_raw().has_key(key) {
+        Value::new(Some(&input.as_raw()[key]))
     } else {
-        Input::Undefined
-    }
+        Value::Undefined
+    };
+
+    result
 }
 
-pub fn boolean(arg: &Input) -> bool {
+pub fn boolean(arg: &Value) -> bool {
     fn cast(value: &JsonValue) -> bool {
         match value {
             JsonValue::Null => false,
-            JsonValue::Short(ref value) => !value.is_empty(),
-            JsonValue::String(ref value) => !value.is_empty(),
-            JsonValue::Number(ref value) => !value.is_zero(),
-            JsonValue::Boolean(ref value) => *value,
-            JsonValue::Object(ref value) => !value.is_empty(),
-            JsonValue::Array(ref value) => match value.len() {
-                0 => false,
-                1 => cast(&value[0]),
-                _ => {
-                    let trues: Vec<_> = value.iter().filter(|x| cast(&x)).collect();
-                    !trues.is_empty()
-                }
-            },
+            JsonValue::Short(value) => !value.is_empty(),
+            JsonValue::String(value) => !value.is_empty(),
+            JsonValue::Number(value) => !value.is_zero(),
+            JsonValue::Boolean(value) => *value,
+            JsonValue::Object(value) => !value.is_empty(),
+            JsonValue::Array(..) => panic!("unexpected JsonValue::Array"),
         }
     }
 
     match arg {
-        Input::Undefined => false,
-        Input::Value(ref value) => cast(value),
-        Input::Sequence(ref seq, ..) => match seq.len() {
+        Value::Undefined => false,
+        Value::Raw(value) => cast(value),
+        Value::Array { arr, .. } => match arr.len() {
             0 => false,
-            1 => boolean(&seq[0]),
+            1 => boolean(&arr[0]),
             _ => {
-                let trues: Vec<_> = seq.iter().filter(|x| boolean(&x)).collect();
+                let trues: Vec<_> = arr.iter().filter(|x| boolean(&x)).collect();
                 !trues.is_empty()
             }
         },
     }
 }
 
-pub fn append(arg1: Input, arg2: Input) -> Input {
-    if let Input::Undefined = arg1 {
+pub fn append(mut arg1: Value, mut arg2: Value) -> Value {
+    if arg1.is_undef() {
         return arg2;
     }
 
-    if let Input::Undefined = arg2 {
+    if arg2.is_undef() {
         return arg1;
     }
 
-    let mut arg1 = arg1.as_value().clone();
-    let arg2 = arg2.as_value().clone();
-
     if !arg1.is_array() {
-        Input::Value(JsonValue::Array(vec![arg1, arg2]))
+        arg1 = Value::new_seq_from(&arg1);
+    }
+
+    if !arg2.is_array() {
+        arg1.push(arg2);
     } else {
-        arg1.push(arg2).unwrap();
-        Input::Value(arg1)
+        arg2.drain(..).for_each(|v| arg1.push(v));
+    }
+
+    arg1
+}
+
+pub fn string(mut arg: Value) -> Option<String> {
+    // TODO: Prettify output (functions.js:108)
+
+    if arg.is_undef() {
+        None
+    } else if arg.is_raw() {
+        if arg.as_raw().is_string() {
+            Some(arg.as_raw().as_str().unwrap().to_owned())
+        } else {
+            Some(stringify(arg.take()))
+        }
+    } else if arg.is_array() {
+        Some(stringify(arg.to_json()))
+    } else {
+        Some("".to_owned())
     }
 }
