@@ -158,12 +158,18 @@ fn evaluate_path(node: &Node, input: &Input, frame: &mut Frame) -> JsonAtaResult
             let mut result = Input::Undefined;
 
             for (step_index, step) in node.children.iter().enumerate() {
-                result = evaluate_step(step, &input_seq, frame, step_index == input.len() - 1)?;
+                result = evaluate_step(
+                    step,
+                    &input_seq,
+                    frame,
+                    step_index == node.children.len() - 1,
+                )?;
 
                 match result {
                     Input::Undefined => break,
                     Input::Value(..) => {
-                        unreachable!("`evaluate_step` should always return a sequence")
+                        result = Input::Sequence(vec![result], false);
+                        input_seq = result.clone();
                     }
                     Input::Sequence(ref seq, ..) => {
                         if seq.is_empty() {
@@ -242,8 +248,10 @@ fn evaluate_ternary(node: &Node, input: &Input, frame: &mut Frame) -> JsonAtaRes
         let condition = evaluate(&node.children[0], input, frame)?;
         if boolean(&condition) {
             evaluate(&node.children[1], input, frame)
-        } else {
+        } else if node.children.len() > 2 {
             evaluate(&node.children[2], input, frame)
+        } else {
+            Ok(Input::Undefined)
         }
     } else {
         panic!("`node` should be a NodeKind::Ternary")
@@ -260,11 +268,11 @@ fn evaluate_name(node: &Node, input: &Input) -> JsonAtaResult<Input> {
 
 fn evaluate_block(node: &Node, input: &Input, frame: &mut Frame) -> JsonAtaResult<Input> {
     if let NodeKind::Block = &node.kind {
-        // TODO: block frame
+        let mut frame = Frame::new_with_parent(frame);
         let mut result: Input = Input::Undefined;
 
         for child in &node.children {
-            result = evaluate(child, input, frame)?;
+            result = evaluate(child, input, &mut frame)?;
         }
 
         Ok(result)
@@ -515,6 +523,8 @@ fn evaluate_equality_expression(
 fn evaluate_string_concat(node: &Node, input: &Input, frame: &mut Frame) -> JsonAtaResult<Input> {
     let lhs = evaluate(&node.children[0], input, frame)?;
     let rhs = evaluate(&node.children[1], input, frame)?;
+
+    // TODO: This is broken, it needs the stringification rules from JSONata for numbers and such
 
     let lstr = if lhs.is_value() {
         lhs.as_value().as_str().unwrap_or("")
