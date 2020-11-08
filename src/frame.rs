@@ -71,3 +71,66 @@ impl<'a> Frame<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bind_and_lookup() {
+        let mut frame = Frame::new();
+        frame.bind("bool", Binding::Var(json::from(true)));
+        frame.bind("number", Binding::Var(json::from(42)));
+        frame.bind("string", Binding::Var(json::from("hello")));
+        frame.bind("array", Binding::Var(json::from(vec![1, 2, 3])));
+        frame.bind("none", Binding::Var(json::Null));
+
+        assert!(frame.lookup("not_there").is_none());
+
+        assert!(frame.lookup("bool").unwrap().as_var().is_boolean());
+        assert!(frame.lookup("number").unwrap().as_var().is_number());
+        assert!(frame.lookup("string").unwrap().as_var().is_string());
+        assert!(frame.lookup("array").unwrap().as_var().is_array());
+        assert!(frame.lookup("none").unwrap().as_var().is_empty());
+
+        assert_eq!(
+            frame.lookup("bool").unwrap().as_var().as_bool().unwrap(),
+            true
+        );
+        assert_eq!(
+            frame
+                .lookup("number")
+                .unwrap()
+                .as_var()
+                .as_number()
+                .unwrap(),
+            42
+        );
+        assert_eq!(
+            frame.lookup("string").unwrap().as_var().as_str().unwrap(),
+            "hello"
+        );
+
+        let array = frame.lookup("array");
+        assert_eq!(array.unwrap().as_var().len(), 3);
+    }
+
+    #[test]
+    fn lookup_through_parent() {
+        let mut parent = Frame::new();
+        parent.bind("value", Binding::Var(json::from(42)));
+        let child = Frame::new_with_parent(&parent);
+        assert_eq!(
+            child.lookup("value").unwrap().as_var().as_number().unwrap(),
+            42
+        );
+    }
+
+    // #[test]
+    // fn fn_binding() {
+    //     let mut frame = Frame::new();
+    //     frame.bind("sum", Binding::Function(&sum, ""));
+    //     let sum = frame.lookup("sum").unwrap().as_func();
+    //     assert_eq!(sum(vec![]).as_str().unwrap(), "todo");
+    // }
+}

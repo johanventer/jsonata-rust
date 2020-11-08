@@ -554,8 +554,6 @@ fn evaluate_step(
         }
     }
 
-    //println!("evaluate_step RESULT: {:#?}", result);
-
     if last_step && result.len() == 1 && result[0].is_array() && !result[0].is_seq() {
         Ok(result[0].clone())
     } else {
