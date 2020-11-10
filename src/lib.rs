@@ -1,7 +1,7 @@
 #![feature(or_patterns)]
 #![feature(box_syntax)]
 
-use json::{array, JsonValue};
+use json::JsonValue;
 
 #[macro_use]
 mod error;

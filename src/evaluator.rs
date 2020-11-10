@@ -1,4 +1,4 @@
-use json::{array, JsonValue};
+use json::JsonValue;
 use std::ops::{Index, RangeBounds};
 use std::slice::Iter;
 use std::vec::Drain;
@@ -39,6 +39,16 @@ impl Value {
         Self::Array {
             arr: vec![],
             is_seq: false,
+            keep_array: false,
+        }
+    }
+
+    pub fn new_seq_with_capacity(capacity: usize) -> Self {
+        let mut arr: Vec<Value> = Vec::new();
+        arr.reserve(capacity);
+        Self::Array {
+            arr,
+            is_seq: true,
             keep_array: false,
         }
     }
@@ -172,6 +182,57 @@ impl Value {
             )),
         }
     }
+
+    /// Returns the raw JSON value as a usize if it can be converted, and checks to ensure that it
+    /// is an integer (i.e. it returns None if there is any fractional part).
+    pub fn as_usize(&self) -> Option<usize> {
+        match self {
+            Value::Raw(raw) => match raw.as_f64() {
+                Some(num) => {
+                    if num.trunc() == num {
+                        Some(num as usize)
+                    } else {
+                        None
+                    }
+                }
+                None => None,
+            },
+            _ => None,
+        }
+    }
+
+    pub fn as_f64(&self) -> Option<f64> {
+        match self {
+            Value::Raw(raw) => match raw.as_f64() {
+                Some(num) => {
+                    if num.is_finite() {
+                        Some(num)
+                    } else {
+                        None
+                    }
+                }
+                None => None,
+            },
+            _ => None,
+        }
+    }
+
+    pub fn as_f64_vec(&self) -> Option<Vec<f64>> {
+        match self {
+            Value::Array { arr, .. } => {
+                let mut nums = vec![];
+                for value in arr {
+                    if let Some(num) = value.as_f64() {
+                        nums.push(num);
+                    } else {
+                        return None;
+                    }
+                }
+                return Some(nums);
+            }
+            _ => None,
+        }
+    }
 }
 
 impl Index<usize> for Value {
@@ -230,7 +291,13 @@ pub fn evaluate(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<
         _ => unimplemented!("TODO: node kind not yet supported: {}", node.kind),
     };
 
-    // TODO: Predicate and grouping (jsonata.js:127)
+    if let Some(ref predicates) = node.predicates {
+        for predicate in predicates {
+            result = evaluate_filter(predicate, &result, frame)?;
+        }
+    }
+
+    // TODO: grouping (jsonata.js:127)
 
     if result.is_seq() {
         if result.len() == 0 {
@@ -272,12 +339,12 @@ fn evaluate_unary_op(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaRe
                     _ => panic!("`result` should've been an Input::Value"),
                 }
             }
-            UnaryOp::Array => {
+            UnaryOp::ArrayConstructor => {
                 let mut result = Value::new_array();
                 for child in &node.children {
                     let value = evaluate(child, input, frame)?;
                     if !value.is_undef() {
-                        if let NodeKind::Unary(UnaryOp::Array) = child.kind {
+                        if let NodeKind::Unary(UnaryOp::ArrayConstructor) = child.kind {
                             result.push(value)
                         } else {
                             result = append(result, value);
@@ -289,11 +356,19 @@ fn evaluate_unary_op(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaRe
                 }
                 Ok(result)
             }
-            UnaryOp::Object => unimplemented!("TODO: object constructors not yet supported"),
+            UnaryOp::ObjectConstructor => evaluate_group_expression(node, input, frame),
         }
     } else {
         panic!("`node` should be a NodeKind::Unary");
     }
+}
+
+fn evaluate_group_expression(
+    _node: &Node,
+    _input: &Value,
+    _frame: &mut Frame,
+) -> JsonAtaResult<Value> {
+    unimplemented!("Object constructors not yet supported");
 }
 
 fn evaluate_binary_op(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
@@ -311,7 +386,12 @@ fn evaluate_binary_op(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaR
             Bind => evaluate_bind_expression(node, input, frame),
             Or | And => evaluate_boolean_expression(node, input, frame, op),
             In => evaluate_includes_expression(node, input, frame),
-            _ => unimplemented!("TODO: Binary op {:?} not yet supported", op),
+            Range => evaluate_range_expression(node, input, frame),
+            ContextBind => unimplemented!("TODO: Context bind not yet supported"),
+            PositionalBind => unimplemented!("TODO: Positional bind not yet supported"),
+            ArrayPredicate => unimplemented!("TODO: Array predicate not yet supported"),
+            Apply => unimplemented!("TODO: Apply not yet supported"),
+            _ => unreachable!("Unexpected binary operator {:#?}", op),
         }
     } else {
         panic!("`node` should be a NodeKind::Binary")
@@ -504,6 +584,56 @@ fn evaluate_string_concat(node: &Node, input: &Value, frame: &mut Frame) -> Json
     Ok(Value::Raw(lstr.into()))
 }
 
+fn evaluate_range_expression(
+    node: &Node,
+    input: &Value,
+    frame: &mut Frame,
+) -> JsonAtaResult<Value> {
+    let lhs = evaluate(&node.children[0], input, frame)?;
+    let rhs = evaluate(&node.children[1], input, frame)?;
+
+    if lhs.is_undef() || rhs.is_undef() {
+        return Ok(Value::Undefined);
+    }
+
+    let lhs = match lhs.as_usize() {
+        Some(num) => num,
+        None => {
+            return Err(box T2003 {
+                position: node.position,
+            })
+        }
+    };
+
+    let rhs = match rhs.as_usize() {
+        Some(num) => num,
+        None => {
+            return Err(box T2004 {
+                position: node.position,
+            })
+        }
+    };
+
+    if lhs > rhs {
+        return Ok(Value::Undefined);
+    }
+
+    let size = rhs - lhs + 1;
+    if size > 10_000_000_000 {
+        return Err(box D2014 {
+            position: node.position,
+            value: size.to_string(),
+        });
+    }
+
+    let mut result = Value::new_seq_with_capacity(size);
+    for i in lhs..rhs + 1 {
+        result.push(Value::Raw(i.into()))
+    }
+
+    Ok(result)
+}
+
 fn evaluate_path(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
     let mut input = if input.is_array() {
         input.clone()
@@ -545,9 +675,13 @@ fn evaluate_step(
     let mut result = Value::new_seq();
 
     for input in input.iter() {
-        let res = evaluate(node, input, frame)?;
+        let mut res = evaluate(node, input, frame)?;
 
-        // TODO: Filtering (jsonata.js:267)
+        if let Some(ref stages) = node.stages {
+            for stage in stages {
+                res = evaluate_filter(stage, &res, frame)?;
+            }
+        }
 
         if !res.is_undef() {
             result.push(res);
@@ -607,4 +741,59 @@ fn evaluate_variable(name: &str, frame: &Frame) -> JsonAtaResult<Value> {
     } else {
         Ok(Value::Undefined)
     }
+}
+
+fn evaluate_filter(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
+    let mut results = Value::new_seq();
+
+    let input = if input.is_array() {
+        input.clone()
+    } else {
+        Value::new_seq_from(input)
+    };
+
+    if let NodeKind::Num(num) = node.kind {
+        let index = if num < 0. {
+            (num.floor() as isize).wrapping_add(input.len() as isize) as usize
+        } else {
+            num.floor() as usize
+        };
+        if index < input.len() {
+            let item = &input[index as usize];
+            if item.is_array() {
+                results = item.clone();
+            } else {
+                results.push(item.clone());
+            }
+        }
+    } else {
+        for (index, item) in input.iter().enumerate() {
+            let res = evaluate(node, item, frame)?;
+
+            let indices = if let Some(num) = res.as_f64() {
+                vec![num]
+            } else if let Some(indices) = res.as_f64_vec() {
+                indices
+            } else {
+                vec![]
+            };
+
+            if !indices.is_empty() {
+                indices.iter().for_each(|num| {
+                    let ii = if *num < 0. {
+                        (num.floor() as isize).wrapping_add(input.len() as isize) as usize
+                    } else {
+                        num.floor() as usize
+                    };
+                    if ii == index {
+                        results.push(item.clone());
+                    }
+                });
+            } else if boolean(&res) {
+                results.push(item.clone());
+            }
+        }
+    }
+
+    Ok(results)
 }

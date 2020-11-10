@@ -20,14 +20,15 @@ pub trait Symbol {
 }
 
 /// Parses an object definition.
-fn object_parse(parser: &mut Parser, vec: &mut Vec<Node>) -> JsonAtaResult<()> {
+fn parse_object(parser: &mut Parser) -> JsonAtaResult<Vec<Node>> {
+    let mut object: Vec<Node> = vec![];
     if parser.token().kind != TokenKind::RightBrace {
         loop {
             let name = parser.expression(0)?;
             parser.expect(TokenKind::Colon, false)?;
             let value = parser.expression(0)?;
-            vec.push(name);
-            vec.push(value);
+            object.push(name);
+            object.push(value);
             if parser.token().kind != TokenKind::Comma {
                 break;
             }
@@ -35,7 +36,7 @@ fn object_parse(parser: &mut Parser, vec: &mut Vec<Node>) -> JsonAtaResult<()> {
         }
     }
     parser.expect(TokenKind::RightBrace, true)?;
-    Ok(())
+    Ok(object)
 }
 
 /// This is the majority of the parsing logic, constructed as an implementation of `Symbol` for all
@@ -126,7 +127,7 @@ impl Symbol for Token {
                 parser.expect(T::RightBracket, true)?;
 
                 Ok(Node::new_with_children(
-                    N::Unary(UnaryOp::Array),
+                    N::Unary(UnaryOp::ArrayConstructor),
                     p,
                     expressions,
                 ))
@@ -134,10 +135,9 @@ impl Symbol for Token {
 
             // Object constructor
             T::LeftBrace => {
-                let mut children = Vec::new();
-                object_parse(parser, &mut children)?;
+                let children = parse_object(parser)?;
                 Ok(Node::new_with_children(
-                    N::Unary(UnaryOp::Object),
+                    N::Unary(UnaryOp::ObjectConstructor),
                     p,
                     children,
                 ))
@@ -188,7 +188,7 @@ impl Symbol for Token {
         }
 
         match &self.kind {
-            T::Period => binary!(Path),
+            T::Period => binary!(PathOp),
             T::Plus => binary!(Add),
             T::Minus => binary!(Subtract),
             T::Wildcard => binary!(Multiply),
@@ -376,9 +376,10 @@ impl Symbol for Token {
             // Object group by
             T::LeftBrace => {
                 let mut children = vec![left];
-                object_parse(parser, &mut children)?;
+                let mut object = parse_object(parser)?;
+                children.append(&mut object);
                 Ok(Node::new_with_children(
-                    N::Unary(UnaryOp::Object),
+                    N::Binary(BinaryOp::GroupBy),
                     p,
                     children,
                 ))
@@ -397,7 +398,7 @@ impl Symbol for Token {
                         step = &mut step.children[0]
                     }
 
-                    //step.keep_array = true;
+                    step.keep_array = true;
                     parser.expect(T::RightBracket, false)?;
                     Ok(left)
                 } else {

@@ -100,8 +100,6 @@ impl Parser {
             left = last.led(self, left)?;
         }
 
-        //println!("{:#?}", left);
-
         Ok(left)
     }
 }
@@ -116,78 +114,52 @@ pub fn parse(source: &str) -> JsonAtaResult<Node> {
 type N = NodeKind;
 
 fn process_ast(node: &Node) -> JsonAtaResult<Node> {
-    let kind = node.kind.clone();
-
-    match kind {
-        N::Binary(ref op) => process_binary_node(node, op),
+    let mut result = match &node.kind {
         N::Name(..) => Ok(Node::new_with_child(N::Path, node.position, node.clone())),
+        N::Unary(ref op) => process_unary_node(node, op),
+        N::Binary(ref op) => process_binary_node(node, op),
+        N::Block => process_block_node(node),
         _ => Ok(node.clone()),
+    }?;
+
+    if node.keep_array {
+        result.keep_array = true;
     }
+
+    Ok(result)
+}
+
+fn process_unary_node(node: &Node, op: &UnaryOp) -> JsonAtaResult<Node> {
+    Ok(match op {
+        UnaryOp::Minus => process_unary_minus(node)?,
+        UnaryOp::ArrayConstructor => process_array_constructor(node)?,
+        UnaryOp::ObjectConstructor => process_object_constructor(node)?,
+    })
+}
+
+fn process_unary_minus(node: &Node) -> JsonAtaResult<Node> {
+    let mut result = process_ast(&node.children[0])?;
+    if let NodeKind::Num(ref mut num) = result.kind {
+        *num = -*num;
+    }
+    Ok(result)
+}
+
+fn process_array_constructor(node: &Node) -> JsonAtaResult<Node> {
+    // TODO
+    Ok(node.clone())
+}
+
+fn process_object_constructor(node: &Node) -> JsonAtaResult<Node> {
+    // TODO
+    Ok(node.clone())
 }
 
 fn process_binary_node(node: &Node, op: &BinaryOp) -> JsonAtaResult<Node> {
-    type N = NodeKind;
-
     match op {
-        BinaryOp::Path => {
-            let lhs = process_ast(&node.children[0])?;
-            let mut rhs = process_ast(&node.children[1])?;
-
-            let mut result = {
-                // If lhs is a Path, start with that, otherwise create a new one
-                if let N::Path = lhs.kind {
-                    lhs
-                } else {
-                    Node::new_with_child(N::Path, lhs.position, lhs)
-                }
-            };
-
-            // TODO: If the lhs is a Parent (parser.js:997)
-
-            // TODO: If the rhs is a Function (parser.js:1001)
-
-            // If rhs is a Path, merge the steps in
-            if let N::Path = rhs.kind {
-                result.children.append(&mut rhs.children);
-            } else {
-                // TODO: Predicate stuff (parser.js:1012)
-                result.children.push(rhs);
-            }
-
-            let last_index = result.children.len() - 1;
-
-            for (step_index, step) in result.children.iter_mut().enumerate() {
-                match step.kind {
-                    // Steps cannot be literal values
-                    N::Num(..) | N::Bool(..) | N::Null => {
-                        return Err(box S0213 {
-                            position: step.position,
-                            value: step.kind.to_string(),
-                        })
-                    }
-                    // Steps that are string literals should be switched to Name
-                    N::Str(ref v) => {
-                        step.kind = N::Name(v.clone());
-                    }
-                    // If first or last step is an array constructor, it shouldn't be flattened
-                    N::Unary(ref op) => {
-                        if let UnaryOp::Array = op {
-                            if step_index == 0 || step_index == last_index {
-                                step.keep_array = true;
-                            }
-                        }
-                    }
-                    _ => (),
-                }
-
-                // TODO: Handle singleton array (parser.js:1034)
-            }
-
-            // TODO: Filter step types, handle first step is a path constructor, handle last step is an array constructor (parser.js:1040)
-
-            Ok(result)
-        }
-
+        BinaryOp::PathOp => process_path(node),
+        BinaryOp::ArrayPredicate => process_array_predicate(node),
+        BinaryOp::GroupBy => process_group_by(node),
         _ => {
             let lhs = process_ast(&node.children[0])?;
             let rhs = process_ast(&node.children[1])?;
@@ -200,6 +172,157 @@ fn process_binary_node(node: &Node, op: &BinaryOp) -> JsonAtaResult<Node> {
     }
 }
 
+fn process_path(node: &Node) -> JsonAtaResult<Node> {
+    let lhs = process_ast(&node.children[0])?;
+    let mut rhs = process_ast(&node.children[1])?;
+
+    let mut result = {
+        // If lhs is a Path, start with that, otherwise create a new one
+        if lhs.is_path() {
+            lhs
+        } else {
+            Node::new_with_child(N::Path, lhs.position, lhs)
+        }
+    };
+
+    // TODO: If the lhs is a Parent (parser.js:997)
+
+    // TODO: If the rhs is a Function (parser.js:1001)
+
+    // If rhs is a Path, merge the steps in
+    if rhs.is_path() {
+        result.children.append(&mut rhs.children);
+    } else {
+        if rhs.predicates.is_some() {
+            rhs.stages = rhs.predicates;
+            rhs.predicates = None;
+        }
+        result.children.push(rhs);
+    }
+
+    let last_index = result.children.len() - 1;
+    let mut keep_array = false;
+
+    for (step_index, step) in result.children.iter_mut().enumerate() {
+        match step.kind {
+            // Steps cannot be literal values
+            N::Num(..) | N::Bool(..) | N::Null => {
+                return Err(box S0213 {
+                    position: step.position,
+                    value: step.kind.to_string(),
+                })
+            }
+            // Steps that are string literals should be switched to Name
+            N::Str(ref v) => {
+                step.kind = N::Name(v.clone());
+            }
+            // If first or last step is an array constructor, it shouldn't be flattened
+            N::Unary(ref op) => {
+                if let UnaryOp::ArrayConstructor = op {
+                    if step_index == 0 || step_index == last_index {
+                        step.keep_array = true;
+                    }
+                }
+            }
+            _ => (),
+        }
+
+        keep_array = keep_array || step.keep_array;
+    }
+
+    result.keep_array = keep_array;
+
+    Ok(result)
+}
+
+fn process_array_predicate(node: &Node) -> JsonAtaResult<Node> {
+    println!("PROCESSING: {:#?}", node.children[0]);
+
+    let mut result = process_ast(&node.children[0])?;
+    let mut is_stages = false;
+
+    let step = if result.is_path() {
+        is_stages = true;
+        let last_index = result.children.len() - 1;
+        &mut result.children[last_index]
+    } else {
+        &mut result
+    };
+
+    if step.group_by.is_some() {
+        return Err(box S0209 {
+            position: node.position,
+        });
+    }
+
+    let predicate = process_ast(&node.children[1])?;
+
+    // TODO: seekingParent (parser.js:1074)
+
+    if is_stages {
+        if step.stages.is_none() {
+            step.stages = Some(vec![predicate]);
+        } else {
+            if let Some(ref mut stages) = step.stages {
+                stages.push(predicate);
+            }
+        }
+    } else {
+        if step.predicates.is_none() {
+            step.predicates = Some(vec![predicate]);
+        } else {
+            if let Some(ref mut predicates) = step.predicates {
+                predicates.push(predicate);
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+fn process_group_by(node: &Node) -> JsonAtaResult<Node> {
+    let mut result = process_ast(&node.children[0])?;
+
+    if result.group_by.is_some() {
+        return Err(box S0210 {
+            position: node.position,
+        });
+    }
+
+    let mut object: Object = vec![];
+
+    for i in 1..node.children.len() - 2 {
+        object.push((
+            process_ast(&node.children[i])?,
+            process_ast(&node.children[i + 1])?,
+        ));
+    }
+
+    result.group_by = Some(GroupBy {
+        position: node.position,
+        object,
+    });
+
+    Ok(result)
+}
+
+fn process_block_node(node: &Node) -> JsonAtaResult<Node> {
+    let children = node
+        .children
+        .iter()
+        .map(|child| {
+            process_ast(child)
+
+            // TODO: consarray (parser.js:1267)
+        })
+        .collect::<JsonAtaResult<Vec<Node>>>()?;
+
+    Ok(Node::new_with_children(
+        NodeKind::Block,
+        node.position,
+        children,
+    ))
+}
 // fn process_ast(&mut self, node: Node) -> Node {
 //     use NodeKind::*;
 //     let mut node = node;

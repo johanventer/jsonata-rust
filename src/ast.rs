@@ -2,8 +2,8 @@ use std::fmt;
 
 use crate::tokenizer::Position;
 
-// /// An object is represented as a list of (key, value) tuples
-// pub type Object = Vec<(Node, Node)>;
+/// An object is represented as a list of (key, value) tuples
+pub type Object = Vec<(Node, Node)>;
 
 // /// Slots are used for resolving path ancestory.
 // #[derive(Debug)]
@@ -20,10 +20,10 @@ pub enum UnaryOp {
     Minus,
 
     /// Array constructor, e.g. `[1, 2, 3]`.
-    Array,
+    ArrayConstructor,
 
     /// An object constructor, e.g. `{ key1: value1, key2: value2 }`.
-    Object,
+    ObjectConstructor,
 }
 
 impl fmt::Display for UnaryOp {
@@ -34,8 +34,8 @@ impl fmt::Display for UnaryOp {
             "{}",
             match self {
                 Minus => "-",
-                Array => "[",
-                Object => "{",
+                ArrayConstructor => "[",
+                ObjectConstructor => "{",
             }
         )
     }
@@ -44,9 +44,6 @@ impl fmt::Display for UnaryOp {
 /// Types of binary expressions.
 #[derive(Debug, Copy, Clone)]
 pub enum BinaryOp {
-    /// Path operator, e.g. `x.y`.
-    Path,
-
     /// Numeric addition, e.g. `x + 10`.
     Add,
 
@@ -92,6 +89,9 @@ pub enum BinaryOp {
     /// Array containment, e.g. `1 in [1, 2 3]`.
     In,
 
+    /// Path operator, e.g. `x.y`.
+    PathOp,
+
     /// An array range index, e.g. `[x..y]`.
     Range,
 
@@ -103,6 +103,9 @@ pub enum BinaryOp {
 
     /// An array filtering predicate, e.g. `phone.number[type="mobile"]`.
     ArrayPredicate,
+
+    /// Group by
+    GroupBy,
 
     /// Chained function application, e.g. `$func1 ~> $func2`.
     Apply,
@@ -118,7 +121,7 @@ impl fmt::Display for BinaryOp {
             f,
             "{}",
             match self {
-                Path => ".",
+                PathOp => ".",
                 Add => "+",
                 Subtract => "-",
                 Multiply => "*",
@@ -138,6 +141,7 @@ impl fmt::Display for BinaryOp {
                 ContextBind => "@",
                 PositionalBind => "#",
                 ArrayPredicate => "[",
+                GroupBy => "{",
                 Apply => "~>",
                 Bind => ":=",
             }
@@ -199,9 +203,6 @@ pub enum NodeKind {
     /// A sort term. The associated value indicates whether it is a descending term.
     SortTerm(bool),
 
-    /// A filtering expression.
-    Filter,
-
     /// An index expression.
     Index,
 
@@ -239,7 +240,6 @@ impl fmt::Display for NodeKind {
                 Block => "Block".to_string(),
                 Sort => "Sort".to_string(),
                 SortTerm(ref v) => format!("SortTerm({})", v),
-                Filter => "Filter".to_string(),
                 Index => "Index".to_string(),
                 Ternary => "Ternary".to_string(),
                 Transform => "Transform".to_string(),
@@ -247,6 +247,12 @@ impl fmt::Display for NodeKind {
             }
         )
     }
+}
+
+#[derive(Debug)]
+pub struct GroupBy {
+    pub position: Position,
+    pub object: Object,
 }
 
 /// A node in the parsed AST.
@@ -264,16 +270,16 @@ pub struct Node {
 
     /// Indicates that this node should not be flattened.
     pub keep_array: bool,
-    // /// An optional group by expression, represented as an object.
-    // pub group_by: Option<Object>,
 
-    // /// An optional list of predicates.
-    // pub predicates: Option<Vec<Node>>,
+    /// An optional group by expression, represented as an object.
+    pub group_by: Option<GroupBy>,
 
-    // /// An optional list of evaluation stages, for example this specifies the filtering and
-    // /// indexing for various expressions.
-    // pub stages: Option<Vec<Node>>,
+    /// An optional list of predicates.
+    pub predicates: Option<Vec<Node>>,
 
+    /// An optional list of evaluation stages, for example this specifies the filtering and
+    /// indexing for various expressions.
+    pub stages: Option<Vec<Node>>,
     // /// Indicates if this node has a focussed variable binding.
     // pub focus: Option<String>,
 
@@ -298,28 +304,49 @@ impl Node {
             position,
             children,
             keep_array: false,
-            // group_by: None,
-            // predicates: None,
-            // stages: None,
+            group_by: None,
+            predicates: None,
+            stages: None,
             // focus: None,
             // index: None,
             // tuple: false,
         }
     }
+
+    pub fn is_path(&self) -> bool {
+        matches!(self.kind, NodeKind::Path)
+    }
 }
 
 impl Clone for Node {
     fn clone(&self) -> Self {
-        let mut cloned_children = Vec::<Node>::new();
-        cloned_children.reserve_exact(self.children.len());
-        for child in &self.children {
-            cloned_children.push(child.clone());
-        }
+        let children = self.children.iter().cloned().collect();
+        let predicates = if let Some(predicates) = &self.predicates {
+            Some(predicates.iter().cloned().collect())
+        } else {
+            None
+        };
+        let stages = if let Some(stages) = &self.stages {
+            Some(stages.iter().cloned().collect())
+        } else {
+            None
+        };
+        let group_by = if let Some(group_by) = &self.group_by {
+            Some(GroupBy {
+                position: group_by.position,
+                object: group_by.object.iter().cloned().collect(),
+            })
+        } else {
+            None
+        };
 
         Self {
             kind: self.kind.clone(),
             position: self.position,
-            children: cloned_children,
+            children,
+            predicates,
+            stages,
+            group_by,
             keep_array: self.keep_array,
         }
     }

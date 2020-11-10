@@ -83,8 +83,11 @@ define_error!(
     "Parameter `{}` of function definition must be a variable name (start with $)",
     arg
 );
-// "S0209": "A predicate cannot follow a grouping expression in a step",
-// "S0210": "Each step can only have one grouping expression",
+define_error!(
+    S0209,
+    "A predicate cannot follow a grouping expression in a step"
+);
+define_error!(S0210, "Each step can only have one grouping expression");
 define_error!(
     S0211,
     "The symbol `{}` cannot be used as a unary operator",
@@ -136,8 +139,14 @@ define_error!(
     "The right side of the `{}` operator must evaluate to a number",
     op
 );
-// "T2003": "The left side of the range operator (..) must evaluate to an integer",
-// "T2004": "The right side of the range operator (..) must evaluate to an integer",
+define_error!(
+    T2003,
+    "The left side of the range operator (..) must evaluate to an integer"
+);
+define_error!(
+    T2004,
+    "The right side of the range operator (..) must evaluate to an integer"
+);
 // "D2005": "The left side of := must be a variable name (start with $)",  // defunct - replaced by S0212 parser error
 // "T2006": "The right side of the function application operator ~> must be a function",
 // "T2007": "Type mismatch when comparing values {{value}} and {{value2}} in order-by clause",
@@ -157,7 +166,11 @@ define_error!(
 // "T2011": "The insert/update clause of the transform expression must evaluate to an object: {{value}}",
 // "T2012": "The delete clause of the transform expression must evaluate to a string or array of strings: {{value}}",
 // "T2013": "The transform expression clones the input object using the $clone() function.  This has been overridden in the current scope by a non-function.",
-// "D2014": "The size of the sequence allocated by the range operator (..) must not exceed 1e6.  Attempted to allocate {{value}}.",
+define_error!(
+    D2014,
+    "The size of the sequence allocated by the range operator (..) must not exceed 1e7.  Attempted to allocate {}",
+    value
+);
 // "D3001": "Attempting to invoke string function on Infinity or NaN",
 // "D3010": "Second argument of replace function cannot be an empty string",
 // "D3011": "Fourth argument of replace function must evaluate to a positive number",
