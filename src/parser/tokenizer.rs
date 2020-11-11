@@ -3,35 +3,7 @@ use std::iter::FromIterator;
 use std::{char, str};
 
 use crate::error::*;
-use crate::JsonAtaResult;
-
-#[derive(Copy, Clone, Debug)]
-pub struct Position {
-    pub line: usize,
-    pub column: usize,
-    pub source_pos: usize,
-}
-
-impl Position {
-    pub fn advance_x(&mut self, x: usize) {
-        self.column += x;
-        self.source_pos += x;
-    }
-
-    pub fn advance_line(&mut self) {
-        self.line += 1;
-        self.column = 0;
-        self.source_pos += 1;
-    }
-
-    pub fn advance_1(&mut self) {
-        self.advance_x(1);
-    }
-
-    pub fn advance_2(&mut self) {
-        self.advance_x(2);
-    }
-}
+use crate::{JsonAtaResult, Position};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {

@@ -1,12 +1,13 @@
-use crate::ast::*;
 use crate::error::*;
-use crate::parser::Parser;
-use crate::tokenizer::{Token, TokenKind};
 use crate::JsonAtaResult;
+
+use super::ast::*;
+use super::tokenizer::{Token, TokenKind};
+use super::Parser;
 
 /// Represents a symbol, which is essentially an enhanced token that performs its own parsing and
 /// creates syntax trees.
-pub trait Symbol {
+pub(crate) trait Symbol {
     /// Returns the left binding power for the symbol.
     fn lbp(&self) -> u32;
 

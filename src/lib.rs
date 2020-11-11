@@ -3,28 +3,51 @@
 
 use json::JsonValue;
 
-#[macro_use]
 mod error;
-mod ast;
 mod evaluator;
-mod frame;
 mod functions;
 mod parser;
-mod symbol;
-mod tokenizer;
 
-pub use frame::Binding;
+pub use evaluator::frame::Binding;
 
 pub type JsonAtaResult<T> = std::result::Result<T, Box<dyn error::JsonAtaError>>;
 
+#[derive(Copy, Clone, Debug)]
+pub struct Position {
+    pub line: usize,
+    pub column: usize,
+    pub source_pos: usize,
+}
+
+impl Position {
+    pub fn advance_x(&mut self, x: usize) {
+        self.column += x;
+        self.source_pos += x;
+    }
+
+    pub fn advance_line(&mut self) {
+        self.line += 1;
+        self.column = 0;
+        self.source_pos += 1;
+    }
+
+    pub fn advance_1(&mut self) {
+        self.advance_x(1);
+    }
+
+    pub fn advance_2(&mut self) {
+        self.advance_x(2);
+    }
+}
+
 pub struct JsonAta<'a> {
-    root_frame: frame::Frame<'a>,
-    ast: ast::Node,
+    root_frame: evaluator::frame::Frame<'a>,
+    ast: parser::ast::Node,
 }
 
 impl<'a> JsonAta<'a> {
     pub fn new(expr: &str) -> JsonAtaResult<Self> {
-        let root_frame = frame::Frame::new();
+        let root_frame = evaluator::frame::Frame::new();
 
         // // TODO: Apply statics to the environment
         // environment.bind("sum", Binding::Function(&sum, "<a<n>:n>"));
@@ -47,7 +70,7 @@ impl<'a> JsonAta<'a> {
         self.root_frame.bind(name, value);
     }
 
-    pub fn ast(&self) -> &ast::Node {
+    pub fn ast(&self) -> &parser::ast::Node {
         &self.ast
     }
 

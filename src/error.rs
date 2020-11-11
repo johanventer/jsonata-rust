@@ -1,25 +1,24 @@
 //! Defines all the errors that the tokenizer, parser and evaluator can fail with.
 //!
 //! Error codes
-//!  Sxxxx - Static errors (compile time)
-//!  Txxxx - Type errors
-//!  Dxxxx - Dynamic errors (evaluate time)
-//!   01xx - tokenizer
-//!   02xx - parser
-//!   03xx - regex parser
-//!   04xx - function signature parser/evaluator
-//!   10xx - evaluator
-//!   20xx - operators
-//!   3xxx - functions (blocks of 10 for each function)
+//!  - Sxxxx - Static errors (compile time)
+//!  - Txxxx - Type errors
+//!  - Dxxxx - Dynamic errors (evaluate time)
+//!  -  01xx - tokenizer
+//!  -  02xx - parser
+//!  -  03xx - regex parser
+//!  -  04xx - function signature parser/evaluator
+//!  -  10xx - evaluator
+//!  -  20xx - operators
+//!  -  3xxx - functions (blocks of 10 for each function)
 use json::{object, JsonValue};
 
-use crate::tokenizer::Position;
+use crate::Position;
 
 pub trait JsonAtaError: std::fmt::Display + std::fmt::Debug {
     fn code(&self) -> &str;
 }
 
-#[macro_export]
 macro_rules! define_error {
     ($name:ident, $template:literal, $( $arg:ident ),*) => {
         #[derive(Debug)]

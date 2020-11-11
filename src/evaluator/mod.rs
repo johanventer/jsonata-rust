@@ -3,11 +3,14 @@ use std::ops::{Index, RangeBounds};
 use std::slice::Iter;
 use std::vec::Drain;
 
-use crate::ast::*;
 use crate::error::*;
-use crate::frame::{Binding, Frame};
 use crate::functions::*;
+use crate::parser::ast::*;
 use crate::JsonAtaResult;
+
+pub mod frame;
+
+use frame::{Binding, Frame};
 
 #[derive(Clone, Debug)]
 pub enum Value {

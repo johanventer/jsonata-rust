@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::tokenizer::Position;
+use crate::Position;
 
 /// An object is represented as a list of (key, value) tuples
 pub type Object = Vec<(Node, Node)>;
