@@ -8,7 +8,7 @@ mod evaluator;
 mod functions;
 mod parser;
 
-pub use evaluator::frame::Binding;
+use evaluator::frame::Binding;
 
 pub type JsonAtaResult<T> = std::result::Result<T, Box<dyn error::JsonAtaError>>;
 
@@ -61,16 +61,14 @@ impl<'a> JsonAta<'a> {
     }
 
     pub fn evaluate(&mut self, input: Option<&JsonValue>) -> JsonAtaResult<Option<JsonValue>> {
-        if let Some(input) = input {
-            self.root_frame.bind("$", Binding::Var(input.clone()));
-        }
-        let input = evaluator::Value::new(input);
+        self.root_frame.bind("$", Binding::Var(input.into()));
+        let input: evaluator::Value = input.into();
         let result = evaluator::evaluate(&self.ast, &input, &mut self.root_frame)?;
         Ok(result.into())
     }
 
-    pub fn assign(&mut self, name: &str, value: Binding) {
-        self.root_frame.bind(name, value);
+    pub fn assign_var(&mut self, name: &str, value: &JsonValue) {
+        self.root_frame.bind(name, Binding::Var(value.into()));
     }
 
     pub fn ast(&self) -> &parser::ast::Node {

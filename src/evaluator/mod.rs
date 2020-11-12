@@ -276,6 +276,66 @@ impl From<Value> for Option<JsonValue> {
     }
 }
 
+// TODO: Cleanup new and those From impls
+
+impl From<JsonValue> for Value {
+    fn from(raw: JsonValue) -> Self {
+        match raw {
+            JsonValue::Array(arr) => Self::Array {
+                arr: arr.iter().map(|v| Self::new(Some(v))).collect(),
+                is_seq: false,
+                keep_array: false,
+            },
+            _ => Self::Raw(raw.clone()),
+        }
+    }
+}
+
+impl From<&JsonValue> for Value {
+    fn from(raw: &JsonValue) -> Self {
+        match raw {
+            JsonValue::Array(arr) => Self::Array {
+                arr: arr.iter().map(|v| Self::new(Some(v))).collect(),
+                is_seq: false,
+                keep_array: false,
+            },
+            _ => Self::Raw(raw.clone()),
+        }
+    }
+}
+
+impl From<Option<JsonValue>> for Value {
+    fn from(raw: Option<JsonValue>) -> Self {
+        match raw {
+            None => Value::Undefined,
+            Some(raw) => match raw {
+                JsonValue::Array(arr) => Self::Array {
+                    arr: arr.iter().map(|v| Self::new(Some(v))).collect(),
+                    is_seq: false,
+                    keep_array: false,
+                },
+                _ => Self::Raw(raw.clone()),
+            },
+        }
+    }
+}
+
+impl From<Option<&JsonValue>> for Value {
+    fn from(raw: Option<&JsonValue>) -> Self {
+        match raw {
+            None => Value::Undefined,
+            Some(raw) => match raw {
+                JsonValue::Array(arr) => Self::Array {
+                    arr: arr.iter().map(|v| Self::new(Some(v))).collect(),
+                    is_seq: false,
+                    keep_array: false,
+                },
+                _ => Self::Raw(raw.clone()),
+            },
+        }
+    }
+}
+
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         if self.is_undef() && other.is_undef() {
@@ -426,13 +486,11 @@ fn evaluate_bind_expression(node: &Node, input: &Value, frame: &mut Frame) -> Js
     let name = &node.children[0];
     let value = evaluate(&node.children[1], input, frame)?;
 
-    if !value.is_undef() {
-        if let NodeKind::Var(name) = &name.kind {
-            frame.bind(name, Binding::Var(value.to_json().unwrap()));
-        }
+    if let NodeKind::Var(name) = &name.kind {
+        frame.bind(name, Binding::Var(value.clone()));
     }
 
-    Ok(Value::Undefined)
+    Ok(value)
 }
 
 fn evaluate_numeric_expression(
@@ -772,16 +830,18 @@ fn evaluate_ternary(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaRes
 }
 
 fn evaluate_variable(name: &str, input: &Value, frame: &Frame) -> JsonAtaResult<Value> {
-    if name == "" {
+    let result = if name == "" {
         // Empty variable name returns the context value
         Ok(input.clone())
     } else {
         if let Some(binding) = frame.lookup(name) {
-            Ok(Value::Raw(binding.as_var().clone()))
+            Ok(binding.as_var().clone())
         } else {
             Ok(Value::Undefined)
         }
-    }
+    };
+
+    result
 }
 
 fn evaluate_filter(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {

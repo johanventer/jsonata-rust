@@ -1,15 +1,17 @@
 // use chrono::{DateTime, Utc};
-use json::JsonValue;
 use std::collections::HashMap;
 
+use super::Value;
+
 /// A binding in a stack frame
+#[derive(Debug)]
 pub enum Binding {
-    Var(JsonValue),
+    Var(Value),
     // Function(&'a dyn Fn(Vec<&JsonValue>) -> JsonValue, &'a str),
 }
 
 impl Binding {
-    pub fn as_var(&self) -> &JsonValue {
+    pub fn as_var(&self) -> &Value {
         match self {
             Binding::Var(value) => &value,
             // _ => panic!("Binding is not a variable"),
@@ -25,6 +27,7 @@ impl Binding {
 }
 
 /// A stack frame of the expression evaluation
+#[derive(Debug)]
 pub struct Frame<'a> {
     /// Stores the bindings for the frame
     bindings: HashMap<String, Binding>,
@@ -79,22 +82,38 @@ mod tests {
     #[test]
     fn bind_and_lookup() {
         let mut frame = Frame::new();
-        frame.bind("bool", Binding::Var(json::from(true)));
-        frame.bind("number", Binding::Var(json::from(42)));
-        frame.bind("string", Binding::Var(json::from("hello")));
-        frame.bind("array", Binding::Var(json::from(vec![1, 2, 3])));
-        frame.bind("none", Binding::Var(json::Null));
+        frame.bind("bool", Binding::Var(json::from(true).into()));
+        frame.bind("number", Binding::Var(json::from(42).into()));
+        frame.bind("string", Binding::Var(json::from("hello").into()));
+        frame.bind("array", Binding::Var(json::from(vec![1, 2, 3]).into()));
+        frame.bind("none", Binding::Var(json::Null.into()));
 
         assert!(frame.lookup("not_there").is_none());
 
-        assert!(frame.lookup("bool").unwrap().as_var().is_boolean());
-        assert!(frame.lookup("number").unwrap().as_var().is_number());
-        assert!(frame.lookup("string").unwrap().as_var().is_string());
+        assert!(frame.lookup("bool").unwrap().as_var().as_raw().is_boolean());
+        assert!(frame
+            .lookup("number")
+            .unwrap()
+            .as_var()
+            .as_raw()
+            .is_number());
+        assert!(frame
+            .lookup("string")
+            .unwrap()
+            .as_var()
+            .as_raw()
+            .is_string());
         assert!(frame.lookup("array").unwrap().as_var().is_array());
-        assert!(frame.lookup("none").unwrap().as_var().is_empty());
+        assert!(frame.lookup("none").unwrap().as_var().as_raw().is_empty());
 
         assert_eq!(
-            frame.lookup("bool").unwrap().as_var().as_bool().unwrap(),
+            frame
+                .lookup("bool")
+                .unwrap()
+                .as_var()
+                .as_raw()
+                .as_bool()
+                .unwrap(),
             true
         );
         assert_eq!(
@@ -102,12 +121,19 @@ mod tests {
                 .lookup("number")
                 .unwrap()
                 .as_var()
+                .as_raw()
                 .as_number()
                 .unwrap(),
             42
         );
         assert_eq!(
-            frame.lookup("string").unwrap().as_var().as_str().unwrap(),
+            frame
+                .lookup("string")
+                .unwrap()
+                .as_var()
+                .as_raw()
+                .as_str()
+                .unwrap(),
             "hello"
         );
 
@@ -118,10 +144,16 @@ mod tests {
     #[test]
     fn lookup_through_parent() {
         let mut parent = Frame::new();
-        parent.bind("value", Binding::Var(json::from(42)));
+        parent.bind("value", Binding::Var(json::from(42).into()));
         let child = Frame::new_with_parent(&parent);
         assert_eq!(
-            child.lookup("value").unwrap().as_var().as_number().unwrap(),
+            child
+                .lookup("value")
+                .unwrap()
+                .as_var()
+                .as_raw()
+                .as_number()
+                .unwrap(),
             42
         );
     }

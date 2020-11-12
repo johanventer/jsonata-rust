@@ -1,7 +1,7 @@
 use json::stringify_pretty;
 use std::env;
 
-use jsonata::{Binding, JsonAta, JsonAtaResult};
+use jsonata::{JsonAta, JsonAtaResult};
 
 fn main() -> JsonAtaResult<()> {
     let args: Vec<String> = env::args().collect();
@@ -24,7 +24,7 @@ fn main() -> JsonAtaResult<()> {
             if args.len() > 3 && !args[3].is_empty() {
                 let bindings = json::parse(&args[3]).unwrap();
                 for (key, value) in bindings.entries() {
-                    jsonata.assign(key, Binding::Var(value.clone()));
+                    jsonata.assign_var(key, value);
                 }
             }
 

@@ -362,9 +362,7 @@ mod tests {
         )
     "#
     )]
-    fn parser_tests(source: &str) {
-        let _ast = parse(source);
-        // use json::stringify_pretty;
-        // println!("{}", stringify_pretty(ast.to_json(), 4));
+    fn parser_tests(source: &str) -> JsonAtaResult<Node> {
+        parse(source)
     }
 }
