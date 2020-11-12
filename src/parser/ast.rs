@@ -201,9 +201,6 @@ pub enum NodeKind {
     /// Block consisting of multiple expressions, e.g. `($x + 1; $x - 1)`.
     Block,
 
-    /// An index expression.
-    Index,
-
     /// A ternary conditional expression.
     Ternary,
 
