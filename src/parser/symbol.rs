@@ -319,7 +319,11 @@ impl Symbol for Token {
                 }
                 parser.expect(T::RightParen, false)?;
 
-                Ok(Node::new_with_children(N::Sort, p, children))
+                Ok(Node::new_with_children(
+                    N::Binary(BinaryOp::SortOp),
+                    p,
+                    children,
+                ))
             }
 
             // Context variable bind
@@ -395,7 +399,7 @@ impl Symbol for Token {
 
                     // Walk back through left hand sides to find something that's not an array
                     // predicate
-                    while let N::Binary(BinaryOp::ArrayPredicate) = step.kind {
+                    while let N::Binary(BinaryOp::Predicate) = step.kind {
                         step = &mut step.children[0]
                     }
 
@@ -406,7 +410,7 @@ impl Symbol for Token {
                     let rhs = parser.expression(0)?;
                     parser.expect(T::RightBracket, true)?;
                     Ok(Node::new_with_children(
-                        N::Binary(BinaryOp::ArrayPredicate),
+                        N::Binary(BinaryOp::Predicate),
                         p,
                         vec![left, rhs],
                     ))

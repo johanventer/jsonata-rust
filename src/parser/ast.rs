@@ -101,8 +101,8 @@ pub enum BinaryOp {
     /// A positional variable binding, e.g. `library.books#$i`.
     PositionalBind,
 
-    /// An array filtering predicate, e.g. `phone.number[type="mobile"]`.
-    ArrayPredicate,
+    /// An filtering predicate, e.g. `phone.number[type="mobile"]`.
+    Predicate,
 
     /// Group by
     GroupBy,
@@ -112,6 +112,9 @@ pub enum BinaryOp {
 
     /// A variable binding, e.g. `$x := 10`.
     Bind,
+
+    /// An array sorting expression, e.g. `account.order.product^(price)`.
+    SortOp,
 }
 
 impl fmt::Display for BinaryOp {
@@ -140,10 +143,11 @@ impl fmt::Display for BinaryOp {
                 Range => "..",
                 ContextBind => "@",
                 PositionalBind => "#",
-                ArrayPredicate => "[",
+                Predicate => "[",
                 GroupBy => "{",
                 Apply => "~>",
                 Bind => ":=",
+                SortOp => "^",
             }
         )
     }
@@ -197,12 +201,6 @@ pub enum NodeKind {
     /// Block consisting of multiple expressions, e.g. `($x + 1; $x - 1)`.
     Block,
 
-    /// An array sorting expression, e.g. `account.order.product^(price)`.
-    Sort,
-
-    /// A sort term. The associated value indicates whether it is a descending term.
-    SortTerm(bool),
-
     /// An index expression.
     Index,
 
@@ -214,6 +212,12 @@ pub enum NodeKind {
 
     /// A path consisting of multiple steps.
     Path,
+
+    /// A sort consisting of multiple sort terms.
+    Sort,
+
+    /// A sort term. The associated value indicates whether it is a descending term.
+    SortTerm(bool),
 }
 
 impl fmt::Display for NodeKind {
@@ -238,12 +242,12 @@ impl fmt::Display for NodeKind {
                 PartialArg => "PartialArg".to_string(),
                 Lambda => "Lambda".to_string(),
                 Block => "Block".to_string(),
-                Sort => "Sort".to_string(),
-                SortTerm(ref v) => format!("SortTerm({})", v),
                 Index => "Index".to_string(),
                 Ternary => "Ternary".to_string(),
                 Transform => "Transform".to_string(),
                 Path => "Path".to_string(),
+                Sort => "Sort".to_string(),
+                SortTerm(ref v) => format!("SortTerm({})", v),
             }
         )
     }
@@ -274,8 +278,8 @@ pub struct Node {
     /// An optional group by expression, represented as an object.
     pub group_by: Option<GroupBy>,
 
-    /// An optional list of predicates.
-    pub predicates: Option<Vec<Node>>,
+    /// An optional predicate.
+    pub predicate: Option<Box<Node>>,
 
     /// An optional list of evaluation stages, for example this specifies the filtering and
     /// indexing for various expressions.
@@ -305,7 +309,7 @@ impl Node {
             children,
             keep_array: false,
             group_by: None,
-            predicates: None,
+            predicate: None,
             stages: None,
             // focus: None,
             // index: None,
@@ -321,11 +325,6 @@ impl Node {
 impl Clone for Node {
     fn clone(&self) -> Self {
         let children = self.children.iter().cloned().collect();
-        let predicates = if let Some(predicates) = &self.predicates {
-            Some(predicates.iter().cloned().collect())
-        } else {
-            None
-        };
         let stages = if let Some(stages) = &self.stages {
             Some(stages.iter().cloned().collect())
         } else {
@@ -344,7 +343,7 @@ impl Clone for Node {
             kind: self.kind.clone(),
             position: self.position,
             children,
-            predicates,
+            predicate: self.predicate.clone(),
             stages,
             group_by,
             keep_array: self.keep_array,

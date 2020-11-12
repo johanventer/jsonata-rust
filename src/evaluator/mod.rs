@@ -100,6 +100,13 @@ impl Value {
         }
     }
 
+    pub fn is_object(&self) -> bool {
+        match self {
+            Value::Raw(raw) => raw.is_object(),
+            _ => false,
+        }
+    }
+
     pub fn as_raw(&self) -> &JsonValue {
         match self {
             Value::Raw(value) => &value,
@@ -108,6 +115,13 @@ impl Value {
     }
 
     pub fn as_array_mut(&mut self) -> &mut Vec<Value> {
+        match self {
+            Value::Array { arr, .. } => arr,
+            _ => panic!("unexpected Value type"),
+        }
+    }
+
+    pub fn as_array_owned(self) -> Vec<Value> {
         match self {
             Value::Array { arr, .. } => arr,
             _ => panic!("unexpected Value type"),
@@ -152,6 +166,13 @@ impl Value {
     pub fn push(&mut self, value: Value) {
         match self {
             Value::Array { arr, .. } => arr.push(value),
+            _ => panic!("unexpected Value type"),
+        }
+    }
+
+    pub fn append(&mut self, value: Value) {
+        match self {
+            Value::Array { arr, .. } => arr.append(&mut value.as_array_owned()),
             _ => panic!("unexpected Value type"),
         }
     }
@@ -280,24 +301,33 @@ impl PartialEq for Value {
 
 pub fn evaluate(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
     let mut result = match &node.kind {
+        NodeKind::Path => evaluate_path(node, input, frame)?,
+        NodeKind::Binary(_) => evaluate_binary_op(node, input, frame)?,
+        NodeKind::Unary(_) => evaluate_unary_op(node, input, frame)?,
+        NodeKind::Name(_) => evaluate_name(node, input)?,
         NodeKind::Null => Value::Raw(JsonValue::Null),
         NodeKind::Bool(value) => Value::Raw(json::from(*value)),
         NodeKind::Str(value) => Value::Raw(json::from(value.clone())),
         NodeKind::Num(value) => Value::Raw(json::from(*value)),
-        NodeKind::Name(_) => evaluate_name(node, input)?,
-        NodeKind::Unary(_) => evaluate_unary_op(node, input, frame)?,
-        NodeKind::Binary(_) => evaluate_binary_op(node, input, frame)?,
-        NodeKind::Block => evaluate_block(node, input, frame)?,
         NodeKind::Ternary => evaluate_ternary(node, input, frame)?,
-        NodeKind::Var(name) => evaluate_variable(name, frame)?,
-        NodeKind::Path => evaluate_path(node, input, frame)?,
+        NodeKind::Block => evaluate_block(node, input, frame)?,
+        NodeKind::Var(name) => evaluate_variable(name, input, frame)?,
+        NodeKind::Wildcard => evaluate_wildcard(input)?,
+        NodeKind::Descendent => evaluate_descendents(input)?,
+        // TODO:
+        //  - Descendant
+        //  - Parent
+        //  - Regex
+        //  - Function
+        //  - Lambda
+        //  - Partial
+        //  - Apply
+        //  - Transform
         _ => unimplemented!("TODO: node kind not yet supported: {}", node.kind),
     };
 
-    if let Some(ref predicates) = node.predicates {
-        for predicate in predicates {
-            result = evaluate_filter(predicate, &result, frame)?;
-        }
+    if let Some(ref predicate) = node.predicate {
+        result = evaluate_filter(predicate, &result, frame)?;
     }
 
     // TODO: grouping (jsonata.js:127)
@@ -328,18 +358,13 @@ fn evaluate_unary_op(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaRe
         match op {
             UnaryOp::Minus => {
                 let result = evaluate(&node.children[0], input, frame)?;
-                match result {
-                    Value::Raw(raw) => {
-                        if let Some(raw) = raw.as_f64() {
-                            Ok(Value::Raw((-raw).into()))
-                        } else {
-                            Err(Box::new(D1002 {
-                                position: node.position,
-                                value: raw.to_string(),
-                            }))
-                        }
-                    }
-                    _ => panic!("`result` should've been an Input::Value"),
+                if let Some(num) = result.as_f64() {
+                    Ok(Value::Raw((-num).into()))
+                } else {
+                    Err(Box::new(D1002 {
+                        position: node.position,
+                        value: result.as_raw().to_string(),
+                    }))
                 }
             }
             UnaryOp::ArrayConstructor => {
@@ -390,10 +415,6 @@ fn evaluate_binary_op(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaR
             Or | And => evaluate_boolean_expression(node, input, frame, op),
             In => evaluate_includes_expression(node, input, frame),
             Range => evaluate_range_expression(node, input, frame),
-            ContextBind => unimplemented!("TODO: Context bind not yet supported"),
-            PositionalBind => unimplemented!("TODO: Positional bind not yet supported"),
-            ArrayPredicate => unimplemented!("TODO: Array predicate not yet supported"),
-            Apply => unimplemented!("TODO: Apply not yet supported"),
             _ => unreachable!("Unexpected binary operator {:#?}", op),
         }
     } else {
@@ -673,9 +694,14 @@ fn evaluate_step(
     frame: &mut Frame,
     last_step: bool,
 ) -> JsonAtaResult<Value> {
-    // TODO: Sorting (jsonata.js:253)
-
     let mut result = Value::new_seq();
+
+    // if let NodeKind::Sort = node.kind {
+    //     result = evaluate_sort_expression(node, input, frame);
+    //     if node.stages.is_some() {
+    //       result = evaluate_stages(node.stages, &result, frame)?;
+    //     }
+    // }
 
     for input in input.iter() {
         let mut res = evaluate(node, input, frame)?;
@@ -707,6 +733,14 @@ fn evaluate_step(
     }
 }
 
+// fn evaluate_sort_expression(node: &Node, input: &Value, frame: &mut Frame) {
+
+// }
+
+// fn evaluate_stages(stages: Option<&Vec<Node>>, input: &Value, frame: &mut Frame) {
+
+// }
+
 fn evaluate_block(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
     if let NodeKind::Block = &node.kind {
         let mut frame = Frame::new_with_parent(frame);
@@ -737,12 +771,16 @@ fn evaluate_ternary(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaRes
     }
 }
 
-fn evaluate_variable(name: &str, frame: &Frame) -> JsonAtaResult<Value> {
-    // TODO: Handle empty var name for $ context (jsonata.js:1143)
-    if let Some(binding) = frame.lookup(name) {
-        Ok(Value::Raw(binding.as_var().clone()))
+fn evaluate_variable(name: &str, input: &Value, frame: &Frame) -> JsonAtaResult<Value> {
+    if name == "" {
+        // Empty variable name returns the context value
+        Ok(input.clone())
     } else {
-        Ok(Value::Undefined)
+        if let Some(binding) = frame.lookup(name) {
+            Ok(Value::Raw(binding.as_var().clone()))
+        } else {
+            Ok(Value::Undefined)
+        }
     }
 }
 
@@ -799,4 +837,61 @@ fn evaluate_filter(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResu
     }
 
     Ok(results)
+}
+
+fn evaluate_wildcard(input: &Value) -> JsonAtaResult<Value> {
+    let mut result = Value::new_seq();
+
+    fn flatten(value: &Value, result: &mut Value) {
+        if value.is_array() {
+            value.iter().for_each(|value| {
+                flatten(value, result);
+            });
+        } else {
+            result.push(value.clone());
+        }
+    }
+
+    if input.is_object() {
+        for (_key, value) in input.as_raw().entries() {
+            let value = Value::new(Some(value));
+            if value.is_array() {
+                flatten(&value, &mut result);
+            } else {
+                result.push(value);
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+fn evaluate_descendents(input: &Value) -> JsonAtaResult<Value> {
+    let mut result = Value::Undefined;
+    let mut result_seq = Value::new_seq();
+
+    fn recurse(value: &Value, result: &mut Value) {
+        if !value.is_array() {
+            result.push(value.clone());
+        }
+        if value.is_array() {
+            value.iter().for_each(|value| recurse(value, result));
+        } else if value.is_object() {
+            for (_key, value) in value.as_raw().entries() {
+                let value = Value::new(Some(value));
+                recurse(&value, result);
+            }
+        }
+    }
+
+    if !input.is_undef() {
+        recurse(input, &mut result_seq);
+        if result_seq.len() == 1 {
+            result = result_seq.as_array_mut().swap_remove(0);
+        } else {
+            result = result_seq;
+        }
+    }
+
+    Ok(result)
 }

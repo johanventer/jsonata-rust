@@ -61,6 +61,9 @@ impl<'a> JsonAta<'a> {
     }
 
     pub fn evaluate(&mut self, input: Option<&JsonValue>) -> JsonAtaResult<Option<JsonValue>> {
+        if let Some(input) = input {
+            self.root_frame.bind("$", Binding::Var(input.clone()));
+        }
         let input = evaluator::Value::new(input);
         let result = evaluator::evaluate(&self.ast, &input, &mut self.root_frame)?;
         Ok(result.into())
