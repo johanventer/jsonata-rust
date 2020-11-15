@@ -12,6 +12,7 @@
 //!  -  20xx - operators
 //!  -  3xxx - functions (blocks of 10 for each function)
 use json::{object, JsonValue};
+use std::error::Error;
 
 use crate::Position;
 
@@ -32,6 +33,8 @@ macro_rules! define_error {
                 stringify!($name)
             }
         }
+
+        impl Error for $name {}
 
         impl std::fmt::Display for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -120,13 +123,21 @@ define_error!(
 // "T0412": "Argument {{index}} of function {{token}} must be an array of {{type}}",
 // "D1001": "Number out of range: {{value}}",
 define_error!(D1002, "Cannot negate a non-numeric value `{}`", value);
-// "T1003": "Key in object structure must evaluate to a string; got: {{value}}",
+define_error!(
+    T1003,
+    "Key in object structure must evaluate to a string; got: {}",
+    value
+);
 // "D1004": "Regular expression matches zero length string",
 // "T1005": "Attempted to invoke a non-function. Did you mean ${{{token}}}?",
 // "T1006": "Attempted to invoke a non-function",
 // "T1007": "Attempted to partially apply a non-function. Did you mean ${{{token}}}?",
 // "T1008": "Attempted to partially apply a non-function",
-// "D1009": "Multiple key definitions evaluate to same key: {{value}}",
+define_error!(
+    D1009,
+    "Multiple key definitions evaluate to same key: {}",
+    value
+);
 // "T1010": "The matcher function argument passed to function {{token}} does not return the correct object structure",
 define_error!(
     T2001,

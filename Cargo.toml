@@ -5,9 +5,10 @@ authors = ["Johan Venter <johan.venter@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-chrono = "0.4.11"
-json = "0.12.4"
+chrono = "0.4"
+json = "0.12"
+structopt = "0.3"
 
 [dev-dependencies]
-test-case = "1.0.0"
-test-generator = "0.3.0"
+test-case = "1.0"
+test-generator = "0.3"

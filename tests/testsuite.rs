@@ -30,6 +30,8 @@ fn t(resource: &str) {
             panic!("No expression")
         };
 
+        println!("{}", expr);
+
         let data = if !case["data"].is_null() {
             Some(case["data"].take())
         } else if !case["dataset"].is_null() {

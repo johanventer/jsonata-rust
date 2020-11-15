@@ -21,15 +21,14 @@ pub(crate) trait Symbol {
 }
 
 /// Parses an object definition.
-fn parse_object(parser: &mut Parser) -> JsonAtaResult<Vec<Node>> {
-    let mut object: Vec<Node> = vec![];
+fn parse_object(parser: &mut Parser) -> JsonAtaResult<Object> {
+    let mut object: Object = Vec::new();
     if parser.token().kind != TokenKind::RightBrace {
         loop {
-            let name = parser.expression(0)?;
+            let key = parser.expression(0)?;
             parser.expect(TokenKind::Colon, false)?;
             let value = parser.expression(0)?;
-            object.push(name);
-            object.push(value);
+            object.push((key, value));
             if parser.token().kind != TokenKind::Comma {
                 break;
             }
@@ -136,12 +135,8 @@ impl Symbol for Token {
 
             // Object constructor
             T::LeftBrace => {
-                let children = parse_object(parser)?;
-                Ok(Node::new_with_children(
-                    N::Unary(UnaryOp::ObjectConstructor),
-                    p,
-                    children,
-                ))
+                let object = parse_object(parser)?;
+                Ok(Node::new(N::Unary(UnaryOp::ObjectConstructor(object)), p))
             }
 
             // Object transformer
@@ -380,13 +375,11 @@ impl Symbol for Token {
 
             // Object group by
             T::LeftBrace => {
-                let mut children = vec![left];
-                let mut object = parse_object(parser)?;
-                children.append(&mut object);
-                Ok(Node::new_with_children(
-                    N::Binary(BinaryOp::GroupBy),
+                let object = parse_object(parser)?;
+                Ok(Node::new_with_child(
+                    N::Binary(BinaryOp::GroupBy(object)),
                     p,
-                    children,
+                    left,
                 ))
             }
 

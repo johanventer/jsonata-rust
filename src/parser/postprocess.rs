@@ -45,7 +45,7 @@ fn process_unary_node(node: &Node, op: &UnaryOp) -> JsonAtaResult<Node> {
     Ok(match op {
         UnaryOp::Minus => process_unary_minus(node)?,
         UnaryOp::ArrayConstructor => process_children(node)?,
-        UnaryOp::ObjectConstructor => process_children(node)?,
+        UnaryOp::ObjectConstructor(object) => process_object_constructor(node, object)?,
     })
 }
 
@@ -57,11 +57,22 @@ fn process_unary_minus(node: &Node) -> JsonAtaResult<Node> {
     Ok(result)
 }
 
+fn process_object_constructor(node: &Node, object: &Object) -> JsonAtaResult<Node> {
+    let mut result_object: Object = Vec::with_capacity(object.len());
+    for (k, v) in object.iter() {
+        result_object.push((process_ast(k)?, process_ast(v)?));
+    }
+    Ok(Node::new(
+        NodeKind::Unary(UnaryOp::ObjectConstructor(result_object)),
+        node.position,
+    ))
+}
+
 fn process_binary_node(node: &Node, op: &BinaryOp) -> JsonAtaResult<Node> {
     match op {
         BinaryOp::PathOp => process_path(node),
         BinaryOp::Predicate => process_predicate(node),
-        BinaryOp::GroupBy => process_group_by(node),
+        BinaryOp::GroupBy(object) => process_group_by(node, object),
         BinaryOp::SortOp => process_sort(node),
         BinaryOp::ContextBind => process_context_bind(node),
         BinaryOp::PositionalBind => process_positional_bind(node),
@@ -169,7 +180,7 @@ fn process_predicate(node: &Node) -> JsonAtaResult<Node> {
     Ok(result)
 }
 
-fn process_group_by(node: &Node) -> JsonAtaResult<Node> {
+fn process_group_by(node: &Node, object: &Object) -> JsonAtaResult<Node> {
     let mut result = process_ast(&node.children[0])?;
 
     if result.group_by.is_some() {
@@ -178,19 +189,12 @@ fn process_group_by(node: &Node) -> JsonAtaResult<Node> {
         });
     }
 
-    let mut object: Object = vec![];
-
-    for i in 1..node.children.len() - 2 {
-        object.push((
-            process_ast(&node.children[i])?,
-            process_ast(&node.children[i + 1])?,
-        ));
+    let mut result_object: Object = Vec::with_capacity(object.len());
+    for (k, v) in object.iter() {
+        result_object.push((process_ast(k)?, process_ast(v)?));
     }
 
-    result.group_by = Some(GroupBy {
-        position: node.position,
-        object,
-    });
+    result.group_by = Some(result_object);
 
     Ok(result)
 }

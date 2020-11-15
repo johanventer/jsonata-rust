@@ -62,8 +62,16 @@ impl<'a> JsonAta<'a> {
 
     pub fn evaluate(&mut self, input: Option<&JsonValue>) -> JsonAtaResult<Option<JsonValue>> {
         self.root_frame.bind("$", Binding::Var(input.into()));
-        let input: evaluator::Value = input.into();
+
+        let mut input: evaluator::Value = input.into();
+        if input.is_array() {
+            input = evaluator::Value::wrap(&input);
+        }
+
         let result = evaluator::evaluate(&self.ast, &input, &mut self.root_frame)?;
+
+        //println!("{:#?}", result);
+
         Ok(result.into())
     }
 

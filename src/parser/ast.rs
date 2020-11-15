@@ -5,16 +5,8 @@ use crate::Position;
 /// An object is represented as a list of (key, value) tuples
 pub type Object = Vec<(Node, Node)>;
 
-// /// Slots are used for resolving path ancestory.
-// #[derive(Debug)]
-// pub struct Slot {
-//     pub label: String,
-//     pub level: u32,
-//     pub index: u32,
-// }
-
 /// Types of unary expressions.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub enum UnaryOp {
     /// Unary numeric minus, e.g. `-1`.
     Minus,
@@ -23,7 +15,7 @@ pub enum UnaryOp {
     ArrayConstructor,
 
     /// An object constructor, e.g. `{ key1: value1, key2: value2 }`.
-    ObjectConstructor,
+    ObjectConstructor(Object),
 }
 
 impl fmt::Display for UnaryOp {
@@ -35,14 +27,14 @@ impl fmt::Display for UnaryOp {
             match self {
                 Minus => "-",
                 ArrayConstructor => "[",
-                ObjectConstructor => "{",
+                ObjectConstructor(_) => "{",
             }
         )
     }
 }
 
 /// Types of binary expressions.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub enum BinaryOp {
     /// Numeric addition, e.g. `x + 10`.
     Add,
@@ -105,7 +97,7 @@ pub enum BinaryOp {
     Predicate,
 
     /// Group by
-    GroupBy,
+    GroupBy(Object),
 
     /// Chained function application, e.g. `$func1 ~> $func2`.
     Apply,
@@ -144,7 +136,7 @@ impl fmt::Display for BinaryOp {
                 ContextBind => "@",
                 PositionalBind => "#",
                 Predicate => "[",
-                GroupBy => "{",
+                GroupBy(_) => "{",
                 Apply => "~>",
                 Bind => ":=",
                 SortOp => "^",
@@ -239,7 +231,6 @@ impl fmt::Display for NodeKind {
                 PartialArg => "PartialArg".to_string(),
                 Lambda => "Lambda".to_string(),
                 Block => "Block".to_string(),
-                Index => "Index".to_string(),
                 Ternary => "Ternary".to_string(),
                 Transform => "Transform".to_string(),
                 Path => "Path".to_string(),
@@ -248,12 +239,6 @@ impl fmt::Display for NodeKind {
             }
         )
     }
-}
-
-#[derive(Debug)]
-pub struct GroupBy {
-    pub position: Position,
-    pub object: Object,
 }
 
 /// A node in the parsed AST.
@@ -273,7 +258,7 @@ pub struct Node {
     pub keep_array: bool,
 
     /// An optional group by expression, represented as an object.
-    pub group_by: Option<GroupBy>,
+    pub group_by: Option<Object>,
 
     /// An optional predicate.
     pub predicate: Option<Box<Node>>,
@@ -327,11 +312,8 @@ impl Clone for Node {
         } else {
             None
         };
-        let group_by = if let Some(group_by) = &self.group_by {
-            Some(GroupBy {
-                position: group_by.position,
-                object: group_by.object.iter().cloned().collect(),
-            })
+        let group_by = if let Some(object) = &self.group_by {
+            Some(object.iter().cloned().collect())
         } else {
             None
         };

@@ -1,4 +1,5 @@
 use json::JsonValue;
+use std::collections::HashMap;
 use std::ops::{Index, RangeBounds};
 use std::slice::Iter;
 use std::vec::Drain;
@@ -20,6 +21,7 @@ pub enum Value {
         arr: Vec<Value>,
         is_seq: bool,
         keep_array: bool,
+        outer_wrapper: bool,
     },
 }
 
@@ -32,6 +34,7 @@ impl Value {
                     arr: arr.iter().map(|v| Self::new(Some(v))).collect(),
                     is_seq: false,
                     keep_array: false,
+                    outer_wrapper: false,
                 },
                 _ => Self::Raw(raw.clone()),
             },
@@ -43,16 +46,17 @@ impl Value {
             arr: vec![],
             is_seq: false,
             keep_array: false,
+            outer_wrapper: false,
         }
     }
 
     pub fn new_seq_with_capacity(capacity: usize) -> Self {
-        let mut arr: Vec<Value> = Vec::new();
-        arr.reserve(capacity);
+        let arr: Vec<Value> = Vec::with_capacity(capacity);
         Self::Array {
             arr,
             is_seq: true,
             keep_array: false,
+            outer_wrapper: false,
         }
     }
 
@@ -61,6 +65,7 @@ impl Value {
             arr: vec![],
             is_seq: true,
             keep_array: false,
+            outer_wrapper: false,
         }
     }
 
@@ -69,6 +74,30 @@ impl Value {
             arr: vec![value.clone()],
             is_seq: true,
             keep_array: false,
+            outer_wrapper: false,
+        }
+    }
+
+    pub fn wrap(value: &Value) -> Self {
+        Self::Array {
+            arr: vec![value.clone()],
+            is_seq: true,
+            keep_array: false,
+            outer_wrapper: true,
+        }
+    }
+
+    pub fn is_wrapped(&self) -> bool {
+        match self {
+            Value::Array { outer_wrapper, .. } => *outer_wrapper,
+            _ => false,
+        }
+    }
+
+    pub fn unwrap(self) -> Value {
+        match self {
+            Value::Array { mut arr, .. } => arr.swap_remove(0),
+            _ => panic!("unexpected Value type"),
         }
     }
 
@@ -110,6 +139,13 @@ impl Value {
     pub fn as_raw(&self) -> &JsonValue {
         match self {
             Value::Raw(value) => &value,
+            _ => panic!("unexpected Value type"),
+        }
+    }
+
+    pub fn into_raw(self) -> JsonValue {
+        match self {
+            Value::Raw(value) => value,
             _ => panic!("unexpected Value type"),
         }
     }
@@ -257,6 +293,19 @@ impl Value {
             _ => None,
         }
     }
+
+    pub fn as_string(&self) -> Option<String> {
+        match self {
+            Value::Raw(raw) => {
+                if raw.is_string() {
+                    Some(raw.as_str().unwrap().to_owned())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
 }
 
 impl Index<usize> for Value {
@@ -285,6 +334,7 @@ impl From<JsonValue> for Value {
                 arr: arr.iter().map(|v| Self::new(Some(v))).collect(),
                 is_seq: false,
                 keep_array: false,
+                outer_wrapper: false,
             },
             _ => Self::Raw(raw.clone()),
         }
@@ -298,6 +348,7 @@ impl From<&JsonValue> for Value {
                 arr: arr.iter().map(|v| Self::new(Some(v))).collect(),
                 is_seq: false,
                 keep_array: false,
+                outer_wrapper: false,
             },
             _ => Self::Raw(raw.clone()),
         }
@@ -313,6 +364,7 @@ impl From<Option<JsonValue>> for Value {
                     arr: arr.iter().map(|v| Self::new(Some(v))).collect(),
                     is_seq: false,
                     keep_array: false,
+                    outer_wrapper: false,
                 },
                 _ => Self::Raw(raw.clone()),
             },
@@ -329,6 +381,7 @@ impl From<Option<&JsonValue>> for Value {
                     arr: arr.iter().map(|v| Self::new(Some(v))).collect(),
                     is_seq: false,
                     keep_array: false,
+                    outer_wrapper: false,
                 },
                 _ => Self::Raw(raw.clone()),
             },
@@ -390,13 +443,25 @@ pub fn evaluate(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<
         result = evaluate_filter(predicate, &result, frame)?;
     }
 
-    // TODO: grouping (jsonata.js:127)
+    match &node.group_by {
+        Some(object) if !node.is_path() => {
+            result = evaluate_group_expression(node, object, &result, frame)?;
+        }
+        _ => {}
+    }
 
     if result.is_seq() {
+        if node.keep_array {
+            result.set_keep_array();
+        }
         if result.len() == 0 {
             Ok(Value::Undefined)
         } else if result.len() == 1 {
-            Ok(result.as_array_mut().swap_remove(0))
+            if result.keep_array() {
+                Ok(result)
+            } else {
+                Ok(result.as_array_mut().swap_remove(0))
+            }
         } else {
             Ok(result)
         }
@@ -444,7 +509,9 @@ fn evaluate_unary_op(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaRe
                 }
                 Ok(result)
             }
-            UnaryOp::ObjectConstructor => evaluate_group_expression(node, input, frame),
+            UnaryOp::ObjectConstructor(object) => {
+                evaluate_group_expression(node, object, input, frame)
+            }
         }
     } else {
         panic!("`node` should be a NodeKind::Unary");
@@ -452,11 +519,61 @@ fn evaluate_unary_op(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaRe
 }
 
 fn evaluate_group_expression(
-    _node: &Node,
-    _input: &Value,
-    _frame: &mut Frame,
+    node: &Node,
+    object: &Object,
+    input: &Value,
+    frame: &mut Frame,
 ) -> JsonAtaResult<Value> {
-    unimplemented!("Object constructors not yet supported");
+    // TODO: This code is horrible
+
+    let input = if input.is_array() {
+        input.clone()
+    } else {
+        Value::new_seq_from(input)
+    };
+
+    let mut groups: HashMap<String, (Value, usize)> = HashMap::new();
+
+    for input in input.iter() {
+        for (i, (k, _)) in object.iter().enumerate() {
+            let key = evaluate(k, input, frame)?.as_string();
+
+            if key.is_none() {
+                return Err(box T1003 {
+                    position: node.position,
+                    value: k.to_string(),
+                });
+            }
+
+            let key = key.unwrap();
+
+            if groups.contains_key(&key) {
+                if groups[&key].1 != i {
+                    return Err(box D1009 {
+                        position: node.position,
+                        value: k.to_string(),
+                    });
+                }
+
+                groups.insert(
+                    key.clone(),
+                    (append(groups[&key].0.clone(), input.clone()), i),
+                );
+            } else {
+                groups.insert(key, (input.clone(), i));
+            }
+        }
+    }
+
+    let mut result = JsonValue::Object(json::object::Object::new());
+    for key in groups.keys() {
+        let value = evaluate(&object[groups[key].1].1, &groups[key].0, frame)?;
+        if !value.is_undef() {
+            result.insert(key, value.into_raw()).unwrap();
+        }
+    }
+
+    Ok(Value::Raw(result))
 }
 
 fn evaluate_binary_op(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
@@ -645,6 +762,10 @@ fn evaluate_equality_expression(
     let lhs = evaluate(&node.children[0], input, frame)?;
     let rhs = evaluate(&node.children[1], input, frame)?;
 
+    if lhs.is_undef() || rhs.is_undef() {
+        return Ok(Value::Raw(false.into()));
+    }
+
     let result = match op {
         BinaryOp::Equal => lhs == rhs,
         BinaryOp::NotEqual => lhs != rhs,
@@ -717,13 +838,11 @@ fn evaluate_range_expression(
 }
 
 fn evaluate_path(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
-    let mut input = if input.is_array() {
+    let mut input = if input.is_array() && !matches!(&node.children[0].kind, NodeKind::Var(_)) {
         input.clone()
     } else {
         Value::new_seq_from(input)
     };
-
-    // TODO: Tuple, singleton array, group expressions (jsonata.js:164)
 
     let mut result = Value::Undefined;
 
@@ -741,6 +860,15 @@ fn evaluate_path(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult
                 input = result.clone();
             }
         }
+    }
+
+    // TODO: Tuple, singleton array (jsonata.js:164)
+
+    match &node.group_by {
+        Some(object) if !node.is_path() => {
+            result = evaluate_group_expression(node, object, &result, frame)?;
+        }
+        _ => {}
     }
 
     Ok(result)
@@ -830,18 +958,20 @@ fn evaluate_ternary(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaRes
 }
 
 fn evaluate_variable(name: &str, input: &Value, frame: &Frame) -> JsonAtaResult<Value> {
-    let result = if name == "" {
+    if name == "" {
         // Empty variable name returns the context value
-        Ok(input.clone())
+        if input.is_wrapped() {
+            Ok(input.clone().unwrap())
+        } else {
+            Ok(input.clone())
+        }
     } else {
         if let Some(binding) = frame.lookup(name) {
             Ok(binding.as_var().clone())
         } else {
             Ok(Value::Undefined)
         }
-    };
-
-    result
+    }
 }
 
 fn evaluate_filter(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
@@ -859,12 +989,15 @@ fn evaluate_filter(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResu
         } else {
             num.floor() as usize
         };
+
         if index < input.len() {
             let item = &input[index as usize];
-            if item.is_array() {
-                results = item.clone();
-            } else {
-                results.push(item.clone());
+            if !item.is_undef() {
+                if item.is_array() {
+                    results = item.clone();
+                } else {
+                    results.push(item.clone());
+                }
             }
         }
     } else {
