@@ -2,8 +2,8 @@ use crate::error::*;
 use crate::JsonAtaResult;
 
 use super::ast::*;
+use super::parser::Parser;
 use super::tokenizer::{Token, TokenKind};
-use super::Parser;
 
 /// Represents a symbol, which is essentially an enhanced token that performs its own parsing and
 /// creates syntax trees.
