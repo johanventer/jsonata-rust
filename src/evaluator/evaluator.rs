@@ -387,8 +387,17 @@ fn evaluate_string_concat(node: &Node, input: &Value, frame: &mut Frame) -> Json
     let lhs = evaluate(&node.children[0], input, frame)?;
     let rhs = evaluate(&node.children[1], input, frame)?;
 
-    let mut lstr = string(lhs).unwrap();
-    let rstr = string(rhs).unwrap();
+    let mut lstr = if lhs.is_undef() {
+        "".to_owned()
+    } else {
+        string(lhs).unwrap()
+    };
+
+    let rstr = if rhs.is_undef() {
+        "".to_owned()
+    } else {
+        string(rhs).unwrap()
+    };
 
     lstr.push_str(&rstr);
 
