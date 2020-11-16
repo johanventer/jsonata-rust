@@ -82,6 +82,12 @@ impl Parser {
 pub fn parse(source: &str) -> JsonAtaResult<Node> {
     let mut parser = Parser::new(source)?;
     let ast = parser.expression(0)?;
+    if !matches!(parser.token().kind, TokenKind::End) {
+        return Err(box S0201 {
+            position: parser.token().position,
+            value: parser.token().to_string(),
+        });
+    }
     Ok(process_ast(&ast)?)
 }
 

@@ -253,8 +253,6 @@ impl Tokenizer {
 
                     let token = &self.chars[number_start..self.position.source_pos];
 
-                    //eprintln!("{:?}", token);
-
                     let number = String::from_iter(token);
                     if let Ok(number) = number.parse::<f64>() {
                         break self.emit(Num(number));

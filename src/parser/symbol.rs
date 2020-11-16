@@ -66,8 +66,6 @@ impl Symbol for Token {
         type T = TokenKind;
         type N = NodeKind;
 
-        eprintln!("nud: {:#?}", self);
-
         let p = self.position;
 
         match &self.kind {
@@ -172,8 +170,6 @@ impl Symbol for Token {
     fn led(&self, parser: &mut Parser, mut left: Node) -> JsonAtaResult<Node> {
         type T = TokenKind;
         type N = NodeKind;
-
-        eprintln!("led: {:#?}", self);
 
         let p = self.position;
 

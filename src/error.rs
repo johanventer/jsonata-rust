@@ -22,7 +22,6 @@ pub trait JsonAtaError: std::fmt::Display + std::fmt::Debug + std::error::Error 
 
 macro_rules! define_error {
     ($name:ident, $template:literal, $( $arg:ident ),*) => {
-        #[derive(Debug)]
         pub struct $name {
             pub position: Position,
             $( pub $arg: String, )*
@@ -37,6 +36,12 @@ macro_rules! define_error {
         impl Error for $name {}
 
         impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, concat!("Error @ character {}: {} - ", $template), self.position.source_pos, self.code(), $( self.$arg, )*)
+            }
+        }
+
+        impl std::fmt::Debug for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 write!(f, concat!("Error @ character {}: {} - ", $template), self.position.source_pos, self.code(), $( self.$arg, )*)
             }
@@ -76,6 +81,7 @@ define_error!(
 define_error!(S0106, "Comment has no closing tag");
 
 // "S0201": "Syntax error: {{token}}",
+define_error!(S0201, "Syntax error: `{}`", value);
 define_error!(S0202, "Expected `{}`, got `{}`", expected, actual);
 define_error!(S0203, "Expected `{}` before end of expression", expected);
 //define_error!(S0204, "Unknown operator: `{}`", token);
