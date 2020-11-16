@@ -257,11 +257,15 @@ pub struct Node {
     /// Indicates that this node should not be flattened.
     pub keep_array: bool,
 
+    pub keep_singleton_array: bool,
+
+    pub cons_array: bool,
+
     /// An optional group by expression, represented as an object.
     pub group_by: Option<Object>,
 
-    /// An optional predicate.
-    pub predicate: Option<Box<Node>>,
+    /// An optional list of predicates.
+    pub predicates: Option<Vec<Node>>,
 
     /// An optional list of evaluation stages, for example this specifies the filtering and
     /// indexing for various expressions.
@@ -290,8 +294,10 @@ impl Node {
             position,
             children,
             keep_array: false,
+            keep_singleton_array: false,
+            cons_array: false,
             group_by: None,
-            predicate: None,
+            predicates: None,
             stages: None,
             // focus: None,
             // index: None,
@@ -317,15 +323,22 @@ impl Clone for Node {
         } else {
             None
         };
+        let predicates = if let Some(predicates) = &self.predicates {
+            Some(predicates.iter().cloned().collect())
+        } else {
+            None
+        };
 
         Self {
             kind: self.kind.clone(),
             position: self.position,
             children,
-            predicate: self.predicate.clone(),
+            predicates,
             stages,
             group_by,
             keep_array: self.keep_array,
+            keep_singleton_array: self.keep_singleton_array,
+            cons_array: self.cons_array,
         }
     }
 }

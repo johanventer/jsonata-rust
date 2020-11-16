@@ -36,8 +36,10 @@ pub fn evaluate(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<
         _ => unimplemented!("TODO: node kind not yet supported: {}", node.kind),
     };
 
-    if let Some(ref predicate) = node.predicate {
-        result = evaluate_filter(predicate, &result, frame)?;
+    if let Some(ref predicates) = node.predicates {
+        for predicate in predicates {
+            result = evaluate_filter(predicate, &result, frame)?;
+        }
     }
 
     match &node.group_by {
@@ -49,12 +51,12 @@ pub fn evaluate(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<
 
     if result.is_seq() {
         if node.keep_array {
-            result.set_keep_array();
+            result.set_keep_singleton();
         }
         if result.len() == 0 {
             Ok(Value::Undefined)
         } else if result.len() == 1 {
-            if result.keep_array() {
+            if result.keep_singleton() {
                 Ok(result)
             } else {
                 Ok(result.as_array_mut().swap_remove(0))
@@ -101,8 +103,8 @@ fn evaluate_unary_op(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaRe
                         }
                     }
                 }
-                if node.keep_array {
-                    result.set_keep_array();
+                if node.cons_array {
+                    result.set_cons_array();
                 }
                 Ok(result)
             }
@@ -165,6 +167,7 @@ fn evaluate_group_expression(
     let mut result = JsonValue::Object(json::object::Object::new());
     for key in groups.keys() {
         let value = evaluate(&object[groups[key].1].1, &groups[key].0, frame)?;
+        eprintln!("VALUE: {:#?}", value);
         if !value.is_undef() {
             result.insert(key, value.into_raw()).unwrap();
         }
@@ -444,7 +447,12 @@ fn evaluate_path(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult
     let mut result = Value::Undefined;
 
     for (step_index, step) in node.children.iter().enumerate() {
-        result = evaluate_step(step, &input, frame, step_index == node.children.len() - 1)?;
+        // If the first step is an explicit array constructor, just evaluate it
+        if step_index == 0 && step.cons_array {
+            result = evaluate(step, &input, frame)?;
+        } else {
+            result = evaluate_step(step, &input, frame, step_index == node.children.len() - 1)?;
+        }
 
         match result {
             Value::Undefined => break,
@@ -457,6 +465,13 @@ fn evaluate_path(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult
                 input = result.clone();
             }
         }
+    }
+
+    if node.keep_singleton_array {
+        if !result.is_seq() {
+            result = Value::new_seq_from(&result);
+        }
+        result.set_keep_singleton();
     }
 
     // TODO: Tuple, singleton array (jsonata.js:164)
@@ -506,7 +521,7 @@ fn evaluate_step(
         // Flatten the result
         let mut flattened = Value::new_seq();
         result.iter().cloned().for_each(|v| {
-            if !v.is_array() || v.keep_array() {
+            if !v.is_array() || v.cons_array() {
                 flattened.push(v.clone())
             } else {
                 v.iter().cloned().for_each(|v| flattened.push(v.clone()))

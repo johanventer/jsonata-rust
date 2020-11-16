@@ -11,6 +11,8 @@ pub enum Value {
         arr: Vec<Value>,
         is_seq: bool,
         keep_array: bool,
+        keep_singleton: bool,
+        cons_array: bool,
         outer_wrapper: bool,
     },
 }
@@ -24,6 +26,8 @@ impl Value {
                     arr: arr.iter().map(|v| Self::new(Some(v))).collect(),
                     is_seq: false,
                     keep_array: false,
+                    keep_singleton: false,
+                    cons_array: false,
                     outer_wrapper: false,
                 },
                 _ => Self::Raw(raw.clone()),
@@ -36,6 +40,8 @@ impl Value {
             arr: vec![],
             is_seq: false,
             keep_array: false,
+            keep_singleton: false,
+            cons_array: false,
             outer_wrapper: false,
         }
     }
@@ -46,6 +52,8 @@ impl Value {
             arr,
             is_seq: true,
             keep_array: false,
+            keep_singleton: false,
+            cons_array: false,
             outer_wrapper: false,
         }
     }
@@ -55,6 +63,8 @@ impl Value {
             arr: vec![],
             is_seq: true,
             keep_array: false,
+            keep_singleton: false,
+            cons_array: false,
             outer_wrapper: false,
         }
     }
@@ -64,6 +74,8 @@ impl Value {
             arr: vec![value.clone()],
             is_seq: true,
             keep_array: false,
+            keep_singleton: false,
+            cons_array: false,
             outer_wrapper: false,
         }
     }
@@ -73,6 +85,8 @@ impl Value {
             arr: vec![value.clone()],
             is_seq: true,
             keep_array: false,
+            keep_singleton: false,
+            cons_array: false,
             outer_wrapper: true,
         }
     }
@@ -136,6 +150,7 @@ impl Value {
     pub fn into_raw(self) -> JsonValue {
         match self {
             Value::Raw(value) => value,
+            Value::Array { .. } => self.to_json().unwrap(),
             _ => panic!("unexpected Value type"),
         }
     }
@@ -164,6 +179,34 @@ impl Value {
     pub fn set_keep_array(&mut self) {
         match self {
             Value::Array { keep_array, .. } => *keep_array = true,
+            _ => panic!("unexpected Value type"),
+        }
+    }
+
+    pub fn keep_singleton(&self) -> bool {
+        match self {
+            Value::Array { keep_singleton, .. } => *keep_singleton,
+            _ => false,
+        }
+    }
+
+    pub fn set_keep_singleton(&mut self) {
+        match self {
+            Value::Array { keep_singleton, .. } => *keep_singleton = true,
+            _ => panic!("unexpected Value type"),
+        }
+    }
+
+    pub fn cons_array(&self) -> bool {
+        match self {
+            Value::Array { cons_array, .. } => *cons_array,
+            _ => false,
+        }
+    }
+
+    pub fn set_cons_array(&mut self) {
+        match self {
+            Value::Array { cons_array, .. } => *cons_array = true,
             _ => panic!("unexpected Value type"),
         }
     }
@@ -324,6 +367,8 @@ impl From<JsonValue> for Value {
                 arr: arr.iter().map(|v| Self::new(Some(v))).collect(),
                 is_seq: false,
                 keep_array: false,
+                keep_singleton: false,
+                cons_array: false,
                 outer_wrapper: false,
             },
             _ => Self::Raw(raw.clone()),
@@ -338,6 +383,8 @@ impl From<&JsonValue> for Value {
                 arr: arr.iter().map(|v| Self::new(Some(v))).collect(),
                 is_seq: false,
                 keep_array: false,
+                keep_singleton: false,
+                cons_array: false,
                 outer_wrapper: false,
             },
             _ => Self::Raw(raw.clone()),
@@ -354,6 +401,8 @@ impl From<Option<JsonValue>> for Value {
                     arr: arr.iter().map(|v| Self::new(Some(v))).collect(),
                     is_seq: false,
                     keep_array: false,
+                    keep_singleton: false,
+                    cons_array: false,
                     outer_wrapper: false,
                 },
                 _ => Self::Raw(raw.clone()),
@@ -371,6 +420,8 @@ impl From<Option<&JsonValue>> for Value {
                     arr: arr.iter().map(|v| Self::new(Some(v))).collect(),
                     is_seq: false,
                     keep_array: false,
+                    keep_singleton: false,
+                    cons_array: false,
                     outer_wrapper: false,
                 },
                 _ => Self::Raw(raw.clone()),

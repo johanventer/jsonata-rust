@@ -4,12 +4,7 @@ use crate::JsonAtaResult;
 
 pub fn process_ast(node: &Node) -> JsonAtaResult<Node> {
     let mut result = match &node.kind {
-        // Name nodes are wrapped in Path nodes
-        NodeKind::Name(..) => Ok(Node::new_with_child(
-            NodeKind::Path,
-            node.position,
-            node.clone(),
-        )),
+        NodeKind::Name(..) => process_name(node),
         NodeKind::Unary(ref op) => process_unary_node(node, op),
         NodeKind::Binary(ref op) => process_binary_node(node, op),
         NodeKind::Block => process_block_node(node),
@@ -27,6 +22,15 @@ pub fn process_ast(node: &Node) -> JsonAtaResult<Node> {
         result.keep_array = true;
     }
 
+    Ok(result)
+}
+
+fn process_name(node: &Node) -> JsonAtaResult<Node> {
+    let mut result = Node::new_with_child(NodeKind::Path, node.position, node.clone());
+
+    if node.keep_array {
+        result.keep_singleton_array = true;
+    }
     Ok(result)
 }
 
@@ -101,15 +105,15 @@ fn process_path(node: &Node) -> JsonAtaResult<Node> {
     if rhs.is_path() {
         result.children.append(&mut rhs.children);
     } else {
-        if rhs.predicate.is_some() {
-            rhs.stages = Some(vec![*rhs.predicate.unwrap()]);
-            rhs.predicate = None;
+        if rhs.predicates.is_some() {
+            rhs.stages = rhs.predicates;
+            rhs.predicates = None;
         }
         result.children.push(rhs);
     }
 
     let last_index = result.children.len() - 1;
-    let mut keep_array = false;
+    let mut keep_singleton_array = false;
 
     for (step_index, step) in result.children.iter_mut().enumerate() {
         match step.kind {
@@ -126,19 +130,19 @@ fn process_path(node: &Node) -> JsonAtaResult<Node> {
             }
             // If first or last step is an array constructor, it shouldn't be flattened
             NodeKind::Unary(ref op) => {
-                if let UnaryOp::ArrayConstructor = op {
-                    if step_index == 0 || step_index == last_index {
-                        step.keep_array = true;
-                    }
+                if matches!(op, UnaryOp::ArrayConstructor)
+                    && (step_index == 0 || step_index == last_index)
+                {
+                    step.cons_array = true;
                 }
             }
             _ => (),
         }
 
-        keep_array = keep_array || step.keep_array;
+        keep_singleton_array = keep_singleton_array || step.keep_array;
     }
 
-    result.keep_array = keep_array;
+    result.keep_singleton_array = keep_singleton_array;
 
     Ok(result)
 }
@@ -174,7 +178,13 @@ fn process_predicate(node: &Node) -> JsonAtaResult<Node> {
             }
         }
     } else {
-        step.predicate = Some(box predicate);
+        if step.predicates.is_none() {
+            step.predicates = Some(vec![predicate]);
+        } else {
+            if let Some(ref mut predicates) = step.predicates {
+                predicates.push(predicate);
+            }
+        }
     }
 
     Ok(result)
@@ -240,19 +250,27 @@ fn process_positional_bind(node: &Node) -> JsonAtaResult<Node> {
 }
 
 fn process_block_node(node: &Node) -> JsonAtaResult<Node> {
+    let mut cons_array = false;
     let children = node
         .children
         .iter()
         .map(|child| {
-            process_ast(child)
+            let child = process_ast(child);
 
-            // TODO: consarray (parser.js:1267)
+            if let Ok(ref child) = child {
+                if child.cons_array
+                    || (matches!(child.kind, NodeKind::Path) && child.children[0].cons_array)
+                {
+                    cons_array = true;
+                }
+            }
+
+            child
         })
         .collect::<JsonAtaResult<Vec<Node>>>()?;
 
-    Ok(Node::new_with_children(
-        NodeKind::Block,
-        node.position,
-        children,
-    ))
+    let mut result = Node::new_with_children(NodeKind::Block, node.position, children);
+    result.cons_array = cons_array;
+
+    Ok(result)
 }
