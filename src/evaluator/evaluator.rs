@@ -167,7 +167,6 @@ fn evaluate_group_expression(
     let mut result = JsonValue::Object(json::object::Object::new());
     for key in groups.keys() {
         let value = evaluate(&object[groups[key].1].1, &groups[key].0, frame)?;
-        eprintln!("VALUE: {:#?}", value);
         if !value.is_undef() {
             result.insert(key, value.into_raw()).unwrap();
         }
@@ -494,7 +493,7 @@ fn evaluate_path(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult
     // TODO: Tuple, singleton array (jsonata.js:164)
 
     match &node.group_by {
-        Some(object) if !node.is_path() => {
+        Some(object) => {
             result = evaluate_group_expression(node, object, &result, frame)?;
         }
         _ => {}
