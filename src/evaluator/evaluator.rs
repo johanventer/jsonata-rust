@@ -82,7 +82,9 @@ fn evaluate_unary_op(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaRe
         match op {
             UnaryOp::Minus => {
                 let result = evaluate(&node.children[0], input, frame)?;
-                if let Some(num) = result.as_f64() {
+                if result.is_undef() {
+                    Ok(Value::Undefined)
+                } else if let Some(num) = result.as_f64() {
                     Ok(Value::Raw((-num).into()))
                 } else {
                     Err(Box::new(D1002 {
