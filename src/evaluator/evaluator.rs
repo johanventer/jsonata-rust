@@ -340,6 +340,10 @@ fn evaluate_includes_expression(
     let lhs = evaluate(&node.children[0], input, frame)?;
     let rhs = evaluate(&node.children[1], input, frame)?;
 
+    if lhs.is_undef() || rhs.is_undef() {
+        return Ok(Value::Raw(false.into()));
+    }
+
     if !rhs.is_array() {
         return Ok(Value::Raw((lhs.as_raw() == rhs.as_raw()).into()));
     }
