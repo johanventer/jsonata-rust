@@ -58,7 +58,18 @@ fn t(resource: &str) {
                         if case["undefinedResult"].is_boolean() && case["undefinedResult"] == true {
                             assert_eq!(None, result)
                         } else if !case["result"].is_null() {
-                            assert_eq!(case["result"], result.unwrap());
+                            // For numeric results, we can't compare directly due to floating point
+                            // error
+                            if case["result"].is_number() {
+                                assert!(
+                                    (case["result"].as_f64().unwrap()
+                                        - result.unwrap().as_f64().unwrap())
+                                    .abs()
+                                        < 1e-10
+                                );
+                            } else {
+                                assert_eq!(case["result"], result.unwrap());
+                            }
                         }
                     }
                     Err(error) => {

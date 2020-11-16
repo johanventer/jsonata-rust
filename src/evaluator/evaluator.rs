@@ -219,6 +219,10 @@ fn evaluate_numeric_expression(
     let lhs = evaluate(&node.children[0], input, frame)?;
     let rhs = evaluate(&node.children[1], input, frame)?;
 
+    if lhs.is_undef() || rhs.is_undef() {
+        return Ok(Value::Undefined);
+    }
+
     let lhs: f64 = match lhs.as_raw() {
         JsonValue::Number(value) => value.clone().into(),
         _ => {
