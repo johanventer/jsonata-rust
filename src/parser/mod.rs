@@ -26,10 +26,11 @@
 //!    precedence.
 //! 4. Productions are returned, which point to other productions forming the AST.
 
-pub mod ast;
+mod ast;
 mod parser;
 mod postprocess;
 mod symbol;
 mod tokenizer;
 
+pub use ast::{BinaryOp, Node, NodeKind, Object, UnaryOp};
 pub use parser::parse;

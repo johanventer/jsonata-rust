@@ -16,7 +16,7 @@ use std::error::Error;
 
 use crate::Position;
 
-pub trait JsonAtaError: std::fmt::Display + std::fmt::Debug {
+pub trait JsonAtaError: std::fmt::Display + std::fmt::Debug + std::error::Error {
     fn code(&self) -> &str;
 }
 
@@ -56,6 +56,8 @@ macro_rules! define_error {
         define_error!($name, $template,);
     };
 }
+
+define_error!(InvalidJson, "The input is not valid JSON: {}", json_error);
 
 define_error!(
     S0101,

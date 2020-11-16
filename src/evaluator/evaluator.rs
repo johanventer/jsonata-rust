@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::error::*;
 use crate::functions::*;
-use crate::parser::ast::*;
+use crate::parser::*;
 use crate::JsonAtaResult;
 
 use super::frame::{Binding, Frame};

@@ -1,6 +1,7 @@
-pub mod evaluate;
-pub mod frame;
-pub mod value;
+mod evaluator;
+mod frame;
+mod value;
 
-pub use evaluate::evaluate;
+pub use evaluator::evaluate;
+pub use frame::{Binding, Frame};
 pub use value::Value;
