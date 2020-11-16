@@ -416,7 +416,7 @@ fn evaluate_range_expression(
         return Ok(Value::Undefined);
     }
 
-    let lhs = match lhs.as_usize() {
+    let lhs = match lhs.as_isize() {
         Some(num) => num,
         None => {
             return Err(box T2003 {
@@ -425,7 +425,7 @@ fn evaluate_range_expression(
         }
     };
 
-    let rhs = match rhs.as_usize() {
+    let rhs = match rhs.as_isize() {
         Some(num) => num,
         None => {
             return Err(box T2004 {
@@ -446,7 +446,7 @@ fn evaluate_range_expression(
         });
     }
 
-    let mut result = Value::new_seq_with_capacity(size);
+    let mut result = Value::new_seq_with_capacity(size as usize);
     for i in lhs..rhs + 1 {
         result.push(Value::Raw(i.into()))
     }

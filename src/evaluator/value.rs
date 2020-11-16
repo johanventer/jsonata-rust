@@ -276,14 +276,14 @@ impl Value {
         }
     }
 
-    /// Returns the raw JSON value as a usize if it can be converted, and checks to ensure that it
+    /// Returns the raw JSON value as a isize if it can be converted, and checks to ensure that it
     /// is an integer (i.e. it returns None if there is any fractional part).
-    pub fn as_usize(&self) -> Option<usize> {
+    pub fn as_isize(&self) -> Option<isize> {
         match self {
             Value::Raw(raw) => match raw.as_f64() {
                 Some(num) => {
                     if num.trunc() == num {
-                        Some(num as usize)
+                        Some(num as isize)
                     } else {
                         None
                     }
