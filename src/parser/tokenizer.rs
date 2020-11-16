@@ -212,13 +212,39 @@ impl Tokenizer {
                 ['0'..='9', ..] => {
                     let number_start = self.position.source_pos;
                     self.position.advance_1();
+
                     // TODO(johan): Improve this lexing, it's pretty ordinary and allows all sorts
                     // of invalid stuff
                     loop {
                         match self.chars[self.position.source_pos..] {
                             // Range operator
                             ['.', '.', ..] => break,
-                            ['0'..='9' | '.' | 'e' | 'E' | '-' | '+', ..] => {
+                            ['e' | 'E', ..] => {
+                                self.position.advance_1();
+                                loop {
+                                    match self.chars[self.position.source_pos..] {
+                                        ['+' | '-', ..] => {
+                                            self.position.advance_1();
+                                        }
+                                        ['0'..='9', ..] => {
+                                            self.position.advance_1();
+                                        }
+                                        _ => break,
+                                    }
+                                }
+                            }
+                            ['.', ..] => {
+                                self.position.advance_1();
+                                loop {
+                                    match self.chars[self.position.source_pos..] {
+                                        ['0'..='9', ..] => {
+                                            self.position.advance_1();
+                                        }
+                                        _ => break,
+                                    }
+                                }
+                            }
+                            ['0'..='9', ..] => {
                                 self.position.advance_1();
                             }
                             _ => break,
@@ -226,6 +252,9 @@ impl Tokenizer {
                     }
 
                     let token = &self.chars[number_start..self.position.source_pos];
+
+                    //eprintln!("{:?}", token);
+
                     let number = String::from_iter(token);
                     if let Ok(number) = number.parse::<f64>() {
                         break self.emit(Num(number));
