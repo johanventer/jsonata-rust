@@ -5,7 +5,7 @@ use structopt::StructOpt;
 use jsonata::JsonAta;
 
 /// A command line JSON processor using JSONata
-#[derive(StructOpt, Debug)]
+#[derive(StructOpt)]
 #[structopt(name = "jsonata")]
 struct Opt {
     /// Parse the given expression, print the AST and exit
@@ -25,9 +25,6 @@ struct Opt {
 
     /// JSON input
     input: Option<String>,
-
-    /// JSON bindings
-    bindings: Option<String>,
 }
 
 fn main() {

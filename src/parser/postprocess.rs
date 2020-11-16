@@ -55,10 +55,16 @@ fn process_unary_node(node: &Node, op: &UnaryOp) -> JsonAtaResult<Node> {
 
 fn process_unary_minus(node: &Node) -> JsonAtaResult<Node> {
     let mut result = process_ast(&node.children[0])?;
-    if let NodeKind::Num(ref mut num) = result.kind {
+    return if let NodeKind::Num(ref mut num) = result.kind {
         *num = -*num;
-    }
-    Ok(result)
+        Ok(result)
+    } else {
+        Ok(Node::new_with_child(
+            NodeKind::Unary(UnaryOp::Minus),
+            node.position,
+            result,
+        ))
+    };
 }
 
 fn process_object_constructor(node: &Node, object: &Object) -> JsonAtaResult<Node> {
