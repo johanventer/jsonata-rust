@@ -52,6 +52,7 @@ pub fn boolean(arg: &Value) -> bool {
                 !trues.is_empty()
             }
         },
+        Value::Closure { .. } => false,
     }
 }
 

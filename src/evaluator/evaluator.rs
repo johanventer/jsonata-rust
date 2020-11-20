@@ -1,5 +1,7 @@
 use json::JsonValue;
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::error::*;
 use crate::functions::*;
@@ -9,27 +11,32 @@ use crate::JsonAtaResult;
 use super::frame::{Binding, Frame};
 pub use super::value::Value;
 
-pub fn evaluate(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
+pub fn evaluate(node: &Node, input: &Value, frame: Rc<RefCell<Frame>>) -> JsonAtaResult<Value> {
     let mut result = match &node.kind {
-        NodeKind::Path => evaluate_path(node, input, frame)?,
-        NodeKind::Binary(_) => evaluate_binary_op(node, input, frame)?,
-        NodeKind::Unary(_) => evaluate_unary_op(node, input, frame)?,
+        NodeKind::Path => evaluate_path(node, input, Rc::clone(&frame))?,
+        NodeKind::Binary(_) => evaluate_binary_op(node, input, Rc::clone(&frame))?,
+        NodeKind::Unary(_) => evaluate_unary_op(node, input, Rc::clone(&frame))?,
         NodeKind::Name(_) => evaluate_name(node, input)?,
         NodeKind::Null => Value::Raw(JsonValue::Null),
         NodeKind::Bool(value) => Value::Raw(json::from(*value)),
         NodeKind::Str(value) => Value::Raw(json::from(value.clone())),
         NodeKind::Num(value) => Value::Raw(json::from(*value)),
-        NodeKind::Ternary => evaluate_ternary(node, input, frame)?,
-        NodeKind::Block => evaluate_block(node, input, frame)?,
-        NodeKind::Var(name) => evaluate_variable(name, input, frame)?,
+        NodeKind::Ternary => evaluate_ternary(node, input, Rc::clone(&frame))?,
+        NodeKind::Block => evaluate_block(node, input, Rc::clone(&frame))?,
+        NodeKind::Var(name) => evaluate_variable(name, input, Rc::clone(&frame))?,
         NodeKind::Wildcard => evaluate_wildcard(input)?,
         NodeKind::Descendent => evaluate_descendents(input)?,
+        NodeKind::Lambda { args, body } => evaluate_lambda(args, body, input, Rc::clone(&frame))?,
+        NodeKind::Function {
+            proc,
+            args,
+            is_partial,
+        } => evaluate_function(proc, args, *is_partial, input, Rc::clone(&frame))?,
         // TODO:
         //  - Descendant
         //  - Parent
         //  - Regex
         //  - Function
-        //  - Lambda
         //  - Partial
         //  - Apply
         //  - Transform
@@ -38,13 +45,13 @@ pub fn evaluate(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<
 
     if let Some(ref predicates) = node.predicates {
         for predicate in predicates {
-            result = evaluate_filter(predicate, &result, frame)?;
+            result = evaluate_filter(predicate, &result, Rc::clone(&frame))?;
         }
     }
 
     match &node.group_by {
         Some(object) if !node.is_path() => {
-            result = evaluate_group_expression(node, object, &result, frame)?;
+            result = evaluate_group_expression(node, object, &result, Rc::clone(&frame))?;
         }
         _ => {}
     }
@@ -77,7 +84,11 @@ fn evaluate_name(node: &Node, input: &Value) -> JsonAtaResult<Value> {
     }
 }
 
-fn evaluate_unary_op(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
+fn evaluate_unary_op(
+    node: &Node,
+    input: &Value,
+    frame: Rc<RefCell<Frame>>,
+) -> JsonAtaResult<Value> {
     if let NodeKind::Unary(op) = &node.kind {
         match op {
             UnaryOp::Minus => {
@@ -96,7 +107,7 @@ fn evaluate_unary_op(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaRe
             UnaryOp::ArrayConstructor => {
                 let mut result = Value::new_array();
                 for child in &node.children {
-                    let value = evaluate(child, input, frame)?;
+                    let value = evaluate(child, input, Rc::clone(&frame))?;
                     if !value.is_undef() {
                         if let NodeKind::Unary(UnaryOp::ArrayConstructor) = child.kind {
                             result.push(value)
@@ -123,7 +134,7 @@ fn evaluate_group_expression(
     node: &Node,
     object: &Object,
     input: &Value,
-    frame: &mut Frame,
+    frame: Rc<RefCell<Frame>>,
 ) -> JsonAtaResult<Value> {
     // TODO: This code is horrible
 
@@ -137,7 +148,7 @@ fn evaluate_group_expression(
 
     for input in input.iter() {
         for (i, (k, _)) in object.iter().enumerate() {
-            let key = evaluate(k, input, frame)?.as_string();
+            let key = evaluate(k, input, Rc::clone(&frame))?.as_string();
 
             if key.is_none() {
                 return Err(box T1003 {
@@ -168,7 +179,7 @@ fn evaluate_group_expression(
 
     let mut result = JsonValue::Object(json::object::Object::new());
     for key in groups.keys() {
-        let value = evaluate(&object[groups[key].1].1, &groups[key].0, frame)?;
+        let value = evaluate(&object[groups[key].1].1, &groups[key].0, Rc::clone(&frame))?;
         if !value.is_undef() {
             result.insert(key, value.into_raw()).unwrap();
         }
@@ -177,7 +188,11 @@ fn evaluate_group_expression(
     Ok(Value::Raw(result))
 }
 
-fn evaluate_binary_op(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
+fn evaluate_binary_op(
+    node: &Node,
+    input: &Value,
+    frame: Rc<RefCell<Frame>>,
+) -> JsonAtaResult<Value> {
     use BinaryOp::*;
     if let NodeKind::Binary(op) = &node.kind {
         match op {
@@ -200,12 +215,18 @@ fn evaluate_binary_op(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaR
     }
 }
 
-fn evaluate_bind_expression(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
+fn evaluate_bind_expression(
+    node: &Node,
+    input: &Value,
+    frame: Rc<RefCell<Frame>>,
+) -> JsonAtaResult<Value> {
     let name = &node.children[0];
-    let value = evaluate(&node.children[1], input, frame)?;
+    let value = evaluate(&node.children[1], input, Rc::clone(&frame))?;
 
     if let NodeKind::Var(name) = &name.kind {
-        frame.bind(name, Binding::Var(value.clone()));
+        frame
+            .borrow_mut()
+            .bind(name, Binding::Var(Rc::new(value.clone())));
     }
 
     Ok(value)
@@ -214,11 +235,11 @@ fn evaluate_bind_expression(node: &Node, input: &Value, frame: &mut Frame) -> Js
 fn evaluate_numeric_expression(
     node: &Node,
     input: &Value,
-    frame: &mut Frame,
+    frame: Rc<RefCell<Frame>>,
     op: &BinaryOp,
 ) -> JsonAtaResult<Value> {
-    let lhs = evaluate(&node.children[0], input, frame)?;
-    let rhs = evaluate(&node.children[1], input, frame)?;
+    let lhs = evaluate(&node.children[0], input, Rc::clone(&frame))?;
+    let rhs = evaluate(&node.children[1], input, Rc::clone(&frame))?;
 
     if lhs.is_undef() || rhs.is_undef() {
         return Ok(Value::Undefined);
@@ -259,11 +280,11 @@ fn evaluate_numeric_expression(
 fn evaluate_comparison_expression(
     node: &Node,
     input: &Value,
-    frame: &mut Frame,
+    frame: Rc<RefCell<Frame>>,
     op: &BinaryOp,
 ) -> JsonAtaResult<Value> {
-    let lhs = evaluate(&node.children[0], input, frame)?;
-    let rhs = evaluate(&node.children[1], input, frame)?;
+    let lhs = evaluate(&node.children[0], input, Rc::clone(&frame))?;
+    let rhs = evaluate(&node.children[1], input, Rc::clone(&frame))?;
 
     let lhs = match lhs {
         Value::Undefined => return Ok(Value::Undefined),
@@ -319,11 +340,11 @@ fn evaluate_comparison_expression(
 fn evaluate_boolean_expression(
     node: &Node,
     input: &Value,
-    frame: &mut Frame,
+    frame: Rc<RefCell<Frame>>,
     op: &BinaryOp,
 ) -> JsonAtaResult<Value> {
-    let lhs = evaluate(&node.children[0], input, frame)?;
-    let rhs = evaluate(&node.children[1], input, frame)?;
+    let lhs = evaluate(&node.children[0], input, Rc::clone(&frame))?;
+    let rhs = evaluate(&node.children[1], input, Rc::clone(&frame))?;
 
     let left_bool = boolean(&lhs);
     let right_bool = boolean(&rhs);
@@ -340,10 +361,10 @@ fn evaluate_boolean_expression(
 fn evaluate_includes_expression(
     node: &Node,
     input: &Value,
-    frame: &mut Frame,
+    frame: Rc<RefCell<Frame>>,
 ) -> JsonAtaResult<Value> {
-    let lhs = evaluate(&node.children[0], input, frame)?;
-    let rhs = evaluate(&node.children[1], input, frame)?;
+    let lhs = evaluate(&node.children[0], input, Rc::clone(&frame))?;
+    let rhs = evaluate(&node.children[1], input, Rc::clone(&frame))?;
 
     if lhs.is_undef() || rhs.is_undef() {
         return Ok(Value::Raw(false.into()));
@@ -365,11 +386,11 @@ fn evaluate_includes_expression(
 fn evaluate_equality_expression(
     node: &Node,
     input: &Value,
-    frame: &mut Frame,
+    frame: Rc<RefCell<Frame>>,
     op: &BinaryOp,
 ) -> JsonAtaResult<Value> {
-    let lhs = evaluate(&node.children[0], input, frame)?;
-    let rhs = evaluate(&node.children[1], input, frame)?;
+    let lhs = evaluate(&node.children[0], input, Rc::clone(&frame))?;
+    let rhs = evaluate(&node.children[1], input, Rc::clone(&frame))?;
 
     if lhs.is_undef() || rhs.is_undef() {
         return Ok(Value::Raw(false.into()));
@@ -384,9 +405,13 @@ fn evaluate_equality_expression(
     Ok(Value::Raw(result.into()))
 }
 
-fn evaluate_string_concat(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
-    let lhs = evaluate(&node.children[0], input, frame)?;
-    let rhs = evaluate(&node.children[1], input, frame)?;
+fn evaluate_string_concat(
+    node: &Node,
+    input: &Value,
+    frame: Rc<RefCell<Frame>>,
+) -> JsonAtaResult<Value> {
+    let lhs = evaluate(&node.children[0], input, Rc::clone(&frame))?;
+    let rhs = evaluate(&node.children[1], input, Rc::clone(&frame))?;
 
     let mut lstr = if lhs.is_undef() {
         "".to_owned()
@@ -408,10 +433,10 @@ fn evaluate_string_concat(node: &Node, input: &Value, frame: &mut Frame) -> Json
 fn evaluate_range_expression(
     node: &Node,
     input: &Value,
-    frame: &mut Frame,
+    frame: Rc<RefCell<Frame>>,
 ) -> JsonAtaResult<Value> {
-    let lhs = evaluate(&node.children[0], input, frame)?;
-    let rhs = evaluate(&node.children[1], input, frame)?;
+    let lhs = evaluate(&node.children[0], input, Rc::clone(&frame))?;
+    let rhs = evaluate(&node.children[1], input, Rc::clone(&frame))?;
 
     if lhs.is_undef() || rhs.is_undef() {
         return Ok(Value::Undefined);
@@ -455,7 +480,7 @@ fn evaluate_range_expression(
     Ok(result)
 }
 
-fn evaluate_path(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
+fn evaluate_path(node: &Node, input: &Value, frame: Rc<RefCell<Frame>>) -> JsonAtaResult<Value> {
     let mut input = if input.is_array() && !matches!(&node.children[0].kind, NodeKind::Var(_)) {
         input.clone()
     } else {
@@ -467,14 +492,18 @@ fn evaluate_path(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult
     for (step_index, step) in node.children.iter().enumerate() {
         // If the first step is an explicit array constructor, just evaluate it
         if step_index == 0 && step.cons_array {
-            result = evaluate(step, &input, frame)?;
+            result = evaluate(step, &input, Rc::clone(&frame))?;
         } else {
-            result = evaluate_step(step, &input, frame, step_index == node.children.len() - 1)?;
+            result = evaluate_step(
+                step,
+                &input,
+                Rc::clone(&frame),
+                step_index == node.children.len() - 1,
+            )?;
         }
 
         match result {
             Value::Undefined => break,
-            Value::Raw(..) => panic!("unexpected Value::Raw"),
             Value::Array { .. } => {
                 if result.is_empty() {
                     break;
@@ -482,6 +511,7 @@ fn evaluate_path(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult
 
                 input = result.clone();
             }
+            _ => panic!("unexpected Value::Raw"),
         }
     }
 
@@ -496,7 +526,7 @@ fn evaluate_path(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult
 
     match &node.group_by {
         Some(object) => {
-            result = evaluate_group_expression(node, object, &result, frame)?;
+            result = evaluate_group_expression(node, object, &result, Rc::clone(&frame))?;
         }
         _ => {}
     }
@@ -507,7 +537,7 @@ fn evaluate_path(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult
 fn evaluate_step(
     node: &Node,
     input: &Value,
-    frame: &mut Frame,
+    frame: Rc<RefCell<Frame>>,
     last_step: bool,
 ) -> JsonAtaResult<Value> {
     let mut result = Value::new_seq();
@@ -520,11 +550,11 @@ fn evaluate_step(
     // }
 
     for input in input.iter() {
-        let mut res = evaluate(node, input, frame)?;
+        let mut res = evaluate(node, input, Rc::clone(&frame))?;
 
         if let Some(ref stages) = node.stages {
             for stage in stages {
-                res = evaluate_filter(stage, &res, frame)?;
+                res = evaluate_filter(stage, &res, Rc::clone(&frame))?;
             }
         }
 
@@ -549,21 +579,21 @@ fn evaluate_step(
     }
 }
 
-// fn evaluate_sort_expression(node: &Node, input: &Value, frame: &mut Frame) {
+// fn evaluate_sort_expression(node: &Node, input: &Value, frame: Rc<RefCell<Frame>>) {
 
 // }
 
-// fn evaluate_stages(stages: Option<&Vec<Node>>, input: &Value, frame: &mut Frame) {
+// fn evaluate_stages(stages: Option<&Vec<Node>>, input: &Value, frame: Rc<RefCell<Frame>>) {
 
 // }
 
-fn evaluate_block(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
+fn evaluate_block(node: &Node, input: &Value, frame: Rc<RefCell<Frame>>) -> JsonAtaResult<Value> {
     if let NodeKind::Block = &node.kind {
-        let mut frame = Frame::new_with_parent(frame);
+        let frame = Rc::new(RefCell::new(Frame::new_with_parent(frame)));
         let mut result = Value::Undefined;
 
         for child in &node.children {
-            result = evaluate(child, input, &mut frame)?;
+            result = evaluate(child, input, Rc::clone(&frame))?;
         }
 
         Ok(result)
@@ -572,13 +602,13 @@ fn evaluate_block(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResul
     }
 }
 
-fn evaluate_ternary(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
+fn evaluate_ternary(node: &Node, input: &Value, frame: Rc<RefCell<Frame>>) -> JsonAtaResult<Value> {
     if let NodeKind::Ternary = &node.kind {
-        let condition = evaluate(&node.children[0], input, frame)?;
+        let condition = evaluate(&node.children[0], input, Rc::clone(&frame))?;
         if boolean(&condition) {
-            evaluate(&node.children[1], input, frame)
+            evaluate(&node.children[1], input, Rc::clone(&frame))
         } else if node.children.len() > 2 {
-            evaluate(&node.children[2], input, frame)
+            evaluate(&node.children[2], input, Rc::clone(&frame))
         } else {
             Ok(Value::Undefined)
         }
@@ -587,7 +617,7 @@ fn evaluate_ternary(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaRes
     }
 }
 
-fn evaluate_variable(name: &str, input: &Value, frame: &Frame) -> JsonAtaResult<Value> {
+fn evaluate_variable(name: &str, input: &Value, frame: Rc<RefCell<Frame>>) -> JsonAtaResult<Value> {
     if name == "" {
         // Empty variable name returns the context value
         if input.is_wrapped() {
@@ -596,7 +626,7 @@ fn evaluate_variable(name: &str, input: &Value, frame: &Frame) -> JsonAtaResult<
             Ok(input.clone())
         }
     } else {
-        if let Some(binding) = frame.lookup(name) {
+        if let Some(binding) = frame.borrow().lookup(name) {
             Ok(binding.as_var().clone())
         } else {
             Ok(Value::Undefined)
@@ -604,7 +634,7 @@ fn evaluate_variable(name: &str, input: &Value, frame: &Frame) -> JsonAtaResult<
     }
 }
 
-fn evaluate_filter(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResult<Value> {
+fn evaluate_filter(node: &Node, input: &Value, frame: Rc<RefCell<Frame>>) -> JsonAtaResult<Value> {
     let mut results = Value::new_seq();
 
     let input = if input.is_array() {
@@ -632,7 +662,7 @@ fn evaluate_filter(node: &Node, input: &Value, frame: &mut Frame) -> JsonAtaResu
         }
     } else {
         for (index, item) in input.iter().enumerate() {
-            let res = evaluate(node, item, frame)?;
+            let res = evaluate(node, item, Rc::clone(&frame))?;
 
             let indices = if let Some(num) = res.as_f64() {
                 vec![num]
@@ -717,4 +747,63 @@ fn evaluate_descendents(input: &Value) -> JsonAtaResult<Value> {
     }
 
     Ok(result)
+}
+
+fn evaluate_lambda(
+    args: &Vec<Node>,
+    body: &Node,
+    input: &Value,
+    frame: Rc<RefCell<Frame>>,
+) -> JsonAtaResult<Value> {
+    Ok(Value::Closure {
+        input: Rc::new(input.clone()),
+        frame: Rc::new(RefCell::new(Frame::new())), // TODO: THIS IS WRONG, BUT PASSING FRAME RESULTS IN AN ENDLESS LOOP OF REFERENCES
+        args: args.iter().cloned().collect(),
+        body: Rc::new(body.clone()),
+    })
+}
+
+fn evaluate_function(
+    proc: &Node,
+    args: &Vec<Node>,
+    is_partial: bool,
+    input: &Value,
+    frame: Rc<RefCell<Frame>>,
+) -> JsonAtaResult<Value> {
+    let proc = evaluate(proc, input, Rc::clone(&frame))?;
+
+    let arg_values = args
+        .iter()
+        .map(|arg| evaluate(&arg, &input, Rc::clone(&frame)))
+        .collect::<JsonAtaResult<Vec<Value>>>()?;
+
+    if let Value::Closure {
+        input,
+        args,
+        body,
+        frame,
+    } = proc
+    {
+        if arg_values.len() != args.len() {
+            panic!("Different number of args and arg values");
+        }
+
+        let frame = Rc::new(RefCell::new(Frame::new_with_parent(Rc::clone(&frame))));
+
+        for i in 0..args.len() {
+            let arg = &args[i];
+            let value = &arg_values[i];
+            if let NodeKind::Var(name) = &arg.kind {
+                frame
+                    .borrow_mut()
+                    .bind(&name, Binding::Var(Rc::new(value.clone())));
+            } else {
+                panic!("Argument was not a NodeKind::Var!")
+            }
+        }
+
+        evaluate(&body, &input, frame)
+    } else {
+        panic!("TODO:  Only lambda's are supported right now")
+    }
 }

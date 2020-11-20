@@ -256,14 +256,26 @@ impl Symbol for Token {
                     parser.expect(T::LeftBrace, false)?;
 
                     // Body of the lambda function
-                    arguments.push(parser.expression(0)?);
+                    let body = box parser.expression(0)?;
 
-                    func = Node::new_with_children(N::Lambda, p, arguments);
+                    func = Node::new(
+                        N::Lambda {
+                            args: arguments,
+                            body,
+                        },
+                        p,
+                    );
 
                     parser.expect(T::RightBrace, false)?;
                 } else {
-                    arguments.push(left);
-                    func = Node::new_with_children(N::Function(is_partial), p, arguments);
+                    func = Node::new(
+                        N::Function {
+                            proc: box left,
+                            args: arguments,
+                            is_partial,
+                        },
+                        p,
+                    );
                 }
 
                 Ok(func)

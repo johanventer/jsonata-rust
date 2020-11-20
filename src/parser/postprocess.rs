@@ -5,13 +5,13 @@ use crate::JsonAtaResult;
 pub fn process_ast(node: &Node) -> JsonAtaResult<Node> {
     let mut result = match &node.kind {
         NodeKind::Name(..) => process_name(node),
-        NodeKind::Unary(ref op) => process_unary_node(node, op),
-        NodeKind::Binary(ref op) => process_binary_node(node, op),
-        NodeKind::Block => process_block_node(node),
+        NodeKind::Unary(ref op) => process_unary(node, op),
+        NodeKind::Binary(ref op) => process_binary(node, op),
+        NodeKind::Block => process_block(node),
+        NodeKind::Lambda { args, body } => process_lambda(node, args, body),
         // TODO:
         //  - Function
         //  - Partial
-        //  - Lambda
         //  - Ternary
         //  - Transform
         //  - Parent
@@ -45,7 +45,7 @@ fn process_children(node: &Node) -> JsonAtaResult<Node> {
     ))
 }
 
-fn process_unary_node(node: &Node, op: &UnaryOp) -> JsonAtaResult<Node> {
+fn process_unary(node: &Node, op: &UnaryOp) -> JsonAtaResult<Node> {
     Ok(match op {
         UnaryOp::Minus => process_unary_minus(node)?,
         UnaryOp::ArrayConstructor => process_children(node)?,
@@ -78,7 +78,7 @@ fn process_object_constructor(node: &Node, object: &Object) -> JsonAtaResult<Nod
     ))
 }
 
-fn process_binary_node(node: &Node, op: &BinaryOp) -> JsonAtaResult<Node> {
+fn process_binary(node: &Node, op: &BinaryOp) -> JsonAtaResult<Node> {
     match op {
         BinaryOp::PathOp => process_path(node),
         BinaryOp::Predicate => process_predicate(node),
@@ -255,7 +255,7 @@ fn process_positional_bind(node: &Node) -> JsonAtaResult<Node> {
     Ok(node.clone())
 }
 
-fn process_block_node(node: &Node) -> JsonAtaResult<Node> {
+fn process_block(node: &Node) -> JsonAtaResult<Node> {
     let mut cons_array = false;
     let children = node
         .children
@@ -279,4 +279,14 @@ fn process_block_node(node: &Node) -> JsonAtaResult<Node> {
     result.cons_array = cons_array;
 
     Ok(result)
+}
+
+fn process_lambda(node: &Node, args: &Vec<Node>, body: &Node) -> JsonAtaResult<Node> {
+    Ok(Node::new(
+        NodeKind::Lambda {
+            args: args.iter().cloned().collect(),
+            body: box process_ast(body)?,
+        },
+        node.position,
+    ))
 }

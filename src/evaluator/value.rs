@@ -1,7 +1,12 @@
 use json::JsonValue;
+use std::cell::RefCell;
 use std::ops::{Index, RangeBounds};
+use std::rc::Rc;
 use std::slice::Iter;
 use std::vec::Drain;
+
+use super::Frame;
+use crate::parser::Node;
 
 #[derive(Clone, Debug)]
 pub enum Value {
@@ -14,6 +19,12 @@ pub enum Value {
         keep_singleton: bool,
         cons_array: bool,
         outer_wrapper: bool,
+    },
+    Closure {
+        input: Rc<Value>,
+        frame: Rc<RefCell<Frame>>,
+        args: Vec<Node>,
+        body: Rc<Node>,
     },
 }
 
@@ -273,6 +284,7 @@ impl Value {
                     .map(|v| v.to_json().unwrap())
                     .collect(),
             )),
+            _ => None,
         }
     }
 

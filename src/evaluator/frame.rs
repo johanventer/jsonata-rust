@@ -1,12 +1,14 @@
 // use chrono::{DateTime, Utc};
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use super::Value;
 
 /// A binding in a stack frame
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Binding {
-    Var(Value),
+    Var(Rc<Value>),
     // Function(&'a dyn Fn(Vec<&JsonValue>) -> JsonValue, &'a str),
 }
 
@@ -27,19 +29,19 @@ impl Binding {
 }
 
 /// A stack frame of the expression evaluation
-#[derive(Debug)]
-pub struct Frame<'a> {
+#[derive(Debug, Clone)]
+pub struct Frame {
     /// Stores the bindings for the frame
     bindings: HashMap<String, Binding>,
 
     /// The parent frame of this frame
-    parent_frame: Option<&'a Frame<'a>>,
+    parent_frame: Option<Rc<RefCell<Frame>>>,
     ///// The local timestamp in this frame
     //timestamp: DateTime<Utc>,
     // TODO: async, global
 }
 
-impl<'a> Frame<'a> {
+impl Frame {
     /// Creates a new empty frame
     pub fn new() -> Self {
         Self {
@@ -50,11 +52,10 @@ impl<'a> Frame<'a> {
     }
 
     /// Creates a new empty frame, with a parent frame for lookups
-    pub fn new_with_parent(parent_frame: &'a Frame) -> Self {
+    pub fn new_with_parent(parent_frame: Rc<RefCell<Frame>>) -> Self {
         Self {
             bindings: HashMap::new(),
-            parent_frame: Some(parent_frame),
-            //timestamp: parent_frame.timestamp.clone(),
+            parent_frame: Some(parent_frame), //timestamp: parent_frame.timestamp.clone(),
         }
     }
 
@@ -64,11 +65,11 @@ impl<'a> Frame<'a> {
     }
 
     /// Lookup a value by name in a frame
-    pub fn lookup(&self, name: &str) -> Option<&Binding> {
-        match &self.bindings.get(name) {
-            Some(value) => Some(value),
+    pub fn lookup(&self, name: &str) -> Option<Binding> {
+        match self.bindings.get(name) {
+            Some(binding) => Some(binding.clone()),
             None => match &self.parent_frame {
-                Some(parent) => parent.lookup(name),
+                Some(parent) => parent.borrow().lookup(name),
                 None => None,
             },
         }
@@ -82,11 +83,14 @@ mod tests {
     #[test]
     fn bind_and_lookup() {
         let mut frame = Frame::new();
-        frame.bind("bool", Binding::Var(json::from(true).into()));
-        frame.bind("number", Binding::Var(json::from(42).into()));
-        frame.bind("string", Binding::Var(json::from("hello").into()));
-        frame.bind("array", Binding::Var(json::from(vec![1, 2, 3]).into()));
-        frame.bind("none", Binding::Var(json::Null.into()));
+        frame.bind("bool", Binding::Var(Rc::new(json::from(true).into())));
+        frame.bind("number", Binding::Var(Rc::new(json::from(42).into())));
+        frame.bind("string", Binding::Var(Rc::new(json::from("hello").into())));
+        frame.bind(
+            "array",
+            Binding::Var(Rc::new(json::from(vec![1, 2, 3]).into())),
+        );
+        frame.bind("none", Binding::Var(Rc::new(json::Null.into())));
 
         assert!(frame.lookup("not_there").is_none());
 
@@ -143,9 +147,11 @@ mod tests {
 
     #[test]
     fn lookup_through_parent() {
-        let mut parent = Frame::new();
-        parent.bind("value", Binding::Var(json::from(42).into()));
-        let child = Frame::new_with_parent(&parent);
+        let parent = Rc::new(RefCell::new(Frame::new()));
+        parent
+            .borrow_mut()
+            .bind("value", Binding::Var(Rc::new(json::from(42).into())));
+        let child = Frame::new_with_parent(Rc::clone(&parent));
         assert_eq!(
             child
                 .lookup("value")

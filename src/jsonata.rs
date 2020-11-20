@@ -1,17 +1,19 @@
 use json::JsonValue;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::evaluator::{evaluate, Binding, Frame, Value};
 use crate::parser::{parse, Node};
 use crate::JsonAtaResult;
 
-pub struct JsonAta<'a> {
-    root_frame: Frame<'a>,
+pub struct JsonAta {
     ast: Node,
+    frame: Rc<RefCell<Frame>>,
 }
 
-impl<'a> JsonAta<'a> {
+impl JsonAta {
     pub fn new(expr: &str) -> JsonAtaResult<Self> {
-        let root_frame = Frame::new();
+        let frame = Rc::new(RefCell::new(Frame::new()));
 
         // // TODO: Apply statics to the environment
         // environment.bind("sum", Binding::Function(&sum, "<a<n>:n>"));
@@ -19,20 +21,22 @@ impl<'a> JsonAta<'a> {
         // TODO: Probably could just do this once somewhere to avoid doing it every time
 
         Ok(Self {
-            root_frame,
             ast: parse(expr)?,
+            frame,
         })
     }
 
     pub fn evaluate(&mut self, input: Option<&JsonValue>) -> JsonAtaResult<Option<JsonValue>> {
-        self.root_frame.bind("$", Binding::Var(input.into()));
+        self.frame
+            .borrow_mut()
+            .bind("$", Binding::Var(Rc::new(input.into())));
 
         let mut input: Value = input.into();
         if input.is_array() {
             input = Value::wrap(&input);
         }
 
-        let result = evaluate(&self.ast, &input, &mut self.root_frame)?;
+        let result = evaluate(&self.ast, &input, Rc::clone(&self.frame))?;
 
         //println!("{:#?}", result);
 
@@ -40,7 +44,9 @@ impl<'a> JsonAta<'a> {
     }
 
     pub fn assign_var(&mut self, name: &str, value: &JsonValue) {
-        self.root_frame.bind(name, Binding::Var(value.into()));
+        self.frame
+            .borrow_mut()
+            .bind(name, Binding::Var(Rc::new(value.into())));
     }
 
     pub fn ast(&self) -> &Node {

@@ -182,13 +182,17 @@ pub enum NodeKind {
     Parent,
 
     /// Function call. The associated value indicates whether it is a partial application or not.
-    Function(bool),
+    Function {
+        proc: Box<Node>,
+        args: Vec<Node>,
+        is_partial: bool,
+    },
 
     /// Partial function call argument, e.g. `$func(?)`.
     PartialArg,
 
     /// Lambda function definition, e.g. `function($x) { $x + 1 }`.
-    Lambda,
+    Lambda { args: Vec<Node>, body: Box<Node> },
 
     /// Block consisting of multiple expressions, e.g. `($x + 1; $x - 1)`.
     Block,
@@ -227,9 +231,9 @@ impl fmt::Display for NodeKind {
                 Wildcard => "Wildcard".to_string(),
                 Descendent => "Descendent".to_string(),
                 Parent => "Parent".to_string(),
-                Function(ref v) => format!("Function({})", v),
+                Function { .. } => "Function".to_string(),
                 PartialArg => "PartialArg".to_string(),
-                Lambda => "Lambda".to_string(),
+                Lambda { .. } => "Lambda".to_string(),
                 Block => "Block".to_string(),
                 Ternary => "Ternary".to_string(),
                 Transform => "Transform".to_string(),
