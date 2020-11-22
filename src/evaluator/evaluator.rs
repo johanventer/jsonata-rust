@@ -757,7 +757,7 @@ fn evaluate_lambda(
 ) -> JsonAtaResult<Value> {
     Ok(Value::Closure {
         input: Rc::new(input.clone()),
-        frame: Rc::new(RefCell::new(Frame::new())), // TODO: THIS IS WRONG, BUT PASSING FRAME RESULTS IN AN ENDLESS LOOP OF REFERENCES
+        frame: Rc::clone(&frame),
         args: args.iter().cloned().collect(),
         body: Rc::new(body.clone()),
     })
