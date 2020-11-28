@@ -770,40 +770,41 @@ fn evaluate_function(
     input: &Value,
     frame: Rc<RefCell<Frame>>,
 ) -> JsonAtaResult<Value> {
-    let proc = evaluate(proc, input, Rc::clone(&frame))?;
+    todo!("TODO: Functions")
+    // let proc = evaluate(proc, input, Rc::clone(&frame))?;
 
-    let arg_values = args
-        .iter()
-        .map(|arg| evaluate(&arg, &input, Rc::clone(&frame)))
-        .collect::<JsonAtaResult<Vec<Value>>>()?;
+    // let arg_values = args
+    //     .iter()
+    //     .map(|arg| evaluate(&arg, &input, Rc::clone(&frame)))
+    //     .collect::<JsonAtaResult<Vec<Value>>>()?;
 
-    if let Value::Closure {
-        input,
-        args,
-        body,
-        frame,
-    } = proc
-    {
-        if arg_values.len() != args.len() {
-            panic!("Different number of args and arg values");
-        }
+    // if let Value::Closure {
+    //     input,
+    //     args,
+    //     body,
+    //     frame,
+    // } = proc
+    // {
+    //     if arg_values.len() != args.len() {
+    //         panic!("Different number of args and arg values");
+    //     }
 
-        let frame = Rc::new(RefCell::new(Frame::new_with_parent(Rc::clone(&frame))));
+    //     let frame = Rc::new(RefCell::new(Frame::new_with_parent(Rc::clone(&frame))));
 
-        for i in 0..args.len() {
-            let arg = &args[i];
-            let value = &arg_values[i];
-            if let NodeKind::Var(name) = &arg.kind {
-                frame
-                    .borrow_mut()
-                    .bind(&name, Binding::Var(Rc::new(value.clone())));
-            } else {
-                panic!("Argument was not a NodeKind::Var!")
-            }
-        }
+    //     for i in 0..args.len() {
+    //         let arg = &args[i];
+    //         let value = &arg_values[i];
+    //         if let NodeKind::Var(name) = &arg.kind {
+    //             frame
+    //                 .borrow_mut()
+    //                 .bind(&name, Binding::Var(Rc::new(value.clone())));
+    //         } else {
+    //             panic!("Argument was not a NodeKind::Var!")
+    //         }
+    //     }
 
-        evaluate(&body, &input, frame)
-    } else {
-        panic!("TODO:  Only lambda's are supported right now")
-    }
+    //     evaluate(&body, &input, frame)
+    // } else {
+    //     panic!("TODO:  Only lambda's are supported right now")
+    // }
 }
