@@ -1,122 +1,191 @@
-use std::fmt;
+use std::rc::Rc;
 
-use crate::Position;
+use super::Position;
 
-/// An object is represented as a list of (key, value) tuples
-pub type Object = Vec<(Node, Node)>;
+pub type Object = Vec<(Box<Node>, Box<Node>)>;
 
-/// Types of unary expressions.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum UnaryOp {
-    /// Unary numeric minus, e.g. `-1`.
-    Minus,
-
-    /// Array constructor, e.g. `[1, 2, 3]`.
-    ArrayConstructor,
-
-    /// An object constructor, e.g. `{ key1: value1, key2: value2 }`.
+    Minus(Box<Node>),
+    ArrayConstructor(Vec<Box<Node>>),
     ObjectConstructor(Object),
 }
 
-impl fmt::Display for UnaryOp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+#[derive(Debug, PartialEq)]
+pub enum BinaryOp {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Modulus,
+    Equal,
+    NotEqual,
+    LessThan,
+    GreaterThan,
+    LessThanEqual,
+    GreaterThanEqual,
+    Concat,
+    And,
+    Or,
+    In,
+    Path,
+    Range,
+    ContextBind,
+    PositionalBind,
+    Predicate,
+    Apply,
+    Bind,
+}
+
+#[derive(Debug)]
+pub enum NodeKind {
+    Null,
+    Bool(bool),
+    Str(String),
+    Num(f64),
+    Name(String),
+    Var(String),
+    Unary(UnaryOp),
+    Binary(BinaryOp, Box<Node>, Box<Node>),
+    GroupBy(Box<Node>, Object),
+    SortOp(Box<Node>, Vec<Box<Node>>),
+    Block(Vec<Box<Node>>),
+    Wildcard,
+    Descendent,
+    Parent,
+    Function {
+        proc: Box<Node>,
+        args: Vec<Box<Node>>,
+        is_partial: bool,
+    },
+    PartialArg,
+    Lambda {
+        args: Vec<Box<Node>>,
+        body: Box<Node>,
+    },
+    Ternary {
+        cond: Box<Node>,
+        truthy: Box<Node>,
+        falsy: Option<Box<Node>>,
+    },
+    Transform {
+        pattern: Box<Node>,
+        update: Box<Node>,
+        delete: Option<Box<Node>>,
+    },
+    SortTerm(Box<Node>, bool),
+    Path(Vec<Box<Node>>),
+    Sort(Vec<Box<Node>>),
+}
+
+#[derive(Debug)]
+pub struct Node {
+    pub kind: NodeKind,
+    pub position: Position,
+
+    pub keep_array: bool,
+    pub cons_array: bool,
+    pub keep_singleton_array: bool,
+
+    /// An optional group by expression, represented as an object.
+    pub group_by: Option<Object>,
+
+    /// An optional list of predicates.
+    pub predicates: Option<Vec<Box<Node>>>,
+
+    /// An optional list of evaluation stages, for example this specifies the filtering and
+    /// indexing for various expressions.
+    pub stages: Option<Vec<Box<Node>>>,
+}
+
+impl Node {
+    pub(crate) fn new(kind: NodeKind, position: Position) -> Self {
+        Self {
+            kind,
+            position,
+            keep_array: false,
+            cons_array: false,
+            keep_singleton_array: false,
+            group_by: None,
+            predicates: None,
+            stages: None,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn is_path(&self) -> bool {
+        matches!(self.kind, NodeKind::Path{..})
+    }
+
+    #[inline]
+    pub(crate) fn path_len(&self) -> usize {
+        match self.kind {
+            NodeKind::Path(ref steps) => steps.len(),
+            _ => panic!("Not a path"),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn new_path(position: Position, steps: Vec<Box<Node>>) -> Self {
+        Node::new(NodeKind::Path(steps), position)
+    }
+
+    #[inline]
+    pub(crate) fn path_steps(&mut self) -> &mut Vec<Box<Node>> {
+        match self.kind {
+            NodeKind::Path(ref mut steps) => steps,
+            _ => panic!("Not a path"),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn push_step(&mut self, step: Box<Node>) {
+        match self.kind {
+            NodeKind::Path(ref mut steps) => steps.push(step),
+            _ => panic!("Not a path"),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn append_steps(&mut self, new_steps: &mut Vec<Box<Node>>) {
+        match self.kind {
+            NodeKind::Path(ref mut steps) => steps.append(new_steps),
+            _ => panic!("Not a path"),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn take_path_steps(self) -> Vec<Box<Node>> {
+        match self.kind {
+            NodeKind::Path(steps) => steps,
+            _ => panic!("Not a path"),
+        }
+    }
+}
+
+impl std::fmt::Display for UnaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use UnaryOp::*;
         write!(
             f,
             "{}",
             match self {
-                Minus => "-",
-                ArrayConstructor => "[",
+                Minus(..) => "-",
+                ArrayConstructor(..) => "[",
                 ObjectConstructor(_) => "{",
             }
         )
     }
 }
 
-/// Types of binary expressions.
-#[derive(Debug, Clone)]
-pub enum BinaryOp {
-    /// Numeric addition, e.g. `x + 10`.
-    Add,
-
-    /// Numeric subtraction, e.g. `x - 10`.
-    Subtract,
-
-    /// Numeric multiplication, e.g. `x * 10`.
-    Multiply,
-
-    /// Numeric division, e.g. `x / 10`.
-    Divide,
-
-    /// Numeric modulus, e.g. `x % 10`.
-    Modulus,
-
-    /// Equality, e.g `x = y`.
-    Equal,
-
-    /// Inequality, e.g. `x != y`.
-    NotEqual,
-
-    /// Less than comparison, e.g. `x < y`.
-    LessThan,
-
-    /// Great than comparison, e.g. `x > y`.
-    GreaterThan,
-
-    /// Less than or equal comparison, e.g. `x <= y`.
-    LessThanEqual,
-
-    /// Greater than or equal comparison, e.g. `x >= y`.
-    GreaterThanEqual,
-
-    /// String concatenation, e.g. `"x" & "y"`.
-    Concat,
-
-    /// Boolean and, e.g. `x and y`.
-    And,
-
-    /// Boolean or, e.g. `x or y`.
-    Or,
-
-    /// Array containment, e.g. `1 in [1, 2 3]`.
-    In,
-
-    /// Path operator, e.g. `x.y`.
-    PathOp,
-
-    /// An array range index, e.g. `[x..y]`.
-    Range,
-
-    /// A context variable binding, e.g. `library.loans@$l`.
-    ContextBind,
-
-    /// A positional variable binding, e.g. `library.books#$i`.
-    PositionalBind,
-
-    /// An filtering predicate, e.g. `phone.number[type="mobile"]`.
-    Predicate,
-
-    /// Group by
-    GroupBy(Object),
-
-    /// Chained function application, e.g. `$func1 ~> $func2`.
-    Apply,
-
-    /// A variable binding, e.g. `$x := 10`.
-    Bind,
-
-    /// An array sorting expression, e.g. `account.order.product^(price)`.
-    SortOp,
-}
-
-impl fmt::Display for BinaryOp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for BinaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use BinaryOp::*;
         write!(
             f,
             "{}",
             match self {
-                PathOp => ".",
+                Path { .. } => ".",
                 Add => "+",
                 Subtract => "-",
                 Multiply => "*",
@@ -136,225 +205,43 @@ impl fmt::Display for BinaryOp {
                 ContextBind => "@",
                 PositionalBind => "#",
                 Predicate => "[",
-                GroupBy(_) => "{",
                 Apply => "~>",
                 Bind => ":=",
-                SortOp => "^",
             }
         )
     }
 }
 
-/// Types of AST nodes.
-#[derive(Debug, Clone)]
-pub enum NodeKind {
-    /// Literal null value, e.g. `null`.
-    Null,
-
-    /// Literal boolean value, e.g. `true` or `false`.
-    Bool(bool),
-
-    /// Literal string value, e.g. `"hello"`.
-    Str(String),
-
-    /// Literal number value, e.g. `1` or `1.23` or `1e-10`.
-    Num(f64),
-
-    /// Name expression, e.g. `product`.
-    Name(String),
-
-    /// $ variable expression, e.g. `$x`.
-    Var(String),
-
-    /// Unary expression.
-    Unary(UnaryOp),
-
-    /// Binary expression.
-    Binary(BinaryOp),
-
-    /// Wildcard path navigation, e.g. `address.*`.
-    Wildcard,
-
-    /// Descendent path navigation, e.g. `**.postcode`.
-    Descendent,
-
-    /// Parent operator expression, e.g. `%.order_id`.
-    Parent,
-
-    /// Function call. The associated value indicates whether it is a partial application or not.
-    Function {
-        proc: Box<Node>,
-        args: Vec<Node>,
-        is_partial: bool,
-    },
-
-    /// Partial function call argument, e.g. `$func(?)`.
-    PartialArg,
-
-    /// Lambda function definition, e.g. `function($x) { $x + 1 }`.
-    Lambda { args: Vec<Node>, body: Box<Node> },
-
-    /// Block consisting of multiple expressions, e.g. `($x + 1; $x - 1)`.
-    Block,
-
-    /// A ternary conditional expression.
-    Ternary,
-
-    /// An object transform expression.
-    Transform,
-
-    /// A path consisting of multiple steps.
-    Path,
-
-    /// A sort consisting of multiple sort terms.
-    Sort,
-
-    /// A sort term. The associated value indicates whether it is a descending term.
-    SortTerm(bool),
-}
-
-impl fmt::Display for NodeKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for NodeKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use NodeKind::*;
         write!(
             f,
             "{}",
             match self {
                 Null => "null".to_owned(),
-                Bool(ref v) => format!("{}", v),
-                Str(ref v) => format!("{}", v),
-                Num(ref v) => format!("{}", v),
-                Name(ref v) => format!("{}", v),
-                Var(ref v) => format!("{}", v),
-                Unary(ref v) => format!("Unary({})", v),
-                Binary(ref v) => format!("Binary({})", v),
-                Wildcard => "Wildcard".to_string(),
-                Descendent => "Descendent".to_string(),
-                Parent => "Parent".to_string(),
+                Bool(ref v) => v.to_string(),
+                Str(ref v) => v.to_string(),
+                Num(ref v) => v.to_string(),
+                Name(ref v) => v.to_string(),
+                Var(ref v) => v.to_string(),
+                Unary(ref v) => v.to_string(),
+                Binary(ref v, ..) => v.to_string(),
+                Wildcard => "**".to_string(),
+                Descendent => "*".to_string(),
+                Parent => "%".to_string(),
                 Function { .. } => "Function".to_string(),
                 PartialArg => "PartialArg".to_string(),
                 Lambda { .. } => "Lambda".to_string(),
-                Block => "Block".to_string(),
-                Ternary => "Ternary".to_string(),
-                Transform => "Transform".to_string(),
-                Path => "Path".to_string(),
-                Sort => "Sort".to_string(),
-                SortTerm(ref v) => format!("SortTerm({})", v),
+                Block(..) => "Block".to_string(),
+                Ternary { .. } => "Ternary".to_string(),
+                Transform { .. } => "Transform".to_string(),
+                Path { .. } => "Path".to_string(),
+                Sort(..) => "Sort".to_string(),
+                SortTerm(_, ref v) => format!("SortTerm({})", v),
+                GroupBy(..) => "{".to_string(),
+                SortOp(..) => "^".to_string(),
             }
         )
-    }
-}
-
-/// A node in the parsed AST.
-#[derive(Debug)]
-pub struct Node {
-    /// The kind of the node.
-    pub kind: NodeKind,
-
-    /// The position in the input source expression.
-    pub position: Position,
-
-    /// A general list of child nodes, could represent lhs/rhs, update/transform/delete,
-    /// condition/then/else, procedure/arguments etc.
-    pub children: Vec<Node>,
-
-    /// Indicates that this node should not be flattened.
-    pub keep_array: bool,
-
-    pub keep_singleton_array: bool,
-
-    pub cons_array: bool,
-
-    /// An optional group by expression, represented as an object.
-    pub group_by: Option<Object>,
-
-    /// An optional list of predicates.
-    pub predicates: Option<Vec<Node>>,
-
-    /// An optional list of evaluation stages, for example this specifies the filtering and
-    /// indexing for various expressions.
-    pub stages: Option<Vec<Node>>,
-    // /// Indicates if this node has a focussed variable binding.
-    // pub focus: Option<String>,
-
-    // /// Indicates if this node has an indexed variable binding.
-    // pub index: Option<String>,
-    // /// TODO: I'm not really sure what this indicates, yet, but it is used during evaluation.
-    // pub tuple: bool,
-}
-
-impl Node {
-    pub fn new(kind: NodeKind, position: Position) -> Self {
-        Self::new_with_children(kind, position, Vec::new())
-    }
-
-    pub fn new_with_child(kind: NodeKind, position: Position, child: Node) -> Self {
-        Self::new_with_children(kind, position, vec![child])
-    }
-
-    pub fn new_with_children(kind: NodeKind, position: Position, children: Vec<Node>) -> Self {
-        Self {
-            kind,
-            position,
-            children,
-            keep_array: false,
-            keep_singleton_array: false,
-            cons_array: false,
-            group_by: None,
-            predicates: None,
-            stages: None,
-            // focus: None,
-            // index: None,
-            // tuple: false,
-        }
-    }
-
-    pub fn is_path(&self) -> bool {
-        matches!(self.kind, NodeKind::Path)
-    }
-}
-
-impl Clone for Node {
-    fn clone(&self) -> Self {
-        let children = self.children.iter().cloned().collect();
-        let stages = if let Some(stages) = &self.stages {
-            Some(stages.iter().cloned().collect())
-        } else {
-            None
-        };
-        let group_by = if let Some(object) = &self.group_by {
-            Some(object.iter().cloned().collect())
-        } else {
-            None
-        };
-        let predicates = if let Some(predicates) = &self.predicates {
-            Some(predicates.iter().cloned().collect())
-        } else {
-            None
-        };
-
-        Self {
-            kind: self.kind.clone(),
-            position: self.position,
-            children,
-            predicates,
-            stages,
-            group_by,
-            keep_array: self.keep_array,
-            keep_singleton_array: self.keep_singleton_array,
-            cons_array: self.cons_array,
-        }
-    }
-}
-
-impl fmt::Display for Node {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "{}", self.kind)?;
-        if !self.children.is_empty() {
-            for child in &self.children {
-                writeln!(f, "  {}", child)?;
-            }
-        }
-        Ok(())
     }
 }

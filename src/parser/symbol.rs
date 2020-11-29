@@ -1,46 +1,16 @@
 use crate::error::*;
-use crate::JsonAtaResult;
+use crate::Result;
 
 use super::ast::*;
 use super::parser::Parser;
 use super::tokenizer::{Token, TokenKind};
 
-/// Represents a symbol, which is essentially an enhanced token that performs its own parsing and
-/// creates syntax trees.
 pub(crate) trait Symbol {
-    /// Returns the left binding power for the symbol.
     fn lbp(&self) -> u32;
-
-    /// Returns the `null denotation` for the symbol, this is the AST created when this
-    /// symbol is treated as a prefix (and doesn't care about tokens to the left of it).
-    fn nud(&self, parser: &mut Parser) -> JsonAtaResult<Node>;
-
-    /// Returns the `left denotation` for the symbol, this is the AST created when this
-    /// symbol is treated as infix (and cares about tokens to the left of it).
-    fn led(&self, parser: &mut Parser, left: Node) -> JsonAtaResult<Node>;
+    fn nud(&self, parser: &mut Parser) -> Result<Box<Node>>;
+    fn led(&self, parser: &mut Parser, left: Box<Node>) -> Result<Box<Node>>;
 }
 
-/// Parses an object definition.
-fn parse_object(parser: &mut Parser) -> JsonAtaResult<Object> {
-    let mut object: Object = Vec::new();
-    if parser.token().kind != TokenKind::RightBrace {
-        loop {
-            let key = parser.expression(0)?;
-            parser.expect(TokenKind::Colon, false)?;
-            let value = parser.expression(0)?;
-            object.push((key, value));
-            if parser.token().kind != TokenKind::Comma {
-                break;
-            }
-            parser.expect(TokenKind::Comma, false)?;
-        }
-    }
-    parser.expect(TokenKind::RightBrace, true)?;
-    Ok(object)
-}
-
-/// This is the majority of the parsing logic, constructed as an implementation of `Symbol` for all
-/// types of `Token`.
 impl Symbol for Token {
     fn lbp(&self) -> u32 {
         use TokenKind::*;
@@ -62,187 +32,193 @@ impl Symbol for Token {
         }
     }
 
-    fn nud(&self, parser: &mut Parser) -> JsonAtaResult<Node> {
-        type T = TokenKind;
-        type N = NodeKind;
-
-        let p = self.position;
-
-        match &self.kind {
-            T::Null => Ok(Node::new(N::Null, p)),
-            T::Bool(v) => Ok(Node::new(N::Bool(*v), p)),
-            T::Str(v) => Ok(Node::new(N::Str(v.clone()), p)),
-            T::Num(v) => Ok(Node::new(N::Num(*v), p)),
-            T::Name(v) => Ok(Node::new(N::Name(v.clone()), p)),
-            T::Var(v) => Ok(Node::new(N::Var(v.clone()), p)),
-            T::And => Ok(Node::new(N::Name(String::from("and")), p)),
-            T::Or => Ok(Node::new(N::Name(String::from("or")), p)),
-            T::In => Ok(Node::new(N::Name(String::from("in")), p)),
-            T::Minus => Ok(Node::new_with_child(
-                N::Unary(UnaryOp::Minus),
-                p,
-                parser.expression(70)?,
+    fn nud(&self, parser: &mut Parser) -> Result<Box<Node>> {
+        match self.kind {
+            TokenKind::Null => Ok(box Node::new(NodeKind::Null, self.position)),
+            TokenKind::Bool(ref v) => Ok(box Node::new(NodeKind::Bool(*v), self.position)),
+            TokenKind::Str(ref v) => Ok(box Node::new(NodeKind::Str(v.clone()), self.position)),
+            TokenKind::Num(ref v) => Ok(box Node::new(NodeKind::Num(*v), self.position)),
+            TokenKind::Name(ref v) => Ok(box Node::new(NodeKind::Name(v.clone()), self.position)),
+            TokenKind::Var(ref v) => Ok(box Node::new(NodeKind::Var(v.clone()), self.position)),
+            TokenKind::And => Ok(box Node::new(
+                NodeKind::Name(String::from("and")),
+                self.position,
             )),
-            T::Wildcard => Ok(Node::new(N::Wildcard, p)),
-            T::Descendent => Ok(Node::new(N::Descendent, p)),
-            T::Percent => Ok(Node::new(N::Parent, p)),
+            TokenKind::Or => Ok(box Node::new(
+                NodeKind::Name(String::from("or")),
+                self.position,
+            )),
+            TokenKind::In => Ok(box Node::new(
+                NodeKind::Name(String::from("in")),
+                self.position,
+            )),
+            TokenKind::Minus => Ok(box Node::new(
+                NodeKind::Unary(UnaryOp::Minus(parser.expression(70)?)),
+                self.position,
+            )),
+            TokenKind::Wildcard => Ok(box Node::new(NodeKind::Wildcard, self.position)),
+            TokenKind::Descendent => Ok(box Node::new(NodeKind::Descendent, self.position)),
+            TokenKind::Percent => Ok(box Node::new(NodeKind::Parent, self.position)),
 
             // Block of expressions
-            T::LeftParen => {
+            TokenKind::LeftParen => {
                 let mut expressions = Vec::new();
 
-                while parser.token().kind != T::RightParen {
+                while parser.token().kind != TokenKind::RightParen {
                     expressions.push(parser.expression(0)?);
-                    if parser.token().kind != T::SemiColon {
+                    if parser.token().kind != TokenKind::SemiColon {
                         break;
                     }
-                    parser.expect(T::SemiColon, false)?;
+                    parser.expect(TokenKind::SemiColon, false)?;
                 }
-                parser.expect(T::RightParen, true)?;
+                parser.expect(TokenKind::RightParen, true)?;
 
-                Ok(Node::new_with_children(N::Block, p, expressions))
+                Ok(box Node::new(NodeKind::Block(expressions), self.position))
             }
 
             // Array constructor
-            T::LeftBracket => {
+            TokenKind::LeftBracket => {
                 let mut expressions = Vec::new();
-                if parser.token().kind != T::RightBracket {
+
+                if parser.token().kind != TokenKind::RightBracket {
                     loop {
                         let mut item = parser.expression(0)?;
-                        if parser.token().kind == T::Range {
-                            parser.expect(T::Range, false)?;
-                            item = Node::new_with_children(
-                                N::Binary(BinaryOp::Range),
-                                p,
-                                vec![item, parser.expression(0)?],
+
+                        if parser.token().kind == TokenKind::Range {
+                            parser.expect(TokenKind::Range, false)?;
+                            item = box Node::new(
+                                NodeKind::Binary(BinaryOp::Range, item, parser.expression(0)?),
+                                self.position,
                             )
                         }
+
                         expressions.push(item);
+
+                        if parser.token().kind != TokenKind::Comma {
+                            break;
+                        }
+
+                        parser.expect(TokenKind::Comma, false)?;
+                    }
+                }
+                parser.expect(TokenKind::RightBracket, true)?;
+
+                Ok(box Node::new(
+                    NodeKind::Unary(UnaryOp::ArrayConstructor(expressions)),
+                    self.position,
+                ))
+            }
+
+            // Object constructor
+            TokenKind::LeftBrace => Ok(box Node::new(
+                NodeKind::Unary(UnaryOp::ObjectConstructor(parse_object(parser)?)),
+                self.position,
+            )),
+
+            // Object transformer
+            TokenKind::Pipe => {
+                let pattern = parser.expression(0)?;
+
+                parser.expect(TokenKind::Pipe, false)?;
+
+                let update = parser.expression(0)?;
+
+                let delete = if parser.token().kind == TokenKind::Comma {
+                    parser.expect(TokenKind::Comma, false)?;
+                    Some(parser.expression(0)?)
+                } else {
+                    None
+                };
+
+                parser.expect(TokenKind::Pipe, false)?;
+
+                Ok(box Node::new(
+                    NodeKind::Transform {
+                        pattern,
+                        update,
+                        delete,
+                    },
+                    self.position,
+                ))
+            }
+
+            _ => Err(box S0211 {
+                position: self.position,
+                symbol: self.to_string(),
+            }),
+        }
+    }
+
+    fn led(&self, parser: &mut Parser, mut left: Box<Node>) -> Result<Box<Node>> {
+        macro_rules! binary {
+            ($n:tt) => {
+                Ok(box Node::new(
+                    NodeKind::Binary(BinaryOp::$n, left, parser.expression(self.lbp())?),
+                    self.position,
+                ))
+            };
+        }
+
+        match self.kind {
+            TokenKind::Period => binary!(Path),
+            TokenKind::Plus => binary!(Add),
+            TokenKind::Minus => binary!(Subtract),
+            TokenKind::Wildcard => binary!(Multiply),
+            TokenKind::ForwardSlash => binary!(Divide),
+            TokenKind::Percent => binary!(Modulus),
+            TokenKind::Equal => binary!(Equal),
+            TokenKind::LeftCaret => binary!(LessThan),
+            TokenKind::RightCaret => binary!(GreaterThan),
+            TokenKind::NotEqual => binary!(NotEqual),
+            TokenKind::LessEqual => binary!(LessThanEqual),
+            TokenKind::GreaterEqual => binary!(GreaterThanEqual),
+            TokenKind::Ampersand => binary!(Concat),
+            TokenKind::And => binary!(And),
+            TokenKind::Or => binary!(Or),
+            TokenKind::In => binary!(In),
+            TokenKind::Apply => binary!(Apply),
+
+            // Function calls or lambda definitions
+            TokenKind::LeftParen => {
+                let mut args = Vec::new();
+                let mut is_partial = false;
+                let mut is_lambda = false;
+
+                if parser.token().kind != TokenKind::RightParen {
+                    loop {
+                        match parser.token().kind {
+                            TokenKind::Question => {
+                                is_partial = true;
+                                args.push(box Node::new(
+                                    NodeKind::PartialArg,
+                                    parser.token().position,
+                                ));
+                                parser.expect(TokenKind::Question, false)?;
+                            }
+                            _ => {
+                                args.push(parser.expression(0)?);
+                            }
+                        }
                         if parser.token().kind != TokenKind::Comma {
                             break;
                         }
                         parser.expect(TokenKind::Comma, false)?;
                     }
                 }
-                parser.expect(T::RightBracket, true)?;
-
-                Ok(Node::new_with_children(
-                    N::Unary(UnaryOp::ArrayConstructor),
-                    p,
-                    expressions,
-                ))
-            }
-
-            // Object constructor
-            T::LeftBrace => {
-                let object = parse_object(parser)?;
-                Ok(Node::new(N::Unary(UnaryOp::ObjectConstructor(object)), p))
-            }
-
-            // Object transformer
-            T::Pipe => {
-                // Pattern
-                let mut children = vec![parser.expression(0)?];
-                parser.expect(T::Pipe, false)?;
-
-                // Update
-                children.push(parser.expression(0)?);
-
-                // Delete
-                if parser.token().kind == T::Comma {
-                    parser.expect(T::Comma, false)?;
-                    children.push(parser.expression(0)?);
-                }
-
-                parser.expect(T::Pipe, false)?;
-
-                Ok(Node::new_with_children(N::Transform, p, children))
-            }
-
-            _ => Err(box S0211 {
-                position: p,
-                symbol: self.to_string(),
-            }),
-        }
-    }
-
-    /// Produce the left denotation for the token
-    fn led(&self, parser: &mut Parser, mut left: Node) -> JsonAtaResult<Node> {
-        type T = TokenKind;
-        type N = NodeKind;
-
-        let p = self.position;
-
-        macro_rules! binary {
-            ($n:tt) => {
-                Ok(Node::new_with_children(
-                    N::Binary(BinaryOp::$n),
-                    p,
-                    vec![left, parser.expression(self.lbp())?],
-                ))
-            };
-        }
-
-        match &self.kind {
-            T::Period => binary!(PathOp),
-            T::Plus => binary!(Add),
-            T::Minus => binary!(Subtract),
-            T::Wildcard => binary!(Multiply),
-            T::ForwardSlash => binary!(Divide),
-            T::Percent => binary!(Modulus),
-            T::Equal => binary!(Equal),
-            T::LeftCaret => binary!(LessThan),
-            T::RightCaret => binary!(GreaterThan),
-            T::NotEqual => binary!(NotEqual),
-            T::LessEqual => binary!(LessThanEqual),
-            T::GreaterEqual => binary!(GreaterThanEqual),
-            T::Ampersand => binary!(Concat),
-            T::And => binary!(And),
-            T::Or => binary!(Or),
-            T::In => binary!(In),
-            T::Apply => binary!(Apply),
-
-            // Function calls or lambda definitions
-            T::LeftParen => {
-                let mut arguments = Vec::new();
-                let mut is_partial = false;
-                let mut is_function_def = false;
-
-                if parser.token().kind != T::RightParen {
-                    loop {
-                        match parser.token().kind {
-                            T::Question => {
-                                is_partial = true;
-                                arguments.push(Node::new(N::PartialArg, parser.token().position));
-                                parser.expect(T::Question, false)?;
-                            }
-                            _ => {
-                                arguments.push(parser.expression(0)?);
-                            }
-                        }
-                        if parser.token().kind != T::Comma {
-                            break;
-                        }
-                        parser.expect(T::Comma, false)?;
-                    }
-                }
-                parser.expect(T::RightParen, true)?;
+                parser.expect(TokenKind::RightParen, true)?;
 
                 // If the name of the function is 'function' or λ, then this is a function definition (lambda function)
-                if let N::Name(ref name) = left.kind {
+                if let NodeKind::Name(ref name) = left.kind {
                     if name == "function" || name == "λ" {
-                        is_function_def = true;
+                        is_lambda = true;
 
                         // All of the args must be Variable nodes
-                        for arg in &arguments {
-                            match arg.kind {
-                                N::Var(..) => (),
-                                _ => {
-                                    return Err(box S0208 {
-                                        position: arg.position,
-                                        arg: arg.to_string(),
-                                    })
-                                }
+                        for arg in &args {
+                            if !matches!(arg.kind, NodeKind::Var(..)) {
+                                return Err(box S0208 {
+                                    position: arg.position,
+                                    arg: arg.kind.to_string(),
+                                });
                             }
                         }
 
@@ -250,31 +226,21 @@ impl Symbol for Token {
                     }
                 }
 
-                let func: Node;
+                let func: Box<Node>;
 
-                if is_function_def {
-                    parser.expect(T::LeftBrace, false)?;
-
-                    // Body of the lambda function
-                    let body = box parser.expression(0)?;
-
-                    func = Node::new(
-                        N::Lambda {
-                            args: arguments,
-                            body,
-                        },
-                        p,
-                    );
-
-                    parser.expect(T::RightBrace, false)?;
+                if is_lambda {
+                    parser.expect(TokenKind::LeftBrace, false)?;
+                    let body = parser.expression(0)?;
+                    func = box Node::new(NodeKind::Lambda { args, body }, self.position);
+                    parser.expect(TokenKind::RightBrace, false)?;
                 } else {
-                    func = Node::new(
-                        N::Function {
-                            proc: box left,
-                            args: arguments,
+                    func = box Node::new(
+                        NodeKind::Function {
+                            proc: left,
+                            args,
                             is_partial,
                         },
-                        p,
+                        self.position,
                     );
                 }
 
@@ -282,147 +248,160 @@ impl Symbol for Token {
             }
 
             // Variable assignment
-            T::Bind => {
-                match left.kind {
-                    N::Var(..) => (),
-                    _ => {
-                        return Err(box S0212 {
-                            position: left.position,
-                        })
-                    }
+            TokenKind::Bind => {
+                if !matches!(left.kind, NodeKind::Var(..)) {
+                    return Err(box S0212 {
+                        position: left.position,
+                    });
                 }
 
-                Ok(Node::new_with_children(
-                    N::Binary(BinaryOp::Bind),
-                    p,
-                    vec![left, parser.expression(self.lbp() - 1)?],
+                Ok(box Node::new(
+                    NodeKind::Binary(BinaryOp::Bind, left, parser.expression(self.lbp() - 1)?),
+                    self.position,
                 ))
             }
 
             // Order by expression
-            T::Caret => {
-                let mut children = vec![left];
+            TokenKind::Caret => {
+                let mut terms = Vec::new();
 
-                parser.expect(T::LeftParen, false)?;
+                parser.expect(TokenKind::LeftParen, false)?;
                 loop {
                     let mut descending = false;
-                    if parser.token().kind == T::LeftCaret {
-                        parser.expect(T::LeftCaret, false)?;
-                    } else if parser.token().kind == T::RightCaret {
-                        parser.expect(T::RightCaret, false)?;
+                    if parser.token().kind == TokenKind::LeftCaret {
+                        parser.expect(TokenKind::LeftCaret, false)?;
+                    } else if parser.token().kind == TokenKind::RightCaret {
+                        parser.expect(TokenKind::RightCaret, false)?;
                         descending = true;
                     }
 
-                    children.push(Node::new_with_child(
-                        N::SortTerm(descending),
-                        p,
-                        parser.expression(0)?,
+                    terms.push(box Node::new(
+                        NodeKind::SortTerm(parser.expression(0)?, descending),
+                        self.position,
                     ));
 
-                    if parser.token().kind != T::Comma {
+                    if parser.token().kind != TokenKind::Comma {
                         break;
                     }
-                    parser.expect(T::Comma, false)?;
+                    parser.expect(TokenKind::Comma, false)?;
                 }
-                parser.expect(T::RightParen, false)?;
+                parser.expect(TokenKind::RightParen, false)?;
 
-                Ok(Node::new_with_children(
-                    N::Binary(BinaryOp::SortOp),
-                    p,
-                    children,
-                ))
+                Ok(box Node::new(NodeKind::SortOp(left, terms), self.position))
             }
 
             // Context variable bind
-            T::At => {
+            TokenKind::At => {
                 let rhs = parser.expression(self.lbp())?;
-                match rhs.kind {
-                    N::Var(..) => (),
-                    _ => {
-                        return Err(box S0214 {
-                            position: rhs.position,
-                            op: '@'.to_string(),
-                        })
-                    }
+
+                if !matches!(rhs.kind, NodeKind::Var(..)) {
+                    return Err(box S0214 {
+                        position: rhs.position,
+                        op: '@'.to_string(),
+                    });
                 }
 
-                Ok(Node::new_with_children(
-                    N::Binary(BinaryOp::ContextBind),
-                    p,
-                    vec![left, rhs],
+                Ok(box Node::new(
+                    NodeKind::Binary(BinaryOp::ContextBind, left, rhs),
+                    self.position,
                 ))
             }
 
             // Positional variable bind
-            T::Hash => {
+            TokenKind::Hash => {
                 let rhs = parser.expression(self.lbp())?;
-                match rhs.kind {
-                    N::Var(..) => (),
-                    _ => {
-                        return Err(box S0214 {
-                            position: rhs.position,
-                            op: '#'.to_string(),
-                        })
-                    }
+
+                if !matches!(rhs.kind, NodeKind::Var(..)) {
+                    return Err(box S0214 {
+                        position: rhs.position,
+                        op: '#'.to_string(),
+                    });
                 }
 
-                Ok(Node::new_with_children(
-                    N::Binary(BinaryOp::PositionalBind),
-                    p,
-                    vec![left, rhs],
+                Ok(box Node::new(
+                    NodeKind::Binary(BinaryOp::PositionalBind, left, rhs),
+                    self.position,
                 ))
             }
 
             // Ternary conditional
-            T::Question => {
-                let mut children = vec![left, parser.expression(0)?];
+            TokenKind::Question => {
+                let truthy = parser.expression(0)?;
 
-                if parser.token().kind == T::Colon {
-                    parser.expect(T::Colon, false)?;
-                    children.push(parser.expression(0)?);
-                }
+                let falsy = if parser.token().kind == TokenKind::Colon {
+                    parser.expect(TokenKind::Colon, false)?;
+                    Some(parser.expression(0)?)
+                } else {
+                    None
+                };
 
-                Ok(Node::new_with_children(N::Ternary, p, children))
-            }
-
-            // Object group by
-            T::LeftBrace => {
-                let object = parse_object(parser)?;
-                Ok(Node::new_with_child(
-                    N::Binary(BinaryOp::GroupBy(object)),
-                    p,
-                    left,
+                Ok(box Node::new(
+                    NodeKind::Ternary {
+                        cond: left,
+                        truthy,
+                        falsy,
+                    },
+                    self.position,
                 ))
             }
 
+            // Object group by
+            TokenKind::LeftBrace => Ok(box Node::new(
+                NodeKind::GroupBy(left, parse_object(parser)?),
+                self.position,
+            )),
+
             // Array predicate or index
-            T::LeftBracket => {
-                if parser.token().kind == T::RightBracket {
+            TokenKind::LeftBracket => {
+                if parser.token().kind == TokenKind::RightBracket {
                     // Empty predicate means maintain singleton arrays in the output
 
                     let mut step = &mut left;
 
                     // Walk back through left hand sides to find something that's not an array
                     // predicate
-                    while let N::Binary(BinaryOp::Predicate) = step.kind {
-                        step = &mut step.children[0]
+                    while let NodeKind::Binary(BinaryOp::Predicate, ref mut left, ..) = step.kind {
+                        step = left
                     }
 
                     step.keep_array = true;
-                    parser.expect(T::RightBracket, false)?;
+
+                    parser.expect(TokenKind::RightBracket, false)?;
+
                     Ok(left)
                 } else {
                     let rhs = parser.expression(0)?;
-                    parser.expect(T::RightBracket, true)?;
-                    Ok(Node::new_with_children(
-                        N::Binary(BinaryOp::Predicate),
-                        p,
-                        vec![left, rhs],
+                    parser.expect(TokenKind::RightBracket, true)?;
+                    Ok(box Node::new(
+                        NodeKind::Binary(BinaryOp::Predicate, left, rhs),
+                        self.position,
                     ))
                 }
             }
 
-            _ => unimplemented!("led not implemented for token {:#?}", self),
+            _ => Err(box S0201 {
+                position: self.position,
+                value: self.to_string(),
+            }),
         }
     }
+}
+
+/// Parses an object definition.
+fn parse_object(parser: &mut Parser) -> Result<Object> {
+    let mut object: Object = Vec::new();
+    if parser.token().kind != TokenKind::RightBrace {
+        loop {
+            let key = parser.expression(0)?;
+            parser.expect(TokenKind::Colon, false)?;
+            let value = parser.expression(0)?;
+            object.push((key, value));
+            if parser.token().kind != TokenKind::Comma {
+                break;
+            }
+            parser.expect(TokenKind::Comma, false)?;
+        }
+    }
+    parser.expect(TokenKind::RightBrace, true)?;
+    Ok(object)
 }

@@ -38,7 +38,7 @@ fn main() {
         None => opt.expr.expect("No JSONata expression provided."),
     };
 
-    let mut jsonata = JsonAta::new(&expr).expect("Could not parse JSONata expression");
+    let jsonata = JsonAta::new(&expr).expect("Could not parse JSONata expression");
 
     if opt.ast {
         // TODO(johan): JSON formatting of the AST

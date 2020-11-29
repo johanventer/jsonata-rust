@@ -1,22 +1,8 @@
-//! Defines all the errors that the tokenizer, parser and evaluator can fail with.
-//!
-//! Error codes
-//!  - Sxxxx - Static errors (compile time)
-//!  - Txxxx - Type errors
-//!  - Dxxxx - Dynamic errors (evaluate time)
-//!  -  01xx - tokenizer
-//!  -  02xx - parser
-//!  -  03xx - regex parser
-//!  -  04xx - function signature parser/evaluator
-//!  -  10xx - evaluator
-//!  -  20xx - operators
-//!  -  3xxx - functions (blocks of 10 for each function)
 use json::{object, JsonValue};
-use std::error::Error;
 
-use crate::Position;
+use crate::parser::Position;
 
-pub trait JsonAtaError: std::fmt::Display + std::fmt::Debug + std::error::Error {
+pub trait Error: std::error::Error + std::fmt::Debug + std::fmt::Display {
     fn code(&self) -> &str;
 }
 
@@ -27,13 +13,13 @@ macro_rules! define_error {
             $( pub $arg: String, )*
         }
 
-        impl JsonAtaError for $name {
+        impl std::error::Error for $name {}
+
+        impl Error for $name {
             fn code(&self) -> &str {
                 stringify!($name)
             }
         }
-
-        impl Error for $name {}
 
         impl std::fmt::Display for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -63,7 +49,6 @@ macro_rules! define_error {
 }
 
 define_error!(InvalidJson, "The input is not valid JSON: {}", json_error);
-
 define_error!(
     S0101,
     "String literal must be terminated by a matching quote"
@@ -79,8 +64,6 @@ define_error!(
     "Quoted property name must be terminated with a backquote (`)"
 );
 define_error!(S0106, "Comment has no closing tag");
-
-// "S0201": "Syntax error: {{token}}",
 define_error!(S0201, "Syntax error: `{}`", value);
 define_error!(S0202, "Expected `{}`, got `{}`", expected, actual);
 define_error!(S0203, "Expected `{}` before end of expression", expected);

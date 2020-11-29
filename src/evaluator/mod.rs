@@ -2,6 +2,6 @@ mod evaluator;
 mod frame;
 mod value;
 
-pub use evaluator::evaluate;
-pub use frame::{Binding, Frame};
+pub(crate) use evaluator::evaluate;
+pub(crate) use frame::{Frame, FramePtr};
 pub use value::Value;

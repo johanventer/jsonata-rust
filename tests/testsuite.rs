@@ -8,6 +8,8 @@ use test_generator::test_resources;
 
 use jsonata::JsonAta;
 
+// TODO: timelimit, depth
+
 #[test_resources("tests/testsuite/groups/*/*.json")]
 fn t(resource: &str) {
     let json = fs::read_to_string(resource).expect("Could not read test case");

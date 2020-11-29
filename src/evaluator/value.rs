@@ -1,290 +1,187 @@
 use json::JsonValue;
-use std::cell::RefCell;
-use std::ops::{Index, RangeBounds};
+use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::rc::Rc;
-use std::slice::Iter;
-use std::vec::Drain;
 
-use super::Frame;
-use crate::parser::Node;
+use super::FramePtr;
+use crate::parser::ast::Node;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum Value {
-    Undefined,
+    Undef,
     Raw(JsonValue),
     Array {
-        arr: Vec<Value>,
-        is_seq: bool,
-        keep_array: bool,
-        keep_singleton: bool,
-        cons_array: bool,
-        outer_wrapper: bool,
+        arr: RefCell<Vec<Rc<Value>>>,
+        is_seq: Cell<bool>,
+        keep_array: Cell<bool>,
+        keep_singleton: Cell<bool>,
+        cons_array: Cell<bool>,
+        outer_wrapper: Cell<bool>,
     },
     Closure {
         input: Rc<Value>,
-        frame: Rc<RefCell<Frame>>,
-        args: Vec<Node>,
-        body: Rc<Node>,
+        frame: FramePtr,
+        args: Vec<Box<Node>>,
+        body: Box<Node>,
     },
 }
 
+macro_rules! array_flag {
+    ($i:ident, $g:ident) => {
+        #[inline]
+        pub fn $g(&self) -> bool {
+            match self {
+                Value::Array { $i, .. } => $i.get(),
+                _ => false,
+            }
+        }
+    };
+
+    ($i:ident, $g:ident, $s:ident) => {
+        array_flag!($i, $g);
+
+        #[inline]
+        pub fn $s(&self) {
+            match self {
+                Value::Array { $i, .. } => $i.set(true),
+                _ => panic!("unexpected Value type"),
+            }
+        }
+    };
+}
+
 impl Value {
-    pub fn new(raw: Option<&JsonValue>) -> Self {
+    pub fn from_raw(raw: Option<&JsonValue>) -> Self {
         match raw {
-            None => Self::Undefined,
+            None => Self::Undef,
             Some(raw) => match raw {
                 JsonValue::Array(arr) => Self::Array {
-                    arr: arr.iter().map(|v| Self::new(Some(v))).collect(),
-                    is_seq: false,
-                    keep_array: false,
-                    keep_singleton: false,
-                    cons_array: false,
-                    outer_wrapper: false,
+                    arr: RefCell::new(
+                        arr.iter()
+                            .map(|v| Rc::new(Self::from_raw(Some(v))))
+                            .collect(),
+                    ),
+                    is_seq: Cell::new(false),
+                    keep_array: Cell::new(false),
+                    keep_singleton: Cell::new(false),
+                    cons_array: Cell::new(false),
+                    outer_wrapper: Cell::new(false),
                 },
                 _ => Self::Raw(raw.clone()),
             },
         }
     }
 
-    pub fn new_array() -> Self {
+    pub fn wrap(value: Rc<Value>) -> Self {
         Self::Array {
-            arr: vec![],
-            is_seq: false,
-            keep_array: false,
-            keep_singleton: false,
-            cons_array: false,
-            outer_wrapper: false,
+            arr: RefCell::new(vec![value]),
+            is_seq: Cell::new(true),
+            keep_array: Cell::new(false),
+            keep_singleton: Cell::new(false),
+            cons_array: Cell::new(false),
+            outer_wrapper: Cell::new(true),
         }
     }
 
-    pub fn new_seq_with_capacity(capacity: usize) -> Self {
-        let arr: Vec<Value> = Vec::with_capacity(capacity);
+    pub fn new_arr() -> Self {
         Self::Array {
-            arr,
-            is_seq: true,
-            keep_array: false,
-            keep_singleton: false,
-            cons_array: false,
-            outer_wrapper: false,
+            arr: RefCell::new(Vec::new()),
+            is_seq: Cell::new(false),
+            keep_array: Cell::new(false),
+            keep_singleton: Cell::new(false),
+            cons_array: Cell::new(false),
+            outer_wrapper: Cell::new(false),
         }
     }
 
     pub fn new_seq() -> Self {
         Self::Array {
-            arr: vec![],
-            is_seq: true,
-            keep_array: false,
-            keep_singleton: false,
-            cons_array: false,
-            outer_wrapper: false,
+            arr: RefCell::new(Vec::new()),
+            is_seq: Cell::new(true),
+            keep_array: Cell::new(false),
+            keep_singleton: Cell::new(false),
+            cons_array: Cell::new(false),
+            outer_wrapper: Cell::new(false),
         }
     }
 
-    pub fn new_seq_from(value: &Value) -> Self {
+    pub fn seq_from(item: Rc<Value>) -> Self {
         Self::Array {
-            arr: vec![value.clone()],
-            is_seq: true,
-            keep_array: false,
-            keep_singleton: false,
-            cons_array: false,
-            outer_wrapper: false,
+            arr: RefCell::new(vec![item]),
+            is_seq: Cell::new(true),
+            keep_array: Cell::new(false),
+            keep_singleton: Cell::new(false),
+            cons_array: Cell::new(false),
+            outer_wrapper: Cell::new(false),
         }
     }
 
-    pub fn wrap(value: &Value) -> Self {
+    pub fn seq_with_capacity(size: usize) -> Self {
         Self::Array {
-            arr: vec![value.clone()],
-            is_seq: true,
-            keep_array: false,
-            keep_singleton: false,
-            cons_array: false,
-            outer_wrapper: true,
+            arr: RefCell::new(Vec::with_capacity(size)),
+            is_seq: Cell::new(true),
+            keep_array: Cell::new(false),
+            keep_singleton: Cell::new(false),
+            cons_array: Cell::new(false),
+            outer_wrapper: Cell::new(false),
         }
     }
 
-    pub fn is_wrapped(&self) -> bool {
-        match self {
-            Value::Array { outer_wrapper, .. } => *outer_wrapper,
-            _ => false,
-        }
+    #[inline]
+    pub fn is_undef(&self) -> bool {
+        matches!(self, Value::Undef)
     }
 
-    pub fn unwrap(self) -> Value {
+    #[inline]
+    pub fn is_raw(&self) -> bool {
+        matches!(self, Value::Raw(..))
+    }
+
+    #[inline]
+    pub fn is_array(&self) -> bool {
+        matches!(self, Value::Array {.. })
+    }
+
+    #[inline]
+    pub fn arr(&self) -> Ref<'_, Vec<Rc<Value>>> {
         match self {
-            Value::Array { mut arr, .. } => arr.swap_remove(0),
+            Value::Array { arr, .. } => arr.borrow(),
             _ => panic!("unexpected Value type"),
         }
     }
 
-    pub fn is_undef(&self) -> bool {
+    #[inline]
+    pub fn arr_mut(&self) -> RefMut<'_, Vec<Rc<Value>>> {
         match self {
-            Value::Undefined => true,
-            _ => false,
+            Value::Array { arr, .. } => arr.borrow_mut(),
+            _ => panic!("unexpected Value type"),
         }
     }
 
-    pub fn is_raw(&self) -> bool {
-        match self {
-            Value::Raw(..) => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_array(&self) -> bool {
-        match self {
-            Value::Array { .. } => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_seq(&self) -> bool {
-        match self {
-            Value::Array { is_seq, .. } => *is_seq,
-            _ => false,
-        }
-    }
-
-    pub fn is_object(&self) -> bool {
-        match self {
-            Value::Raw(raw) => raw.is_object(),
-            _ => false,
-        }
-    }
-
+    #[inline]
     pub fn as_raw(&self) -> &JsonValue {
         match self {
-            Value::Raw(value) => &value,
+            Value::Raw(ref raw) => raw,
             _ => panic!("unexpected Value type"),
         }
     }
 
-    pub fn into_raw(self) -> JsonValue {
-        match self {
-            Value::Raw(value) => value,
-            Value::Array { .. } => self.to_json().unwrap(),
-            _ => panic!("unexpected Value type"),
-        }
-    }
+    array_flag!(outer_wrapper, is_wrapped);
+    array_flag!(is_seq, is_seq);
+    array_flag!(keep_array, keep_array, set_keep_array);
+    array_flag!(keep_singleton, keep_singleton, set_keep_singleton);
+    array_flag!(cons_array, cons_array, set_cons_array);
 
-    pub fn as_array_mut(&mut self) -> &mut Vec<Value> {
+    pub fn as_json(&self) -> Option<JsonValue> {
         match self {
-            Value::Array { arr, .. } => arr,
-            _ => panic!("unexpected Value type"),
-        }
-    }
-
-    pub fn as_array_owned(self) -> Vec<Value> {
-        match self {
-            Value::Array { arr, .. } => arr,
-            _ => panic!("unexpected Value type"),
-        }
-    }
-
-    pub fn keep_array(&self) -> bool {
-        match self {
-            Value::Array { keep_array, .. } => *keep_array,
-            _ => false,
-        }
-    }
-
-    pub fn set_keep_array(&mut self) {
-        match self {
-            Value::Array { keep_array, .. } => *keep_array = true,
-            _ => panic!("unexpected Value type"),
-        }
-    }
-
-    pub fn keep_singleton(&self) -> bool {
-        match self {
-            Value::Array { keep_singleton, .. } => *keep_singleton,
-            _ => false,
-        }
-    }
-
-    pub fn set_keep_singleton(&mut self) {
-        match self {
-            Value::Array { keep_singleton, .. } => *keep_singleton = true,
-            _ => panic!("unexpected Value type"),
-        }
-    }
-
-    pub fn cons_array(&self) -> bool {
-        match self {
-            Value::Array { cons_array, .. } => *cons_array,
-            _ => false,
-        }
-    }
-
-    pub fn set_cons_array(&mut self) {
-        match self {
-            Value::Array { cons_array, .. } => *cons_array = true,
-            _ => panic!("unexpected Value type"),
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        match self {
-            Value::Array { arr, .. } => arr.is_empty(),
-            _ => panic!("unexpected Value type"),
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        match self {
-            Value::Array { arr, .. } => arr.len(),
-            _ => panic!("unexpected Value type"),
-        }
-    }
-
-    pub fn iter(&self) -> Iter<'_, Value> {
-        match self {
-            Value::Array { arr, .. } => arr.iter(),
-            _ => panic!("unexpected Value type"),
-        }
-    }
-
-    pub fn push(&mut self, value: Value) {
-        match self {
-            Value::Array { arr, .. } => arr.push(value),
-            _ => panic!("unexpected Value type"),
-        }
-    }
-
-    pub fn append(&mut self, value: Value) {
-        match self {
-            Value::Array { arr, .. } => arr.append(&mut value.as_array_owned()),
-            _ => panic!("unexpected Value type"),
-        }
-    }
-
-    pub fn drain<R>(&mut self, range: R) -> Drain<'_, Value>
-    where
-        R: RangeBounds<usize>,
-    {
-        match self {
-            Value::Array { arr, .. } => arr.drain(range),
-            _ => panic!("unexpected Value type"),
-        }
-    }
-
-    pub fn take(&mut self) -> JsonValue {
-        match self {
-            Value::Raw(raw) => raw.take(),
-            _ => panic!("unexpected Value type"),
-        }
-    }
-
-    pub fn to_json(mut self) -> Option<JsonValue> {
-        match self {
-            Value::Undefined => None,
-            Value::Raw(raw) => Some(raw),
+            Value::Undef => None,
+            Value::Raw(raw) => Some(raw.clone()),
             Value::Array { .. } => Some(JsonValue::Array(
-                self.drain(..)
+                self.arr()
+                    .iter()
                     .filter(|v| !v.is_undef())
-                    .map(|v| v.to_json().unwrap())
+                    .map(|v| v.as_json().unwrap())
                     .collect(),
             )),
-            _ => None,
         }
     }
 
@@ -306,28 +203,13 @@ impl Value {
         }
     }
 
-    pub fn as_f64(&self) -> Option<f64> {
-        match self {
-            Value::Raw(raw) => match raw.as_f64() {
-                Some(num) => {
-                    if num.is_finite() {
-                        Some(num)
-                    } else {
-                        None
-                    }
-                }
-                None => None,
-            },
-            _ => None,
-        }
-    }
-
+    /// Convenience method for determining if a value is an array of numbers
     pub fn as_f64_vec(&self) -> Option<Vec<f64>> {
         match self {
             Value::Array { arr, .. } => {
                 let mut nums = vec![];
-                for value in arr {
-                    if let Some(num) = value.as_f64() {
+                for value in arr.borrow().iter() {
+                    if let Some(num) = value.as_raw().as_f64() {
                         nums.push(num);
                     } else {
                         return None;
@@ -336,108 +218,6 @@ impl Value {
                 return Some(nums);
             }
             _ => None,
-        }
-    }
-
-    pub fn as_string(&self) -> Option<String> {
-        match self {
-            Value::Raw(raw) => {
-                if raw.is_string() {
-                    Some(raw.as_str().unwrap().to_owned())
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
-    }
-}
-
-impl Index<usize> for Value {
-    type Output = Value;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        match self {
-            Value::Array { arr, .. } => &arr[index],
-            _ => panic!("unexpected Value type"),
-        }
-    }
-}
-
-impl From<Value> for Option<JsonValue> {
-    fn from(value: Value) -> Self {
-        value.to_json()
-    }
-}
-
-// TODO: Cleanup new and those From impls
-
-impl From<JsonValue> for Value {
-    fn from(raw: JsonValue) -> Self {
-        match raw {
-            JsonValue::Array(arr) => Self::Array {
-                arr: arr.iter().map(|v| Self::new(Some(v))).collect(),
-                is_seq: false,
-                keep_array: false,
-                keep_singleton: false,
-                cons_array: false,
-                outer_wrapper: false,
-            },
-            _ => Self::Raw(raw.clone()),
-        }
-    }
-}
-
-impl From<&JsonValue> for Value {
-    fn from(raw: &JsonValue) -> Self {
-        match raw {
-            JsonValue::Array(arr) => Self::Array {
-                arr: arr.iter().map(|v| Self::new(Some(v))).collect(),
-                is_seq: false,
-                keep_array: false,
-                keep_singleton: false,
-                cons_array: false,
-                outer_wrapper: false,
-            },
-            _ => Self::Raw(raw.clone()),
-        }
-    }
-}
-
-impl From<Option<JsonValue>> for Value {
-    fn from(raw: Option<JsonValue>) -> Self {
-        match raw {
-            None => Value::Undefined,
-            Some(raw) => match raw {
-                JsonValue::Array(arr) => Self::Array {
-                    arr: arr.iter().map(|v| Self::new(Some(v))).collect(),
-                    is_seq: false,
-                    keep_array: false,
-                    keep_singleton: false,
-                    cons_array: false,
-                    outer_wrapper: false,
-                },
-                _ => Self::Raw(raw.clone()),
-            },
-        }
-    }
-}
-
-impl From<Option<&JsonValue>> for Value {
-    fn from(raw: Option<&JsonValue>) -> Self {
-        match raw {
-            None => Value::Undefined,
-            Some(raw) => match raw {
-                JsonValue::Array(arr) => Self::Array {
-                    arr: arr.iter().map(|v| Self::new(Some(v))).collect(),
-                    is_seq: false,
-                    keep_array: false,
-                    keep_singleton: false,
-                    cons_array: false,
-                    outer_wrapper: false,
-                },
-                _ => Self::Raw(raw.clone()),
-            },
         }
     }
 }
@@ -449,11 +229,11 @@ impl PartialEq for Value {
         } else if self.is_raw() && other.is_raw() {
             self.as_raw() == other.as_raw()
         } else if self.is_array() && other.is_array() {
-            if self.len() != other.len() {
+            if self.arr().len() != other.arr().len() {
                 false
             } else {
-                for i in 0..self.len() - 1 {
-                    if self[i] != other[i] {
+                for i in 0..self.arr().len() - 1 {
+                    if self.arr()[i] != other.arr()[i] {
                         return false;
                     }
                 }

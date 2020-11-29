@@ -1,47 +1,35 @@
 use crate::error::*;
-use crate::JsonAtaResult;
+use crate::Result;
 
 use super::ast::*;
-use super::postprocess::process_ast;
+use super::process::process_ast;
 use super::symbol::Symbol;
 use super::tokenizer::*;
 
-/// An instance of a parser.
 pub(crate) struct Parser {
-    /// The tokenizer which will produce the tokens for parsing.
     tokenizer: Tokenizer,
-
-    /// The last token obtained from the tokenizer.
     token: Token,
-    // ancestor_label: u32,
-    // ancestor_index: u32,
 }
 
 impl Parser {
-    /// Create a new parser from a source string slice.
-    fn new(source: &str) -> JsonAtaResult<Self> {
+    fn new(source: &str) -> Result<Self> {
         let mut tokenizer = Tokenizer::new(source);
         Ok(Self {
             token: tokenizer.next(false)?,
             tokenizer,
-            // ancestor_index: 0,
-            // ancestor_label: 0,
         })
     }
 
-    /// Obtain a reference to the current token.
-    pub fn token(&self) -> &Token {
+    pub(crate) fn token(&self) -> &Token {
         &self.token
     }
 
-    /// Advance the tokenizer.
-    pub fn next(&mut self, infix: bool) -> JsonAtaResult<()> {
+    pub(crate) fn next(&mut self, infix: bool) -> Result<()> {
         self.token = self.tokenizer.next(infix)?;
         Ok(())
     }
 
-    /// Ensure that the current token is an expected type, and then advance the tokenzier.
-    pub fn expect(&mut self, expected: TokenKind, infix: bool) -> JsonAtaResult<()> {
+    pub(crate) fn expect(&mut self, expected: TokenKind, infix: bool) -> Result<()> {
         if self.token.kind == TokenKind::End {
             return Err(Box::new(S0203 {
                 position: self.token.position,
@@ -62,8 +50,7 @@ impl Parser {
         Ok(())
     }
 
-    /// Parse an expression, with a specified minimum binding power.
-    pub fn expression(&mut self, bp: u32) -> JsonAtaResult<Node> {
+    pub(crate) fn expression(&mut self, bp: u32) -> Result<Box<Node>> {
         let mut last = self.token.clone();
         self.next(true)?;
         let mut left = last.nud(self)?;
@@ -78,8 +65,7 @@ impl Parser {
     }
 }
 
-/// Returns the parsed AST for a given source string.
-pub fn parse(source: &str) -> JsonAtaResult<Node> {
+pub(crate) fn parse(source: &str) -> Result<Box<Node>> {
     let mut parser = Parser::new(source)?;
     let ast = parser.expression(0)?;
     if !matches!(parser.token().kind, TokenKind::End) {
@@ -88,12 +74,8 @@ pub fn parse(source: &str) -> JsonAtaResult<Node> {
             value: parser.token().to_string(),
         });
     }
-    Ok(process_ast(&ast)?)
+    Ok(process_ast(ast)?)
 }
-
-//fn resolve_ancestry(&self, path: &mut PathNode) {
-//    // TODO
-//}
 
 #[cfg(test)]
 mod tests {
@@ -335,7 +317,7 @@ mod tests {
         )
     "#
     )]
-    fn parser_tests(source: &str) -> JsonAtaResult<Node> {
+    fn parser_tests(source: &str) -> Result<Box<Node>> {
         parse(source)
     }
 }

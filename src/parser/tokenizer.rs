@@ -1,9 +1,9 @@
-use std::fmt;
 use std::iter::FromIterator;
 use std::{char, str};
 
+use super::Position;
 use crate::error::*;
-use crate::{JsonAtaResult, Position};
+use crate::Result;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
@@ -57,55 +57,58 @@ pub enum TokenKind {
     Var(String),
 }
 
-impl fmt::Display for TokenKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use TokenKind::*;
-        let value = match self {
-            End => "".to_string(),
-            Range => "..".to_string(),
-            Bind => ":=".to_string(),
-            NotEqual => "!=".to_string(),
-            GreaterEqual => ">=".to_string(),
-            LessEqual => "<=".to_string(),
-            Descendent => "**".to_string(),
-            Apply => "~>".to_string(),
-            Or => "or".to_string(),
-            In => "in".to_string(),
-            And => "and".to_string(),
-            Period => ".".to_string(),
-            LeftBracket => "[".to_string(),
-            RightBracket => "]".to_string(),
-            LeftBrace => "{".to_string(),
-            RightBrace => "}".to_string(),
-            LeftParen => "(".to_string(),
-            RightParen => ")".to_string(),
-            Comma => ",".to_string(),
-            At => "@".to_string(),
-            Hash => "#".to_string(),
-            SemiColon => ";".to_string(),
-            Colon => ":".to_string(),
-            Question => "?".to_string(),
-            Plus => "+".to_string(),
-            Minus => "-".to_string(),
-            Wildcard => "*".to_string(),
-            ForwardSlash => "/".to_string(),
-            Percent => "%".to_string(),
-            Pipe => "|".to_string(),
-            Equal => "=".to_string(),
-            RightCaret => ">".to_string(),
-            LeftCaret => "<".to_string(),
-            Caret => "^".to_string(),
-            Ampersand => "&".to_string(),
-            Not => "!".to_string(),
-            Tilde => "~".to_string(),
-            Null => "null".to_string(),
-            Str(v) => v.to_string(),
-            Name(v) => v.to_string(),
-            Var(v) => v.to_string(),
-            Bool(v) => format!("{}", v),
-            Num(v) => format!("{}", v),
-        };
-        write!(f, "{}", value)
+        write!(
+            f,
+            "{}",
+            match self {
+                End => "".to_string(),
+                Range => "..".to_string(),
+                Bind => ":=".to_string(),
+                NotEqual => "!=".to_string(),
+                GreaterEqual => ">=".to_string(),
+                LessEqual => "<=".to_string(),
+                Descendent => "**".to_string(),
+                Apply => "~>".to_string(),
+                Or => "or".to_string(),
+                In => "in".to_string(),
+                And => "and".to_string(),
+                Period => ".".to_string(),
+                LeftBracket => "[".to_string(),
+                RightBracket => "]".to_string(),
+                LeftBrace => "{".to_string(),
+                RightBrace => "}".to_string(),
+                LeftParen => "(".to_string(),
+                RightParen => ")".to_string(),
+                Comma => ",".to_string(),
+                At => "@".to_string(),
+                Hash => "#".to_string(),
+                SemiColon => ";".to_string(),
+                Colon => ":".to_string(),
+                Question => "?".to_string(),
+                Plus => "+".to_string(),
+                Minus => "-".to_string(),
+                Wildcard => "*".to_string(),
+                ForwardSlash => "/".to_string(),
+                Percent => "%".to_string(),
+                Pipe => "|".to_string(),
+                Equal => "=".to_string(),
+                RightCaret => ">".to_string(),
+                LeftCaret => "<".to_string(),
+                Caret => "^".to_string(),
+                Ampersand => "&".to_string(),
+                Not => "!".to_string(),
+                Tilde => "~".to_string(),
+                Null => "null".to_string(),
+                Str(v) => v.to_string(),
+                Name(v) => v.to_string(),
+                Var(v) => v.to_string(),
+                Bool(v) => format!("{}", v),
+                Num(v) => format!("{}", v),
+            }
+        )
     }
 }
 
@@ -121,8 +124,8 @@ impl Token {
     }
 }
 
-impl fmt::Display for Token {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.kind.fmt(f)
     }
 }
@@ -135,27 +138,23 @@ pub struct Tokenizer {
 impl Tokenizer {
     pub fn new(source: &str) -> Self {
         Self {
-            position: Position {
-                source_pos: 0,
-                line: 0,
-                column: 0,
-            },
+            position: Position::default(),
             chars: source.chars().collect(),
         }
     }
 
-    fn emit(&self, kind: TokenKind) -> JsonAtaResult<Token> {
+    fn emit(&self, kind: TokenKind) -> Result<Token> {
         Ok(Token::new(kind, self.position))
     }
 
     /// Returns the next token in the stream and its position as a tuple
-    pub fn next(&mut self, infix: bool) -> JsonAtaResult<Token> {
+    pub fn next(&mut self, infix: bool) -> Result<Token> {
         use TokenKind::*;
 
         // Convenience for single character operators
         macro_rules! op1 {
             ($t:tt) => {{
-                self.position.advance_1();
+                self.position.advance1();
                 break self.emit($t);
             }};
         }
@@ -163,7 +162,7 @@ impl Tokenizer {
         // Convenience for double character operators
         macro_rules! op2 {
             ($t:tt) => {{
-                self.position.advance_2();
+                self.position.advance2();
                 break self.emit($t);
             }};
         }
@@ -173,13 +172,13 @@ impl Tokenizer {
                 [] => break self.emit(End),
                 // Skip whitespace
                 [' ' | '\r' | '\n' | '\t' | '\x0b', ..] => {
-                    self.position.advance_1();
+                    self.position.advance1();
                     continue;
                 }
                 // Skip comments
                 ['/', '*', ..] => {
                     let comment_start = self.position;
-                    self.position.advance_2();
+                    self.position.advance2();
                     loop {
                         match self.chars[self.position.source_pos..] {
                             [] => {
@@ -188,11 +187,11 @@ impl Tokenizer {
                                 })
                             }
                             ['*', '/', ..] => {
-                                self.position.advance_2();
+                                self.position.advance2();
                                 break;
                             }
                             _ => {
-                                self.position.advance_1();
+                                self.position.advance1();
                             }
                         }
                     }
@@ -211,7 +210,7 @@ impl Tokenizer {
                 // Numbers
                 ['0'..='9', ..] => {
                     let number_start = self.position.source_pos;
-                    self.position.advance_1();
+                    self.position.advance1();
 
                     // TODO(johan): Improve this lexing, it's pretty ordinary and allows all sorts
                     // of invalid stuff
@@ -220,32 +219,32 @@ impl Tokenizer {
                             // Range operator
                             ['.', '.', ..] => break,
                             ['e' | 'E', ..] => {
-                                self.position.advance_1();
+                                self.position.advance1();
                                 loop {
                                     match self.chars[self.position.source_pos..] {
                                         ['+' | '-', ..] => {
-                                            self.position.advance_1();
+                                            self.position.advance1();
                                         }
                                         ['0'..='9', ..] => {
-                                            self.position.advance_1();
+                                            self.position.advance1();
                                         }
                                         _ => break,
                                     }
                                 }
                             }
                             ['.', ..] => {
-                                self.position.advance_1();
+                                self.position.advance1();
                                 loop {
                                     match self.chars[self.position.source_pos..] {
                                         ['0'..='9', ..] => {
-                                            self.position.advance_1();
+                                            self.position.advance1();
                                         }
                                         _ => break,
                                     }
                                 }
                             }
                             ['0'..='9', ..] => {
-                                self.position.advance_1();
+                                self.position.advance1();
                             }
                             _ => break,
                         }
@@ -291,7 +290,7 @@ impl Tokenizer {
                 ['~', ..] => op1!(Tilde),
                 // String literals
                 [quote_type @ ('\'' | '"'), ..] => {
-                    self.position.advance_1();
+                    self.position.advance1();
                     let mut string = String::new();
                     let string_start = self.position;
                     break loop {
@@ -304,41 +303,41 @@ impl Tokenizer {
                             }
                             // Escape sequence
                             ['\\', escape_char, ..] => {
-                                self.position.advance_1();
+                                self.position.advance1();
 
                                 match escape_char {
                                     // Basic escape sequence
                                     '"' => {
                                         string.push('"');
-                                        self.position.advance_1();
+                                        self.position.advance1();
                                     }
                                     '\\' => {
                                         string.push('\\');
-                                        self.position.advance_1();
+                                        self.position.advance1();
                                     }
                                     '/' => {
                                         string.push('/');
-                                        self.position.advance_1();
+                                        self.position.advance1();
                                     }
                                     'b' => {
                                         string.push('\x08');
-                                        self.position.advance_1();
+                                        self.position.advance1();
                                     }
                                     'f' => {
                                         string.push('\x0c');
-                                        self.position.advance_1();
+                                        self.position.advance1();
                                     }
                                     'n' => {
                                         string.push('\n');
-                                        self.position.advance_1();
+                                        self.position.advance1();
                                     }
                                     'r' => {
                                         string.push('\r');
-                                        self.position.advance_1();
+                                        self.position.advance1();
                                     }
                                     't' => {
                                         string.push('\t');
-                                        self.position.advance_1();
+                                        self.position.advance1();
                                     }
                                     // Unicode escape sequence
                                     'u' => {
@@ -364,7 +363,7 @@ impl Tokenizer {
                                             .and_then(char::from_u32)
                                         {
                                             string.push(character);
-                                            self.position.advance_x(5);
+                                            self.position.advance(5);
                                         } else {
                                             break Err(box S0104 {
                                                 position: self.position,
@@ -384,7 +383,7 @@ impl Tokenizer {
                             [c, ..] => {
                                 // Check for the end of the string
                                 if c == quote_type {
-                                    self.position.advance_1();
+                                    self.position.advance1();
                                     break self.emit(Str(string));
                                 }
 
@@ -392,7 +391,7 @@ impl Tokenizer {
                                 // TODO(johan): This method of building strings byte by byte is
                                 // probably slow
                                 string.push(c);
-                                self.position.advance_1();
+                                self.position.advance1();
                                 continue;
                             }
                         }
@@ -400,7 +399,7 @@ impl Tokenizer {
                 }
                 // Quoted names (backticks)
                 ['`', ..] => {
-                    self.position.advance_1();
+                    self.position.advance1();
                     // Find the closing backtick and convert to a string
                     match self.chars[self.position.source_pos..]
                         .iter()
@@ -412,7 +411,7 @@ impl Tokenizer {
                                 .collect::<String>()
                         }) {
                         Some(value) => {
-                            self.position.advance_x(value.len() + 1);
+                            self.position.advance(value.len() + 1);
                             break self.emit(Name(value));
                         }
                         None => {
@@ -462,7 +461,7 @@ impl Tokenizer {
                                 }
                             }
                             _ => {
-                                self.position.advance_1();
+                                self.position.advance1();
                             }
                         }
                     };

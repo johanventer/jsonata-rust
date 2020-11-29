@@ -1,52 +1,55 @@
 #![feature(or_patterns)]
 #![feature(box_syntax)]
+use json::JsonValue;
+use std::rc::Rc;
 
 mod error;
 mod evaluator;
 mod functions;
-mod jsonata;
 mod parser;
 
-pub use jsonata::JsonAta;
+pub use error::Error;
+use evaluator::evaluate;
+pub use evaluator::Value;
+use evaluator::{Frame, FramePtr};
+pub use parser::ast::*;
+use parser::parse;
 
-use error::JsonAtaError;
+pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
-pub type JsonAtaResult<T> = std::result::Result<T, Box<dyn JsonAtaError>>;
-
-#[derive(Copy, Clone, Debug)]
-pub struct Position {
-    pub line: usize,
-    pub column: usize,
-    pub source_pos: usize,
+pub struct JsonAta {
+    ast: Box<Node>,
+    frame: FramePtr,
 }
 
-impl Default for Position {
-    fn default() -> Self {
-        Self {
-            line: 0,
-            column: 0,
-            source_pos: 0,
+impl JsonAta {
+    pub fn new(expr: &str) -> Result<Self> {
+        Ok(Self {
+            ast: parse(expr)?,
+            frame: Frame::new_ptr(),
+        })
+    }
+
+    pub fn ast(&self) -> &Node {
+        self.ast.as_ref()
+    }
+
+    pub fn assign_var(&mut self, name: &str, value: &JsonValue) {
+        self.frame
+            .borrow_mut()
+            .bind(name, Rc::new(Value::from_raw(Some(value))));
+    }
+
+    pub fn evaluate(&self, input: Option<&JsonValue>) -> Result<Option<JsonValue>> {
+        let mut input = Rc::new(Value::from_raw(input));
+        if input.is_array() {
+            input = Rc::new(Value::wrap(Rc::clone(&input)));
         }
-    }
-}
 
-impl Position {
-    pub fn advance_x(&mut self, x: usize) {
-        self.column += x;
-        self.source_pos += x;
-    }
+        self.frame.borrow_mut().bind("$", Rc::clone(&input));
 
-    pub fn advance_line(&mut self) {
-        self.line += 1;
-        self.column = 0;
-        self.source_pos += 1;
-    }
+        let result = evaluate(&self.ast, input, Rc::clone(&self.frame))?;
 
-    pub fn advance_1(&mut self) {
-        self.advance_x(1);
-    }
-
-    pub fn advance_2(&mut self) {
-        self.advance_x(2);
+        Ok(result.as_json())
     }
 }
