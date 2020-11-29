@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use super::Position;
 
 pub type Object = Vec<(Box<Node>, Box<Node>)>;

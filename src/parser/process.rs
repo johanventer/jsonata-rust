@@ -9,10 +9,16 @@ pub(super) fn process_ast(node: Box<Node>) -> Result<Box<Node>> {
 
     let mut result = match node.kind {
         NodeKind::Name(..) => process_name(node)?,
+        NodeKind::Block(..) => process_block(node)?,
         NodeKind::Unary(..) => process_unary(node)?,
         NodeKind::Binary(..) => process_binary(node)?,
         //     NodeKind::Binary(BinaryOp::GroupBy(..)) => process_group_by(node),
         //     NodeKind::Binary(BinaryOp::SortOp(..)) => process_sort(node),
+        NodeKind::Lambda { .. } => process_lambda(node)?,
+
+        //     Function
+        //     Ternary
+        //     Transform
         _ => node,
     };
 
@@ -23,6 +29,7 @@ pub(super) fn process_ast(node: Box<Node>) -> Result<Box<Node>> {
     Ok(result)
 }
 
+#[inline]
 fn process_name(node: Box<Node>) -> Result<Box<Node>> {
     let position = node.position;
     let keep_singleton_array = node.keep_array;
@@ -31,6 +38,20 @@ fn process_name(node: Box<Node>) -> Result<Box<Node>> {
     Ok(result)
 }
 
+#[inline]
+fn process_block(mut node: Box<Node>) -> Result<Box<Node>> {
+    let cons_array = false;
+    if let NodeKind::Block(ref mut exprs) = node.kind {
+        *exprs = exprs
+            .drain(..)
+            .map(|expr| process_ast(expr))
+            .collect::<Result<Vec<Box<Node>>>>()?;
+    }
+    node.cons_array = cons_array;
+    Ok(node)
+}
+
+#[inline]
 fn process_unary(mut node: Box<Node>) -> Result<Box<Node>> {
     match node.kind {
         NodeKind::Unary(UnaryOp::Minus(value)) => {
@@ -67,6 +88,7 @@ fn process_unary(mut node: Box<Node>) -> Result<Box<Node>> {
     }
 }
 
+#[inline]
 fn process_binary(mut node: Box<Node>) -> Result<Box<Node>> {
     match node.kind {
         NodeKind::Binary(BinaryOp::Path, lhs, rhs) => process_path(lhs, rhs),
@@ -82,6 +104,7 @@ fn process_binary(mut node: Box<Node>) -> Result<Box<Node>> {
     }
 }
 
+#[inline]
 fn process_path(lhs: Box<Node>, rhs: Box<Node>) -> Result<Box<Node>> {
     let lhs = process_ast(lhs)?;
     let mut rhs = process_ast(rhs)?;
@@ -145,6 +168,7 @@ fn process_path(lhs: Box<Node>, rhs: Box<Node>) -> Result<Box<Node>> {
     Ok(result)
 }
 
+#[inline]
 fn process_predicate(position: Position, lhs: Box<Node>, rhs: Box<Node>) -> Result<Box<Node>> {
     let mut result = process_ast(lhs)?;
     let mut is_stages = false;
@@ -185,3 +209,59 @@ fn process_predicate(position: Position, lhs: Box<Node>, rhs: Box<Node>) -> Resu
 
     Ok(result)
 }
+
+#[inline]
+fn process_lambda(mut node: Box<Node>) -> Result<Box<Node>> {
+    if let NodeKind::Lambda { args, body, .. } = node.kind {
+        //let body = tail_call_optimize(process_ast(body)?)?;
+
+        node.kind = NodeKind::Lambda {
+            args,
+            body: process_ast(body)?.into(),
+        };
+
+        Ok(node)
+    } else {
+        unreachable!()
+    }
+}
+
+// fn tail_call_optimize(mut node: Box<Node>) -> Result<Box<Node>> {
+//     match node.kind {
+//         NodeKind::Function { .. } if node.predicates.is_none() => {
+//             let position = node.position;
+//             Ok(box Node::new(
+//                 NodeKind::Lambda {
+//                     args: Rc::new(Vec::new()),
+//                     body: node.into(),
+//                     thunk: true,
+//                 },
+//                 position,
+//             ))
+//         }
+//         NodeKind::Ternary {
+//             cond,
+//             truthy,
+//             falsy,
+//         } => {
+//             node.kind = NodeKind::Ternary {
+//                 cond,
+//                 truthy: tail_call_optimize(truthy)?,
+//                 falsy: match falsy {
+//                     None => None,
+//                     Some(falsy) => Some(tail_call_optimize(falsy)?),
+//                 },
+//             };
+//             Ok(node)
+//         }
+//         NodeKind::Block(ref mut exprs) => {
+//             let len = exprs.len();
+//             if len > 0 {
+//                 let last = tail_call_optimize(exprs.pop().unwrap())?;
+//                 exprs.push(last);
+//             }
+//             Ok(node)
+//         }
+//         _ => Ok(node),
+//     }
+// }

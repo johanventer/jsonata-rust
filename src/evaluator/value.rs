@@ -2,8 +2,8 @@ use json::JsonValue;
 use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::rc::Rc;
 
-use super::FramePtr;
-use crate::parser::ast::Node;
+// use super::FramePtr;
+// use crate::parser::ast::Node;
 
 #[derive(Debug)]
 pub enum Value {
@@ -17,12 +17,12 @@ pub enum Value {
         cons_array: Cell<bool>,
         outer_wrapper: Cell<bool>,
     },
-    Closure {
-        input: Rc<Value>,
-        frame: FramePtr,
-        args: Vec<Box<Node>>,
-        body: Box<Node>,
-    },
+    // Closure {
+    //     input: Rc<Value>,
+    //     frame: FramePtr,
+    //     args: Rc<Vec<Box<Node>>>,
+    //     body: Rc<Box<Node>>,
+    // },
 }
 
 macro_rules! array_flag {

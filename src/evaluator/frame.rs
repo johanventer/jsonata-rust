@@ -4,10 +4,10 @@ use std::rc::Rc;
 
 use super::value::Value;
 
-pub(crate) type FramePtr = Rc<RefCell<Frame>>;
+pub type FramePtr = Rc<RefCell<Frame>>;
 
 #[derive(Debug)]
-pub(crate) struct Frame {
+pub struct Frame {
     bindings: HashMap<String, Rc<Value>>,
     parent_frame: Option<FramePtr>,
 }
