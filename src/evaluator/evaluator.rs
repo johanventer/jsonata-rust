@@ -30,11 +30,11 @@ pub(crate) fn evaluate(node: &Box<Node>, input: Rc<Value>, frame: FramePtr) -> R
         NodeKind::Wildcard => evaluate_wildcard(input)?,
         NodeKind::Descendent => evaluate_descendents(input)?,
         // NodeKind::Lambda { .. } => evaluate_lambda(node, input, Rc::clone(&frame))?,
-        //         NodeKind::Function {
-        //             proc,
-        //             args,
-        //             is_partial,
-        //         } => evaluate_function(proc, args, *is_partial, input, Rc::clone(&frame))?,
+        // NodeKind::Function {
+        //     ref proc,
+        //     ref args,
+        //     ref is_partial,
+        // } => evaluate_function(proc, args, *is_partial, input, Rc::clone(&frame))?,
         //         // TODO:
         //         //  - Parent
         //         //  - Regex
@@ -733,45 +733,55 @@ fn evaluate_filter(node: &Box<Node>, mut input: Rc<Value>, frame: FramePtr) -> R
 //     }))
 // }
 
-// fn evaluate_function(
-//     proc: &Box<Node>,
-//     args: &Vec<Box<Node>>,
-//     _is_partial: bool,
-//     input: Rc<Value>,
-//     frame: FramePtr,
-// ) -> Result<Rc<Value>> {
-//     let proc = evaluate(proc, Rc::clone(&input), Rc::clone(&frame))?;
+//fn evaluate_function(
+//    _proc: &Box<Node>,
+//    _args: &Vec<Box<Node>>,
+//    _is_partial: bool,
+//    input: Rc<Value>,
+//    _frame: FramePtr,
+//) -> Result<Rc<Value>> {
+//    // let proc = evaluate(proc, Rc::clone(&input), Rc::clone(&frame))?;
 
-//     let arg_values = args
-//         .iter()
-//         .map(|arg| evaluate(&arg, Rc::clone(&input), Rc::clone(&frame)))
-//         .collect::<Result<Vec<Rc<Value>>>>()?;
+//    // let arg_values = args
+//    //     .iter()
+//    //     .map(|arg| evaluate(&arg, Rc::clone(&input), Rc::clone(&frame)))
+//    //     .collect::<Result<Vec<Rc<Value>>>>()?;
 
-//     if let Value::Closure {
-//         ref input,
-//         ref frame,
-//         ref args,
-//         ref body,
-//     } = &*proc
-//     {
-//         if arg_values.len() != args.len() {
-//             panic!("Different number of args and arg values");
-//         }
+//    // match &*proc {
+//    //     Value::NativeFn => {
+//    //         eprintln!("GOT A NATIVE FN");
+//    //         Ok(input)
+//    //     }
+//    //     _ => Ok(input),
+//    // }
+//    //
+//    Ok(input)
 
-//         let frame = Frame::ptr_with_parent(Rc::clone(frame));
+//    // if let Value::Closure {
+//    //     ref input,
+//    //     ref frame,
+//    //     ref args,
+//    //     ref body,
+//    // } = &*proc
+//    // {
+//    //     if arg_values.len() != args.len() {
+//    //         panic!("Different number of args and arg values");
+//    //     }
 
-//         for i in 0..args.len() {
-//             let arg = &args[i];
-//             let value = &arg_values[i];
-//             if let NodeKind::Var(name) = &arg.kind {
-//                 frame.borrow_mut().bind(&name, Rc::clone(value));
-//             } else {
-//                 panic!("Argument was not a NodeKind::Var!")
-//             }
-//         }
+//    //     let frame = Frame::ptr_with_parent(Rc::clone(frame));
 
-//         evaluate(&body, Rc::clone(input), frame)
-//     } else {
-//         panic!("TODO:  Only lambda's are supported right now")
-//     }
-// }
+//    //     for i in 0..args.len() {
+//    //         let arg = &args[i];
+//    //         let value = &arg_values[i];
+//    //         if let NodeKind::Var(name) = &arg.kind {
+//    //             frame.borrow_mut().bind(&name, Rc::clone(value));
+//    //         } else {
+//    //             panic!("Argument was not a NodeKind::Var!")
+//    //         }
+//    //     }
+
+//    //     evaluate(&body, Rc::clone(input), frame)
+//    // } else {
+//    //     panic!("TODO:  Only lambda's are supported right now")
+//    // }
+//}

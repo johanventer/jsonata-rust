@@ -46,6 +46,12 @@ impl JsonAta {
             input = Rc::new(Value::wrap(Rc::clone(&input)));
         }
 
+        // TODO: Apply statics
+        // self.frame
+        //     .borrow_mut()
+        //     .bind("string", Rc::new(Value::NativeFn(functions::string)))
+        //     .bind("boolean", Rc::new(Value::NativeFn(functions::boolean)));
+
         self.frame.borrow_mut().bind("$", Rc::clone(&input));
 
         let result = evaluate(&self.ast, input, Rc::clone(&self.frame))?;
