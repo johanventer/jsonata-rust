@@ -1,5 +1,3 @@
-#![feature(or_patterns)]
-#![feature(box_syntax)]
 use json::JsonValue;
 use std::rc::Rc;
 

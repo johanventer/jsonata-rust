@@ -137,20 +137,20 @@ fn evaluate_group_expression(
             let key = key.as_raw().as_str();
 
             if key.is_none() {
-                return Err(box T1003 {
+                return Err(Box::new(T1003 {
                     position: node.position,
                     value: k.kind.to_string(),
-                });
+                }));
             }
 
             let key = key.unwrap();
 
             if groups.contains_key(key) {
                 if groups[key].1 != i {
-                    return Err(box D1009 {
+                    return Err(Box::new(D1009 {
                         position: node.position,
                         value: k.kind.to_string(),
-                    });
+                    }));
                 }
 
                 groups.insert(
@@ -394,18 +394,18 @@ fn evaluate_range_expression(
     let lhs = match lhs.as_isize() {
         Some(num) => num,
         None => {
-            return Err(box T2003 {
+            return Err(Box::new(T2003 {
                 position: node.position,
-            })
+            }))
         }
     };
 
     let rhs = match rhs.as_isize() {
         Some(num) => num,
         None => {
-            return Err(box T2004 {
+            return Err(Box::new(T2004 {
                 position: node.position,
-            })
+            }))
         }
     };
 
@@ -415,10 +415,10 @@ fn evaluate_range_expression(
 
     let size = rhs - lhs + 1;
     if size > 10_000_000_000 {
-        return Err(box D2014 {
+        return Err(Box::new(D2014 {
             position: node.position,
             value: size.to_string(),
-        });
+        }));
     }
 
     // TODO: This is quite slow with the max 10,000,000,000 items as there is a mem allocation for

@@ -34,31 +34,38 @@ impl Symbol for Token {
 
     fn nud(&self, parser: &mut Parser) -> Result<Box<Node>> {
         match self.kind {
-            TokenKind::Null => Ok(box Node::new(NodeKind::Null, self.position)),
-            TokenKind::Bool(ref v) => Ok(box Node::new(NodeKind::Bool(*v), self.position)),
-            TokenKind::Str(ref v) => Ok(box Node::new(NodeKind::Str(v.clone()), self.position)),
-            TokenKind::Num(ref v) => Ok(box Node::new(NodeKind::Num(*v), self.position)),
-            TokenKind::Name(ref v) => Ok(box Node::new(NodeKind::Name(v.clone()), self.position)),
-            TokenKind::Var(ref v) => Ok(box Node::new(NodeKind::Var(v.clone()), self.position)),
-            TokenKind::And => Ok(box Node::new(
+            TokenKind::Null => Ok(Box::new(Node::new(NodeKind::Null, self.position))),
+            TokenKind::Bool(ref v) => Ok(Box::new(Node::new(NodeKind::Bool(*v), self.position))),
+            TokenKind::Str(ref v) => {
+                Ok(Box::new(Node::new(NodeKind::Str(v.clone()), self.position)))
+            }
+            TokenKind::Num(ref v) => Ok(Box::new(Node::new(NodeKind::Num(*v), self.position))),
+            TokenKind::Name(ref v) => Ok(Box::new(Node::new(
+                NodeKind::Name(v.clone()),
+                self.position,
+            ))),
+            TokenKind::Var(ref v) => {
+                Ok(Box::new(Node::new(NodeKind::Var(v.clone()), self.position)))
+            }
+            TokenKind::And => Ok(Box::new(Node::new(
                 NodeKind::Name(String::from("and")),
                 self.position,
-            )),
-            TokenKind::Or => Ok(box Node::new(
+            ))),
+            TokenKind::Or => Ok(Box::new(Node::new(
                 NodeKind::Name(String::from("or")),
                 self.position,
-            )),
-            TokenKind::In => Ok(box Node::new(
+            ))),
+            TokenKind::In => Ok(Box::new(Node::new(
                 NodeKind::Name(String::from("in")),
                 self.position,
-            )),
-            TokenKind::Minus => Ok(box Node::new(
+            ))),
+            TokenKind::Minus => Ok(Box::new(Node::new(
                 NodeKind::Unary(UnaryOp::Minus(parser.expression(70)?)),
                 self.position,
-            )),
-            TokenKind::Wildcard => Ok(box Node::new(NodeKind::Wildcard, self.position)),
-            TokenKind::Descendent => Ok(box Node::new(NodeKind::Descendent, self.position)),
-            TokenKind::Percent => Ok(box Node::new(NodeKind::Parent, self.position)),
+            ))),
+            TokenKind::Wildcard => Ok(Box::new(Node::new(NodeKind::Wildcard, self.position))),
+            TokenKind::Descendent => Ok(Box::new(Node::new(NodeKind::Descendent, self.position))),
+            TokenKind::Percent => Ok(Box::new(Node::new(NodeKind::Parent, self.position))),
 
             // Block of expressions
             TokenKind::LeftParen => {
@@ -73,7 +80,10 @@ impl Symbol for Token {
                 }
                 parser.expect(TokenKind::RightParen, true)?;
 
-                Ok(box Node::new(NodeKind::Block(expressions), self.position))
+                Ok(Box::new(Node::new(
+                    NodeKind::Block(expressions),
+                    self.position,
+                )))
             }
 
             // Array constructor
@@ -86,10 +96,10 @@ impl Symbol for Token {
 
                         if parser.token().kind == TokenKind::Range {
                             parser.expect(TokenKind::Range, false)?;
-                            item = box Node::new(
+                            item = Box::new(Node::new(
                                 NodeKind::Binary(BinaryOp::Range, item, parser.expression(0)?),
                                 self.position,
-                            )
+                            ))
                         }
 
                         expressions.push(item);
@@ -103,17 +113,17 @@ impl Symbol for Token {
                 }
                 parser.expect(TokenKind::RightBracket, true)?;
 
-                Ok(box Node::new(
+                Ok(Box::new(Node::new(
                     NodeKind::Unary(UnaryOp::ArrayConstructor(expressions)),
                     self.position,
-                ))
+                )))
             }
 
             // Object constructor
-            TokenKind::LeftBrace => Ok(box Node::new(
+            TokenKind::LeftBrace => Ok(Box::new(Node::new(
                 NodeKind::Unary(UnaryOp::ObjectConstructor(parse_object(parser)?)),
                 self.position,
-            )),
+            ))),
 
             // Object transformer
             TokenKind::Pipe => {
@@ -132,30 +142,30 @@ impl Symbol for Token {
 
                 parser.expect(TokenKind::Pipe, false)?;
 
-                Ok(box Node::new(
+                Ok(Box::new(Node::new(
                     NodeKind::Transform {
                         pattern,
                         update,
                         delete,
                     },
                     self.position,
-                ))
+                )))
             }
 
-            _ => Err(box S0211 {
+            _ => Err(Box::new(S0211 {
                 position: self.position,
                 symbol: self.to_string(),
-            }),
+            })),
         }
     }
 
     fn led(&self, parser: &mut Parser, mut left: Box<Node>) -> Result<Box<Node>> {
         macro_rules! binary {
             ($n:tt) => {
-                Ok(box Node::new(
+                Ok(Box::new(Node::new(
                     NodeKind::Binary(BinaryOp::$n, left, parser.expression(self.lbp())?),
                     self.position,
-                ))
+                )))
             };
         }
 
@@ -189,10 +199,10 @@ impl Symbol for Token {
                         match parser.token().kind {
                             TokenKind::Question => {
                                 is_partial = true;
-                                args.push(box Node::new(
+                                args.push(Box::new(Node::new(
                                     NodeKind::PartialArg,
                                     parser.token().position,
-                                ));
+                                )));
                                 parser.expect(TokenKind::Question, false)?;
                             }
                             _ => {
@@ -215,10 +225,10 @@ impl Symbol for Token {
                         // All of the args must be Variable nodes
                         for arg in &args {
                             if !matches!(arg.kind, NodeKind::Var(..)) {
-                                return Err(box S0208 {
+                                return Err(Box::new(S0208 {
                                     position: arg.position,
                                     arg: arg.kind.to_string(),
-                                });
+                                }));
                             }
                         }
 
@@ -231,17 +241,17 @@ impl Symbol for Token {
                 if is_lambda {
                     parser.expect(TokenKind::LeftBrace, false)?;
                     let body = parser.expression(0)?;
-                    func = box Node::new(NodeKind::Lambda { args, body }, self.position);
+                    func = Box::new(Node::new(NodeKind::Lambda { args, body }, self.position));
                     parser.expect(TokenKind::RightBrace, false)?;
                 } else {
-                    func = box Node::new(
+                    func = Box::new(Node::new(
                         NodeKind::Function {
                             proc: left,
                             args,
                             is_partial,
                         },
                         self.position,
-                    );
+                    ));
                 }
 
                 Ok(func)
@@ -250,15 +260,15 @@ impl Symbol for Token {
             // Variable assignment
             TokenKind::Bind => {
                 if !matches!(left.kind, NodeKind::Var(..)) {
-                    return Err(box S0212 {
+                    return Err(Box::new(S0212 {
                         position: left.position,
-                    });
+                    }));
                 }
 
-                Ok(box Node::new(
+                Ok(Box::new(Node::new(
                     NodeKind::Binary(BinaryOp::Bind, left, parser.expression(self.lbp() - 1)?),
                     self.position,
-                ))
+                )))
             }
 
             // Order by expression
@@ -275,10 +285,10 @@ impl Symbol for Token {
                         descending = true;
                     }
 
-                    terms.push(box Node::new(
+                    terms.push(Box::new(Node::new(
                         NodeKind::SortTerm(parser.expression(0)?, descending),
                         self.position,
-                    ));
+                    )));
 
                     if parser.token().kind != TokenKind::Comma {
                         break;
@@ -287,7 +297,10 @@ impl Symbol for Token {
                 }
                 parser.expect(TokenKind::RightParen, false)?;
 
-                Ok(box Node::new(NodeKind::SortOp(left, terms), self.position))
+                Ok(Box::new(Node::new(
+                    NodeKind::SortOp(left, terms),
+                    self.position,
+                )))
             }
 
             // Context variable bind
@@ -295,16 +308,16 @@ impl Symbol for Token {
                 let rhs = parser.expression(self.lbp())?;
 
                 if !matches!(rhs.kind, NodeKind::Var(..)) {
-                    return Err(box S0214 {
+                    return Err(Box::new(S0214 {
                         position: rhs.position,
                         op: '@'.to_string(),
-                    });
+                    }));
                 }
 
-                Ok(box Node::new(
+                Ok(Box::new(Node::new(
                     NodeKind::Binary(BinaryOp::ContextBind, left, rhs),
                     self.position,
-                ))
+                )))
             }
 
             // Positional variable bind
@@ -312,16 +325,16 @@ impl Symbol for Token {
                 let rhs = parser.expression(self.lbp())?;
 
                 if !matches!(rhs.kind, NodeKind::Var(..)) {
-                    return Err(box S0214 {
+                    return Err(Box::new(S0214 {
                         position: rhs.position,
                         op: '#'.to_string(),
-                    });
+                    }));
                 }
 
-                Ok(box Node::new(
+                Ok(Box::new(Node::new(
                     NodeKind::Binary(BinaryOp::PositionalBind, left, rhs),
                     self.position,
-                ))
+                )))
             }
 
             // Ternary conditional
@@ -335,21 +348,21 @@ impl Symbol for Token {
                     None
                 };
 
-                Ok(box Node::new(
+                Ok(Box::new(Node::new(
                     NodeKind::Ternary {
                         cond: left,
                         truthy,
                         falsy,
                     },
                     self.position,
-                ))
+                )))
             }
 
             // Object group by
-            TokenKind::LeftBrace => Ok(box Node::new(
+            TokenKind::LeftBrace => Ok(Box::new(Node::new(
                 NodeKind::GroupBy(left, parse_object(parser)?),
                 self.position,
-            )),
+            ))),
 
             // Array predicate or index
             TokenKind::LeftBracket => {
@@ -372,17 +385,17 @@ impl Symbol for Token {
                 } else {
                     let rhs = parser.expression(0)?;
                     parser.expect(TokenKind::RightBracket, true)?;
-                    Ok(box Node::new(
+                    Ok(Box::new(Node::new(
                         NodeKind::Binary(BinaryOp::Predicate, left, rhs),
                         self.position,
-                    ))
+                    )))
                 }
             }
 
-            _ => Err(box S0201 {
+            _ => Err(Box::new(S0201 {
                 position: self.position,
                 value: self.to_string(),
-            }),
+            })),
         }
     }
 }

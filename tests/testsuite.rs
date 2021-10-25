@@ -81,6 +81,7 @@ fn t(resource: &str) {
                 }
             }
             Err(error) => {
+                // The parsing error is expected, let's make sure it matches
                 assert!(!case["code"].is_null());
                 assert_eq!(case["code"], error.code());
             }

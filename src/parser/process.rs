@@ -33,7 +33,7 @@ pub(super) fn process_ast(node: Box<Node>) -> Result<Box<Node>> {
 fn process_name(node: Box<Node>) -> Result<Box<Node>> {
     let position = node.position;
     let keep_singleton_array = node.keep_array;
-    let mut result = box Node::new_path(position, vec![node]);
+    let mut result = Box::new(Node::new_path(position, vec![node]));
     result.keep_singleton_array = keep_singleton_array;
     Ok(result)
 }
@@ -61,10 +61,10 @@ fn process_unary(mut node: Box<Node>) -> Result<Box<Node>> {
                 *num = -*num;
                 Ok(result)
             } else {
-                Ok(box Node::new(
+                Ok(Box::new(Node::new(
                     NodeKind::Unary(UnaryOp::Minus(result)),
                     node.position,
-                ))
+                )))
             };
         }
 
@@ -114,7 +114,7 @@ fn process_path(lhs: Box<Node>, rhs: Box<Node>) -> Result<Box<Node>> {
         if lhs.is_path() {
             lhs
         } else {
-            box Node::new_path(lhs.position, vec![lhs])
+            Box::new(Node::new_path(lhs.position, vec![lhs]))
         }
     };
 
@@ -140,10 +140,10 @@ fn process_path(lhs: Box<Node>, rhs: Box<Node>) -> Result<Box<Node>> {
         match step.kind {
             // Steps cannot be literal values
             NodeKind::Num(..) | NodeKind::Bool(..) | NodeKind::Null => {
-                return Err(box S0213 {
+                return Err(Box::new(S0213 {
                     position: step.position,
                     value: step.kind.to_string(),
-                })
+                }))
             }
             // Steps that are string literals should be switched to Name
             NodeKind::Str(ref v) => {
@@ -182,7 +182,7 @@ fn process_predicate(position: Position, lhs: Box<Node>, rhs: Box<Node>) -> Resu
     };
 
     if step.group_by.is_some() {
-        return Err(box S0209 { position });
+        return Err(Box::new(S0209 { position }));
     }
 
     let predicate = process_ast(rhs)?;
@@ -230,14 +230,14 @@ fn process_lambda(mut node: Box<Node>) -> Result<Box<Node>> {
 //     match node.kind {
 //         NodeKind::Function { .. } if node.predicates.is_none() => {
 //             let position = node.position;
-//             Ok(box Node::new(
+//             Ok(Box::new(Node::new(
 //                 NodeKind::Lambda {
 //                     args: Rc::new(Vec::new()),
 //                     body: node.into(),
 //                     thunk: true,
 //                 },
 //                 position,
-//             ))
+//             )))
 //         }
 //         NodeKind::Ternary {
 //             cond,
