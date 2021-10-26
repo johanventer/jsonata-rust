@@ -1,4 +1,3 @@
-use std::iter::FromIterator;
 use std::{char, str};
 
 use super::Position;
@@ -132,14 +131,15 @@ impl std::fmt::Display for Token {
 
 pub struct Tokenizer {
     position: Position,
-    chars: Vec<char>,
+    // TODO: Hate that this is a Vec, can't index into an iterator of Char
+    source: Vec<char>,
 }
 
 impl Tokenizer {
     pub fn new(source: &str) -> Self {
         Self {
             position: Position::default(),
-            chars: source.chars().collect(),
+            source: source.chars().collect(),
         }
     }
 
@@ -168,7 +168,7 @@ impl Tokenizer {
         }
 
         loop {
-            match self.chars[self.position.source_pos..] {
+            match self.source[self.position.source_pos..] {
                 [] => break self.emit(End),
                 // Skip whitespace
                 [' ' | '\r' | '\n' | '\t' | '\x0b', ..] => {
@@ -180,7 +180,7 @@ impl Tokenizer {
                     let comment_start = self.position;
                     self.position.advance2();
                     loop {
-                        match self.chars[self.position.source_pos..] {
+                        match self.source[self.position.source_pos..] {
                             [] => {
                                 return Err(Box::new(S0106 {
                                     position: comment_start,
@@ -215,13 +215,13 @@ impl Tokenizer {
                     // TODO(johan): Improve this lexing, it's pretty ordinary and allows all sorts
                     // of invalid stuff
                     loop {
-                        match self.chars[self.position.source_pos..] {
+                        match &self.source[self.position.source_pos..] {
                             // Range operator
                             ['.', '.', ..] => break,
                             ['e' | 'E', ..] => {
                                 self.position.advance1();
                                 loop {
-                                    match self.chars[self.position.source_pos..] {
+                                    match self.source[self.position.source_pos..] {
                                         ['+' | '-', ..] => {
                                             self.position.advance1();
                                         }
@@ -234,13 +234,9 @@ impl Tokenizer {
                             }
                             ['.', ..] => {
                                 self.position.advance1();
-                                loop {
-                                    match self.chars[self.position.source_pos..] {
-                                        ['0'..='9', ..] => {
-                                            self.position.advance1();
-                                        }
-                                        _ => break,
-                                    }
+                                while let ['0'..='9', ..] = self.source[self.position.source_pos..]
+                                {
+                                    self.position.advance1();
                                 }
                             }
                             ['0'..='9', ..] => {
@@ -250,9 +246,8 @@ impl Tokenizer {
                         }
                     }
 
-                    let token = &self.chars[number_start..self.position.source_pos];
-
-                    let number = String::from_iter(token);
+                    let token = &self.source[number_start..self.position.source_pos];
+                    let number: String = token.iter().collect();
                     if let Ok(number) = number.parse::<f64>() {
                         break self.emit(Num(number));
                     } else {
@@ -294,7 +289,7 @@ impl Tokenizer {
                     let mut string = String::new();
                     let string_start = self.position;
                     break loop {
-                        match self.chars[self.position.source_pos..] {
+                        match self.source[self.position.source_pos..] {
                             // End of string missing
                             [] => {
                                 break Err(Box::new(S0101 {
@@ -344,13 +339,13 @@ impl Tokenizer {
                                         // \u should be followed by 4 hex digits, which needs to
                                         // parsed to a codepoint and then turned into a char to be
                                         // appended
-                                        if self.chars.len() < self.position.source_pos + 5 {
+                                        if self.source.len() < self.position.source_pos + 5 {
                                             break Err(Box::new(S0104 {
                                                 position: self.position,
                                             }));
                                         }
 
-                                        let chars: &String = &self.chars[self.position.source_pos
+                                        let chars: &String = &self.source[self.position.source_pos
                                             + 1
                                             ..self.position.source_pos + 5]
                                             .iter()
@@ -401,11 +396,11 @@ impl Tokenizer {
                 ['`', ..] => {
                     self.position.advance1();
                     // Find the closing backtick and convert to a string
-                    match self.chars[self.position.source_pos..]
+                    match self.source[self.position.source_pos..]
                         .iter()
                         .position(|c| *c == '`')
                         .map(|index| {
-                            self.chars[self.position.source_pos..self.position.source_pos + index]
+                            self.source[self.position.source_pos..self.position.source_pos + index]
                                 .iter()
                                 .cloned()
                                 .collect::<String>()
@@ -425,7 +420,7 @@ impl Tokenizer {
                 [c, ..] => {
                     let name_start = self.position.source_pos;
                     break loop {
-                        match self.chars[self.position.source_pos..] {
+                        match self.source[self.position.source_pos..] {
                             // Match end of source, whitespace characters or a single-char operator
                             // to find the end of the name
                             []
@@ -435,14 +430,15 @@ impl Tokenizer {
                             | '^' | '&' | '!' | '~', ..] => {
                                 if c == '$' {
                                     // Variable reference
-                                    let name = self.chars[name_start + 1..self.position.source_pos]
+                                    let name = self.source
+                                        [name_start + 1..self.position.source_pos]
                                         .iter()
                                         .cloned()
                                         .collect::<String>();
 
                                     break self.emit(Var(name));
                                 } else {
-                                    let name = self.chars[name_start..self.position.source_pos]
+                                    let name = self.source[name_start..self.position.source_pos]
                                         .iter()
                                         .cloned()
                                         .collect::<String>();
@@ -594,39 +590,39 @@ mod tests {
         let mut tokenizer = Tokenizer::new("0 1 0.234 5.678 0e0 1e1 1e-1 1e+1 2.234E-2");
         assert!(matches!(
             tokenizer.next(false).unwrap().kind,
-            TokenKind::Num(n) if (n - 0.0 as f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (n - 0.0_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).unwrap().kind,
-            TokenKind::Num(n) if (n - 1.0 as f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (n - 1.0_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).unwrap().kind,
-            TokenKind::Num(n) if (n - 0.234 as f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (n - 0.234_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).unwrap().kind,
-            TokenKind::Num(n) if (n - 5.678 as f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (n - 5.678_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).unwrap().kind,
-            TokenKind::Num(n) if (n - 0e0 as f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (n - 0e0_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).unwrap().kind,
-            TokenKind::Num(n) if (n - 1e1 as f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (n - 1e1_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).unwrap().kind,
-            TokenKind::Num(n) if (n - 1e-1 as f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (n - 1e-1_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).unwrap().kind,
-            TokenKind::Num(n) if (n - 1e+1 as f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (n - 1e+1_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).unwrap().kind,
-            TokenKind::Num(n) if (n - 2.234E-2 as f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (n - 2.234E-2_f64).abs() < f64::EPSILON
         ));
     }
 }

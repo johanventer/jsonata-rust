@@ -35,7 +35,7 @@ fn main() {
             let expr = std::fs::read(expr_file).expect("Could not read expression input file");
             String::from_utf8_lossy(&expr).to_string()
         }
-        None => opt.expr.expect("No JSONata expression provided."),
+        None => opt.expr.expect("No JSONata expression provided"),
     };
 
     let jsonata = JsonAta::new(&expr).expect("Could not parse JSONata expression");
@@ -51,10 +51,9 @@ fn main() {
             let input = std::fs::read(input_file).expect("Could not read the JSON input file");
             Some(json::parse(&String::from_utf8_lossy(&input)).expect("Could not parse input JSON"))
         }
-        None => match opt.input {
-            Some(input) => Some(json::parse(&input).expect("Could not parse input JSON")),
-            None => None,
-        },
+        None => opt
+            .input
+            .map(|input| json::parse(&input).expect("Could not parse input JSON")),
     };
 
     let result = jsonata
