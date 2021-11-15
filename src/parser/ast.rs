@@ -10,7 +10,7 @@ pub enum UnaryOp {
     ObjectConstructor(Object),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum BinaryOp {
     Add,
     Subtract,
@@ -36,13 +36,42 @@ pub enum BinaryOp {
     Bind,
 }
 
+impl std::fmt::Display for BinaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match *self {
+            BinaryOp::Add => "+",
+            BinaryOp::Subtract => "-",
+            BinaryOp::Multiply => "*",
+            BinaryOp::Divide => "/",
+            BinaryOp::Modulus => "%",
+            BinaryOp::Equal => "=",
+            BinaryOp::NotEqual => "!=",
+            BinaryOp::LessThan => "<",
+            BinaryOp::GreaterThan => ">",
+            BinaryOp::LessThanEqual => "<=",
+            BinaryOp::GreaterThanEqual => ">=",
+            BinaryOp::Concat => "&",
+            BinaryOp::And => "and",
+            BinaryOp::Or => "or",
+            BinaryOp::In => "in",
+            BinaryOp::Map => ".",
+            BinaryOp::Range => "..",
+            BinaryOp::ContextBind => "@",
+            BinaryOp::PositionalBind => "#",
+            BinaryOp::Predicate => "[]",
+            BinaryOp::Apply => "~>",
+            BinaryOp::Bind => ":=",
+        })
+    }
+}
+
 #[derive(Debug)]
 pub enum NodeKind {
     Empty,
     Null,
     Bool(bool),
-    Str(String),
-    Num(f64),
+    String(String),
+    Number(f64),
     Name(String),
     Var(String),
     Unary(UnaryOp),

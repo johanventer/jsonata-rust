@@ -1,17 +1,15 @@
-use json::JsonValue;
 // use std::rc::Rc;
 
 mod error;
 mod evaluator;
 mod functions;
+mod json;
 mod parser;
 
-pub use error::Error;
-// use evaluator::evaluate;
-// pub use evaluator::Value;
-// use evaluator::{Frame, FramePtr};
+pub use error::{Error, InvalidJson};
+use evaluator::FrameData;
+pub use evaluator::Value;
 pub use parser::ast::*;
-use parser::parse;
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
@@ -21,9 +19,9 @@ pub struct JsonAta {
 }
 
 impl JsonAta {
-    pub fn new(expr: &str) -> Result<Self> {
+    pub fn new(expr: &str) -> Result<JsonAta> {
         Ok(Self {
-            ast: parse(expr)?,
+            ast: parser::parse(expr)?,
             // frame: Frame::new_ptr(),
         })
     }
@@ -38,7 +36,9 @@ impl JsonAta {
     //         .bind(name, Rc::new(Value::from_raw(Some(value))));
     // }
 
-    pub fn evaluate(&self, _input: Option<&JsonValue>) -> Result<Option<JsonValue>> {
+    pub fn evaluate(&self, input: &str) -> Result<Value> {
+        let input = json::parse(input).unwrap();
+
         // let mut input = Rc::new(Value::from_raw(input));
         // if input.is_array() {
         //     input = Rc::new(Value::wrap(Rc::clone(&input)));
@@ -52,10 +52,8 @@ impl JsonAta {
 
         // self.frame.borrow_mut().bind("$", Rc::clone(&input));
 
-        // let result = evaluate(&self.ast, input, Rc::clone(&self.frame))?;
-
-        // Ok(result.as_json())
-
-        Ok(None)
+        let frame = FrameData::new();
+        let result = evaluator::evaluate(&self.ast, input, frame)?;
+        Ok(result)
     }
 }

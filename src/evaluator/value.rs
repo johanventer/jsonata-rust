@@ -1,3 +1,87 @@
+use std::collections::BTreeMap;
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Value {
+    Undefined,
+    Null,
+    Number(f64),
+    Bool(bool),
+    String(String),
+    Array(Vec<Value>),
+    Object(BTreeMap<String, Value>),
+}
+
+impl Value {
+    pub fn new_object() -> Value {
+        Value::Object(BTreeMap::new())
+    }
+
+    pub fn insert(&mut self, key: String, value: Value) {
+        match *self {
+            Value::Object(ref mut map) => {
+                map.insert(key, value);
+            }
+            _ => panic!("Tried to insert into a Value that wasn't an Object"),
+        }
+    }
+
+    pub fn new_array() -> Value {
+        Value::Array(Vec::new())
+    }
+
+    pub fn push(&mut self, item: Value) {
+        match *self {
+            Value::Array(ref mut arr) => {
+                arr.push(item);
+            }
+            _ => panic!("Tried to push into a Value that wasn't an Array"),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match *self {
+            Value::Array(ref arr) => arr.is_empty(),
+            Value::Object(ref map) => map.is_empty(),
+            _ => panic!("Tried to call is_empty on a Value that wasn't an Array or an Object"),
+        }
+    }
+
+    pub fn get(&self, key: &str) -> Option<&Value> {
+        match *self {
+            Value::Object(ref map) => map.get(key),
+            _ => panic!("Tried to call get on a Value that wasn't an Object"),
+        }
+    }
+
+    pub fn is_undefined(&self) -> bool {
+        matches!(*self, Value::Undefined)
+    }
+
+    pub fn is_null(&self) -> bool {
+        matches!(*self, Value::Null)
+    }
+
+    pub fn is_number(&self) -> bool {
+        matches!(*self, Value::Number(_))
+    }
+
+    pub fn is_bool(&self) -> bool {
+        matches!(*self, Value::Bool(_))
+    }
+
+    pub fn is_string(&self) -> bool {
+        matches!(*self, Value::String(_))
+    }
+
+    pub fn is_array(&self) -> bool {
+        matches!(*self, Value::Array(_))
+    }
+
+    pub fn is_object(&self) -> bool {
+        matches!(*self, Value::Object(_))
+    }
+}
+
 // use json::JsonValue;
 // use std::cell::{Cell, Ref, RefCell, RefMut};
 // use std::rc::Rc;

@@ -1,54 +1,76 @@
-// use std::cell::RefCell;
-// use std::collections::HashMap;
-// use std::rc::Rc;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-// use super::value::Value;
+use super::value::Value;
 
-// pub type FramePtr = Rc<RefCell<Frame>>;
+pub(crate) type Frame = Rc<RefCell<FrameData>>;
 
-// #[derive(Debug)]
-// pub struct Frame {
-//     bindings: HashMap<String, Rc<Value>>,
-//     parent_frame: Option<FramePtr>,
-// }
+#[derive(Debug)]
+pub struct FrameData {
+    bindings: HashMap<String, Value>,
+    parent: Option<Frame>,
+}
 
-// impl Frame {
-//     pub(crate) fn new() -> Self {
-//         Self {
-//             bindings: HashMap::new(),
-//             parent_frame: None,
-//         }
-//     }
+impl FrameData {
+    pub(crate) fn new() -> Frame {
+        Rc::new(RefCell::new(FrameData {
+            bindings: HashMap::new(),
+            parent: None,
+        }))
+    }
 
-//     /// Creates a new empty frame, with a parent frame for lookups
-//     pub(crate) fn with_parent(parent_frame: FramePtr) -> Self {
-//         Self {
-//             bindings: HashMap::new(),
-//             parent_frame: Some(parent_frame),
-//         }
-//     }
+    pub(crate) fn new_with_parent(parent: Frame) -> Frame {
+        Rc::new(RefCell::new(FrameData {
+            bindings: HashMap::new(),
+            parent: Some(Rc::clone(&parent)),
+        }))
+    }
 
-//     pub(crate) fn new_ptr() -> FramePtr {
-//         Rc::new(RefCell::new(Frame::new()))
-//     }
+    pub(crate) fn bind(&mut self, name: &str, value: Value) {
+        self.bindings.insert(name.to_string(), value);
+    }
 
-//     pub(crate) fn ptr_with_parent(parent_frame: FramePtr) -> FramePtr {
-//         Rc::new(RefCell::new(Frame::with_parent(parent_frame)))
-//     }
+    pub(crate) fn lookup(&self, name: &str) -> Option<Value> {
+        match self.bindings.get(name) {
+            Some(value) => Some(value.clone()),
+            None => match &self.parent {
+                Some(parent) => parent.borrow().lookup(name),
+                None => None,
+            },
+        }
+    }
+}
 
-//     /// Bind a value to a name in a frame
-//     pub(crate) fn bind(&mut self, name: &str, value: Rc<Value>) {
-//         &self.bindings.insert(name.to_string(), value);
-//     }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-//     /// Lookup a value by name in a frame
-//     pub(crate) fn lookup(&self, name: &str) -> Option<Rc<Value>> {
-//         match self.bindings.get(name) {
-//             Some(value) => Some(Rc::clone(value)),
-//             None => match &self.parent_frame {
-//                 Some(parent) => parent.borrow().lookup(name),
-//                 None => None,
-//             },
-//         }
-//     }
-// }
+    #[test]
+    fn bind() {
+        let frame = FrameData::new();
+        frame.borrow_mut().bind("a", Value::Number(1.0));
+        let a = frame.borrow().lookup("a");
+        assert!(a.is_some());
+        assert_eq!(a.unwrap(), Value::Number(1.0));
+    }
+
+    #[test]
+    fn lookup_through_parent() {
+        let parent = FrameData::new();
+        parent.borrow_mut().bind("a", Value::Number(1.0));
+        let frame = FrameData::new_with_parent(parent);
+        let a = frame.borrow().lookup("a");
+        assert!(a.is_some());
+        assert_eq!(a.unwrap(), Value::Number(1.0));
+    }
+
+    #[test]
+    fn lookup_overriding_parent() {
+        let parent = FrameData::new();
+        parent.borrow_mut().bind("a", Value::Number(1.0));
+        let frame = FrameData::new_with_parent(parent);
+        frame.borrow_mut().bind("a", Value::Number(2.0));
+        let a = frame.borrow().lookup("a");
+        assert!(a.is_some());
+        assert_eq!(a.unwrap(), Value::Number(2.0));
+    }
+}

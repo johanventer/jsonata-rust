@@ -1,4 +1,3 @@
-use json::stringify_pretty;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -48,20 +47,14 @@ fn main() {
 
     let input = match opt.input_file {
         Some(input_file) => {
-            let input = std::fs::read(input_file).expect("Could not read the JSON input file");
-            Some(json::parse(&String::from_utf8_lossy(&input)).expect("Could not parse input JSON"))
+            std::fs::read_to_string(input_file).expect("Could not read the JSON input file")
         }
-        None => opt
-            .input
-            .map(|input| json::parse(&input).expect("Could not parse input JSON")),
+        None => opt.input.unwrap_or_else(|| "{}".to_string()),
     };
 
     let result = jsonata
-        .evaluate(input.as_ref())
+        .evaluate(&input)
         .expect("Failed to evaluate JSONata");
 
-    match result {
-        Some(value) => println!("{}", stringify_pretty(value, 2)),
-        None => println!("undefined"),
-    };
+    println!("{:#?}", result);
 }

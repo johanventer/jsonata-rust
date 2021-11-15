@@ -56,7 +56,7 @@ fn process_unary(node: Node) -> Result<Node> {
         // Pre-process negative numbers
         NodeKind::Unary(UnaryOp::Minus(value)) => {
             let mut result = process_ast(*value)?;
-            if let NodeKind::Num(ref mut num) = result.kind {
+            if let NodeKind::Number(ref mut num) = result.kind {
                 *num = -*num;
                 Ok(result)
             } else {

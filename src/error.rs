@@ -1,5 +1,3 @@
-use json::{object, JsonValue};
-
 use crate::parser::Position;
 
 pub trait Error: std::error::Error + std::fmt::Debug + std::fmt::Display {
@@ -32,15 +30,6 @@ macro_rules! define_error {
                 write!(f, concat!("Error @ character {}: {} - ", $template), self.position.source_pos, self.code(), $( self.$arg, )*)
             }
         }
-
-        impl From<$name> for JsonValue {
-            fn from(error: $name) -> Self {
-                object! {
-                    code: error.code(),
-                    message: format!("{}", error)
-                }
-            }
-        }
     };
 
     ($name:ident, $template:literal) => {
@@ -48,7 +37,7 @@ macro_rules! define_error {
     };
 }
 
-define_error!(InvalidJson, "The input is not valid JSON: {}", json_error);
+define_error!(InvalidJson, "The input is not valid JSON");
 define_error!(
     S0101,
     "String literal must be terminated by a matching quote"

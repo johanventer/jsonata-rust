@@ -36,8 +36,8 @@ impl Symbol for Token {
         match self.kind {
             TokenKind::Null => Ok(Node::new(NodeKind::Null, self.position)),
             TokenKind::Bool(ref v) => Ok(Node::new(NodeKind::Bool(*v), self.position)),
-            TokenKind::Str(ref v) => Ok(Node::new(NodeKind::Str(v.clone()), self.position)),
-            TokenKind::Num(ref v) => Ok(Node::new(NodeKind::Num(*v), self.position)),
+            TokenKind::Str(ref v) => Ok(Node::new(NodeKind::String(v.clone()), self.position)),
+            TokenKind::Num(ref v) => Ok(Node::new(NodeKind::Number(*v), self.position)),
             TokenKind::Name(ref v) => Ok(Node::new(NodeKind::Name(v.clone()), self.position)),
             TokenKind::Var(ref v) => Ok(Node::new(NodeKind::Var(v.clone()), self.position)),
             TokenKind::And => Ok(Node::new(
