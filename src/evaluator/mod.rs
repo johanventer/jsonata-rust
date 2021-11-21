@@ -13,6 +13,7 @@ pub(crate) fn evaluate(node: &Node, input: &Value, frame: FrameLink) -> Result<V
         NodeKind::String(ref s) => Value::String(s.clone()),
         NodeKind::Number(n) => Value::Number(n),
         NodeKind::Block(ref exprs) => evaluate_block(exprs, input, frame)?,
+        NodeKind::Unary(ref op) => evaluate_unary_op(node, op, input, frame)?,
         NodeKind::Binary(ref op, ref lhs, ref rhs) => {
             evaluate_binary_op(node, op, lhs, rhs, input, frame)?
         }
@@ -66,6 +67,23 @@ fn evaluate_ternary(
         evaluate(falsy, input, frame)
     } else {
         Ok(Value::Undefined)
+    }
+}
+
+fn evaluate_unary_op(node: &Node, op: &UnaryOp, input: &Value, frame: FrameLink) -> Result<Value> {
+    match *op {
+        UnaryOp::Minus(ref value) => {
+            let result = evaluate(value, input, frame)?;
+            match result {
+                Value::Undefined => Ok(Value::Undefined),
+                Value::Number(num) => Ok(Value::Number(-num)),
+                _ => Err(Box::new(D1002 {
+                    position: node.position,
+                    value: format!("{:#?}", result),
+                })),
+            }
+        }
+        _ => unimplemented!("TODO: {:#?}", op),
     }
 }
 

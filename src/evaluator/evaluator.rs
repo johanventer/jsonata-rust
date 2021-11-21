@@ -16,11 +16,6 @@
 //         }
 //         NodeKind::Unary(ref op) => evaluate_unary_op(node, op, input, Rc::clone(&frame))?,
 //         NodeKind::Name(ref key) => lookup(input, key),
-//         NodeKind::Ternary {
-//             ref cond,
-//             ref truthy,
-//             ref falsy,
-//         } => evaluate_ternary(cond, truthy, falsy.as_ref(), input, Rc::clone(&frame))?,
 //         NodeKind::Block(ref exprs) => evaluate_block(exprs, input, Rc::clone(&frame))?,
 //         NodeKind::Var(ref name) => evaluate_variable(name, input, Rc::clone(&frame))?,
 //         NodeKind::Wildcard => evaluate_wildcard(input)?,
