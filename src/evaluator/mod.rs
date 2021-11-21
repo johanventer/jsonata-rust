@@ -1,13 +1,12 @@
 mod frame;
 mod value;
 
-use std::rc::Rc;
-
+use crate::functions::*;
 use crate::{error::*, parser::ast::*, Result};
-pub(crate) use frame::{Frame, FrameData};
+pub(crate) use frame::{Frame, FrameLink};
 pub use value::Value;
 
-pub(crate) fn evaluate(node: &Node, input: Value, frame: Frame) -> Result<Value> {
+pub(crate) fn evaluate(node: &Node, input: &Value, frame: FrameLink) -> Result<Value> {
     let result = match node.kind {
         NodeKind::Null => Value::Null,
         NodeKind::Bool(b) => Value::Bool(b),
@@ -18,26 +17,31 @@ pub(crate) fn evaluate(node: &Node, input: Value, frame: Frame) -> Result<Value>
             evaluate_binary_op(node, op, lhs, rhs, input, frame)?
         }
         NodeKind::Var(ref name) => evaluate_var(name, input, frame)?,
+        NodeKind::Ternary {
+            ref cond,
+            ref truthy,
+            ref falsy,
+        } => evaluate_ternary(cond, truthy, falsy.as_deref(), input, frame)?,
         _ => unimplemented!("TODO: node kind not yet supported: {:#?}", node.kind),
     };
     Ok(result)
 }
 
-fn evaluate_block(exprs: &[Node], input: Value, frame: Frame) -> Result<Value> {
-    let frame = FrameData::new_with_parent(Rc::clone(&frame));
+fn evaluate_block(exprs: &[Node], input: &Value, frame: FrameLink) -> Result<Value> {
+    let frame = Frame::new_with_parent(frame);
     if exprs.is_empty() {
         return Ok(Value::Undefined);
     }
 
-    let mut result = input;
+    let mut result = input.clone();
     for expr in exprs {
-        result = evaluate(expr, result, Rc::clone(&frame))?;
+        result = evaluate(expr, &result, frame.clone())?;
     }
 
     Ok(result)
 }
 
-fn evaluate_var(name: &str, _input: Value, frame: Frame) -> Result<Value> {
+fn evaluate_var(name: &str, _input: &Value, frame: FrameLink) -> Result<Value> {
     if name.is_empty() {
         // Empty variable name returns the context value
         unimplemented!("TODO: $ context variable not implemented yet");
@@ -48,24 +52,41 @@ fn evaluate_var(name: &str, _input: Value, frame: Frame) -> Result<Value> {
     }
 }
 
+fn evaluate_ternary(
+    cond: &Node,
+    truthy: &Node,
+    falsy: Option<&Node>,
+    input: &Value,
+    frame: FrameLink,
+) -> Result<Value> {
+    let cond = evaluate(cond, input, frame.clone())?;
+    if boolean(&cond) {
+        evaluate(truthy, input, frame)
+    } else if let Some(falsy) = falsy {
+        evaluate(falsy, input, frame)
+    } else {
+        Ok(Value::Undefined)
+    }
+}
+
 fn evaluate_binary_op(
     node: &Node,
     op: &BinaryOp,
     lhs: &Node,
     rhs: &Node,
-    input: Value,
-    frame: Frame,
+    input: &Value,
+    frame: FrameLink,
 ) -> Result<Value> {
-    let rhs = evaluate(&*rhs, input.clone(), Rc::clone(&frame))?;
+    let rhs = evaluate(&*rhs, input, frame.clone())?;
 
     if *op == BinaryOp::Bind {
         if let NodeKind::Var(ref name) = lhs.kind {
             frame.borrow_mut().bind(name, rhs);
         }
-        return Ok(input);
+        return Ok(input.clone());
     }
 
-    let lhs = evaluate(&*lhs, input, Rc::clone(&frame))?;
+    let lhs = evaluate(&*lhs, input, frame)?;
 
     match op {
         BinaryOp::Add

@@ -43,7 +43,7 @@ fn _parse(src: &[char], index: &mut usize) -> Option<Value> {
         't' => parse_true(src, index),
         'f' => parse_false(src, index),
         'n' => parse_null(src, index),
-        '"' => parse_string(src, index).map(|s| Value::String(s)),
+        '"' => parse_string(src, index).map(Value::String),
         '-' => parse_number(src, index),
         _ => {
             if src[*index].is_ascii_digit() {

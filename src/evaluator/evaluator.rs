@@ -16,10 +16,6 @@
 //         }
 //         NodeKind::Unary(ref op) => evaluate_unary_op(node, op, input, Rc::clone(&frame))?,
 //         NodeKind::Name(ref key) => lookup(input, key),
-//         NodeKind::Null => Rc::new(Value::Raw(JsonValue::Null)),
-//         NodeKind::Bool(ref value) => Rc::new(Value::Raw(json::from(*value))),
-//         NodeKind::Str(ref value) => Rc::new(Value::Raw(json::from(value.clone()))),
-//         NodeKind::Num(ref value) => Rc::new(Value::Raw(json::from(*value))),
 //         NodeKind::Ternary {
 //             ref cond,
 //             ref truthy,

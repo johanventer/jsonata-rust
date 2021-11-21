@@ -7,7 +7,7 @@ mod json;
 mod parser;
 
 pub use error::{Error, InvalidJson};
-use evaluator::FrameData;
+use evaluator::Frame;
 pub use evaluator::Value;
 pub use parser::ast::*;
 
@@ -52,8 +52,8 @@ impl JsonAta {
 
         // self.frame.borrow_mut().bind("$", Rc::clone(&input));
 
-        let frame = FrameData::new();
-        let result = evaluator::evaluate(&self.ast, input, frame)?;
+        let frame = Frame::new();
+        let result = evaluator::evaluate(&self.ast, &input, frame)?;
         Ok(result)
     }
 }

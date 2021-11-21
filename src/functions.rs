@@ -1,7 +1,7 @@
 // use json::{stringify, JsonValue};
 // use std::rc::Rc;
 
-// use crate::evaluator::Value;
+use crate::evaluator::Value;
 
 // pub(crate) fn lookup(input: Rc<Value>, key: &str) -> Rc<Value> {
 //     let result = if input.is_array() {
@@ -73,30 +73,59 @@
 //     }
 // }
 
-// pub(crate) fn boolean(arg: Rc<Value>) -> bool {
-//     fn cast(value: &JsonValue) -> bool {
-//         match value {
-//             JsonValue::Null => false,
-//             JsonValue::Short(value) => !value.is_empty(),
-//             JsonValue::String(value) => !value.is_empty(),
-//             JsonValue::Number(value) => !value.is_zero(),
-//             JsonValue::Boolean(value) => *value,
-//             JsonValue::Object(value) => !value.is_empty(),
-//             JsonValue::Array(..) => panic!("unexpected JsonValue::Array"),
-//         }
-//     }
+pub(crate) fn boolean(arg: &Value) -> bool {
+    fn cast(value: &Value) -> bool {
+        match *value {
+            Value::Undefined => false,
+            Value::Null => false,
+            Value::Bool(b) => b,
+            Value::Number(num) => num != 0.0,
+            Value::String(ref str) => !str.is_empty(),
+            Value::Object(ref obj) => !obj.is_empty(),
+            Value::Array(_) => panic!("unexpected Value::Array"),
+        }
+    }
 
-//     match *arg {
-//         Value::Undef => false,
-//         Value::Raw(ref value) => cast(value),
-//         Value::Array { ref arr, .. } => match arr.borrow().len() {
-//             0 => false,
-//             1 => boolean(Rc::clone(&arr.borrow()[0])),
-//             _ => {
-//                 let arr = arr.borrow();
-//                 let trues: Vec<_> = arr.iter().filter(|x| boolean(Rc::clone(&x))).collect();
-//                 !trues.is_empty()
-//             }
-//         },
-//     }
-// }
+    match *arg {
+        Value::Array(ref arr) => match arr.len() {
+            0 => false,
+            1 => boolean(&arr[0]),
+            _ => arr.iter().any(boolean),
+        },
+        _ => cast(arg),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_boolean() {
+        assert!(!boolean(&Value::Undefined));
+        assert!(!boolean(&Value::Null));
+        assert!(!boolean(&Value::Bool(false)));
+        assert!(boolean(&Value::Bool(true)));
+        assert!(!boolean(&Value::Number(0.0)));
+        assert!(boolean(&Value::Number(1.0)));
+        assert!(!boolean(&Value::String("".to_owned())));
+        assert!(boolean(&Value::String("x".to_owned())));
+        assert!(!boolean(&Value::new_object()));
+        let mut obj = Value::new_object();
+        obj.insert("hello".to_owned(), Value::Null);
+        assert!(boolean(&obj));
+        assert!(!boolean(&Value::Array(Vec::new())));
+        assert!(boolean(&Value::Array(vec![Value::Bool(true)])));
+        assert!(!boolean(&Value::Array(vec![Value::Bool(false)])));
+        assert!(!boolean(&Value::Array(vec![
+            Value::Bool(false),
+            Value::Bool(false),
+            Value::Bool(false)
+        ])));
+        assert!(boolean(&Value::Array(vec![
+            Value::Bool(false),
+            Value::Bool(true),
+            Value::Bool(false)
+        ])));
+    }
+}

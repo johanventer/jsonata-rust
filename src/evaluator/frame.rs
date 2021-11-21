@@ -2,24 +2,24 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use super::value::Value;
 
-pub(crate) type Frame = Rc<RefCell<FrameData>>;
+pub(crate) type FrameLink = Rc<RefCell<Frame>>;
 
 #[derive(Debug)]
-pub struct FrameData {
+pub struct Frame {
     bindings: HashMap<String, Value>,
-    parent: Option<Frame>,
+    parent: Option<FrameLink>,
 }
 
-impl FrameData {
-    pub(crate) fn new() -> Frame {
-        Rc::new(RefCell::new(FrameData {
+impl Frame {
+    pub(crate) fn new() -> FrameLink {
+        Rc::new(RefCell::new(Frame {
             bindings: HashMap::new(),
             parent: None,
         }))
     }
 
-    pub(crate) fn new_with_parent(parent: Frame) -> Frame {
-        Rc::new(RefCell::new(FrameData {
+    pub(crate) fn new_with_parent(parent: FrameLink) -> FrameLink {
+        Rc::new(RefCell::new(Frame {
             bindings: HashMap::new(),
             parent: Some(Rc::clone(&parent)),
         }))
@@ -46,7 +46,7 @@ mod tests {
 
     #[test]
     fn bind() {
-        let frame = FrameData::new();
+        let frame = Frame::new();
         frame.borrow_mut().bind("a", Value::Number(1.0));
         let a = frame.borrow().lookup("a");
         assert!(a.is_some());
@@ -55,9 +55,9 @@ mod tests {
 
     #[test]
     fn lookup_through_parent() {
-        let parent = FrameData::new();
+        let parent = Frame::new();
         parent.borrow_mut().bind("a", Value::Number(1.0));
-        let frame = FrameData::new_with_parent(parent);
+        let frame = Frame::new_with_parent(parent);
         let a = frame.borrow().lookup("a");
         assert!(a.is_some());
         assert_eq!(a.unwrap(), Value::Number(1.0));
@@ -65,9 +65,9 @@ mod tests {
 
     #[test]
     fn lookup_overriding_parent() {
-        let parent = FrameData::new();
+        let parent = Frame::new();
         parent.borrow_mut().bind("a", Value::Number(1.0));
-        let frame = FrameData::new_with_parent(parent);
+        let frame = Frame::new_with_parent(parent);
         frame.borrow_mut().bind("a", Value::Number(2.0));
         let a = frame.borrow().lookup("a");
         assert!(a.is_some());
