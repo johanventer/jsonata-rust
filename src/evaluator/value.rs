@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::ops::{Index, IndexMut};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Value {
@@ -25,6 +26,20 @@ impl Value {
         }
     }
 
+    pub fn contains(&self, key: &str) -> bool {
+        match *self {
+            Value::Object(ref map) => map.contains_key(key),
+            _ => panic!("Tried to call contains on a Value that wasn't an Object"),
+        }
+    }
+
+    pub fn get(&self, key: &str) -> Option<&Value> {
+        match *self {
+            Value::Object(ref map) => map.get(key),
+            _ => panic!("Tried to call get on a Value that wasn't an Object"),
+        }
+    }
+
     pub fn new_array() -> Value {
         Value::Array(Vec::new())
     }
@@ -38,18 +53,25 @@ impl Value {
         }
     }
 
+    pub fn iter(&mut self) -> std::slice::Iter<'_, Value> {
+        match *self {
+            Value::Array(ref mut arr) => arr.iter(),
+            _ => panic!("Tried to call iter on a Value that wasn't an Array"),
+        }
+    }
+
+    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, Value> {
+        match *self {
+            Value::Array(ref mut arr) => arr.iter_mut(),
+            _ => panic!("Tried to call iter_mut on a Value that wasn't an Array"),
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         match *self {
             Value::Array(ref arr) => arr.is_empty(),
             Value::Object(ref map) => map.is_empty(),
             _ => panic!("Tried to call is_empty on a Value that wasn't an Array or an Object"),
-        }
-    }
-
-    pub fn get(&self, key: &str) -> Option<&Value> {
-        match *self {
-            Value::Object(ref map) => map.get(key),
-            _ => panic!("Tried to call get on a Value that wasn't an Object"),
         }
     }
 
@@ -79,6 +101,95 @@ impl Value {
 
     pub fn is_object(&self) -> bool {
         matches!(*self, Value::Object(_))
+    }
+
+    pub fn as_f64(&self) -> f64 {
+        match *self {
+            Value::Number(n) => n,
+            _ => panic!("Tried to call as_f64 on a Value that wasn't a Number"),
+        }
+    }
+}
+
+impl Index<usize> for Value {
+    type Output = Value;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        match *self {
+            Value::Array(ref arr) => &arr[index],
+            _ => panic!("Tried to index a a Value that wasn't an Array"),
+        }
+    }
+}
+
+impl IndexMut<usize> for Value {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        match *self {
+            Value::Array(ref mut arr) => &mut arr[index],
+            _ => panic!("Tried to index a a Value that wasn't an Array"),
+        }
+    }
+}
+
+const UNDEFINED: Value = Value::Undefined;
+
+impl Index<&str> for Value {
+    type Output = Value;
+
+    fn index(&self, index: &str) -> &Self::Output {
+        match *self {
+            Value::Object(ref obj) => obj.get(index).unwrap_or(&UNDEFINED),
+            _ => panic!("Tried to index a Value that wasn't an Object"),
+        }
+    }
+}
+
+impl PartialEq<bool> for Value {
+    fn eq(&self, other: &bool) -> bool {
+        match *self {
+            Value::Bool(ref b) => b == other,
+            _ => panic!("Tried to compare a non-Bool to bool"),
+        }
+    }
+}
+
+impl PartialEq<&str> for Value {
+    fn eq(&self, other: &&str) -> bool {
+        match *self {
+            Value::String(ref s) => s == other,
+            _ => panic!("Tried to compare a non-String to &str"),
+        }
+    }
+}
+
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Value::Undefined => f.write_str(""),
+            Value::Null => f.write_str("null"),
+            Value::Number(n) => f.write_str(&n.to_string()),
+            Value::Bool(b) => f.write_str(&b.to_string()),
+            Value::String(ref s) => f.write_str(s),
+            Value::Array(ref arr) => {
+                f.write_str("[")?;
+                for item in arr.iter() {
+                    f.write_str(&item.to_string())?;
+                    f.write_str(",")?;
+                }
+                f.write_str("]")
+            }
+            Value::Object(ref obj) => {
+                f.write_str("{")?;
+                for key in obj.keys() {
+                    f.write_str("\"")?;
+                    f.write_str(key)?;
+                    f.write_str("\":")?;
+                    f.write_str(&obj[key].to_string())?;
+                    f.write_str(",")?;
+                }
+                f.write_str("{")
+            }
+        }
     }
 }
 

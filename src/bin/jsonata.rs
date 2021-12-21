@@ -53,7 +53,7 @@ fn main() {
     };
 
     let result = jsonata
-        .evaluate(&input)
+        .evaluate(Some(&input))
         .expect("Failed to evaluate JSONata");
 
     println!("{:#?}", result);

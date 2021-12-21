@@ -3,7 +3,7 @@
 mod error;
 mod evaluator;
 mod functions;
-mod json;
+pub mod json;
 mod parser;
 
 pub use error::{Error, InvalidJson};
@@ -36,9 +36,16 @@ impl JsonAta {
     //         .bind(name, Rc::new(Value::from_raw(Some(value))));
     // }
 
-    pub fn evaluate(&self, input: &str) -> Result<Value> {
-        let input = json::parse(input).unwrap();
+    pub fn evaluate(&self, input: Option<&str>) -> Result<Value> {
+        let input = match input {
+            Some(input) => json::parse(input).unwrap(),
+            None => Value::Undefined,
+        };
 
+        self.evaluate_with_value(input)
+    }
+
+    pub fn evaluate_with_value(&self, input: Value) -> Result<Value> {
         // let mut input = Rc::new(Value::from_raw(input));
         // if input.is_array() {
         //     input = Rc::new(Value::wrap(Rc::clone(&input)));

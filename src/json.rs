@@ -55,7 +55,7 @@ fn _parse(src: &[char], index: &mut usize) -> Option<Value> {
     }
 }
 
-pub(crate) fn parse(src: &str) -> Option<Value> {
+pub fn parse(src: &str) -> Option<Value> {
     let mut index: usize = 0;
     let src_chars: Vec<char> = src.chars().collect();
     let result = _parse(&src_chars, &mut index);

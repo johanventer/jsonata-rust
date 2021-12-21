@@ -11,3 +11,4 @@ structopt = "0.3"
 [dev-dependencies]
 test-case = "1.2.0"
 test-generator = "0.3"
+json = "0.12.4"
