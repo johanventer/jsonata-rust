@@ -13,10 +13,6 @@ use jsonata::Value;
 
 #[test_resources("tests/testsuite/groups/*/*.json")]
 fn t(resource: &str) {
-    if resource.contains("skip") {
-        return;
-    }
-
     let test = fs::read_to_string(resource).expect("Could not read test case");
     let mut test = json::parse(&test).unwrap();
 
@@ -28,9 +24,9 @@ fn t(resource: &str) {
     }
 
     for case in test.iter() {
-        let expr = if !case["expr"].is_undefined() {
+        let expr = if case["expr"].is_string() {
             case["expr"].to_string()
-        } else if !case["expr-file"].is_undefined() {
+        } else if case["expr-file"].is_string() {
             let expr_file = path::Path::new(resource)
                 .parent()
                 .unwrap()
@@ -40,9 +36,9 @@ fn t(resource: &str) {
             panic!("No expression")
         };
 
-        let data = if !case["data"].is_undefined() {
+        let data = if !case["data"].is_undefined() && !case["data"].is_null() {
             case["data"].clone()
-        } else if !case["dataset"].is_undefined() {
+        } else if case["dataset"].is_string() {
             let dataset_file = format!("tests/testsuite/datasets/{}.json", case["dataset"]);
             let json = fs::read_to_string(&dataset_file)
                 .unwrap_or_else(|_e| panic!("Could not read dataset file: {}", dataset_file));

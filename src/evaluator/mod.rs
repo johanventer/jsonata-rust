@@ -83,7 +83,7 @@ fn evaluate_unary_op(node: &Node, op: &UnaryOp, input: &Value, frame: FrameLink)
                 })),
             }
         }
-        _ => unimplemented!("TODO: {:#?}", op),
+        _ => unimplemented!("TODO: unary op not supported yet {:#?}", op),
     }
 }
 
