@@ -1,10 +1,11 @@
 // use crate::error::*;
 use crate::Result;
 
-use super::ast::*;
-// use super::Position;
+use super::{ast::*, Position};
+use crate::error::*;
 
 pub fn process_ast(node: Node) -> Result<Node> {
+    let mut node = node;
     let keep_array = node.keep_array;
 
     let mut result = match node.kind {
@@ -12,13 +13,13 @@ pub fn process_ast(node: Node) -> Result<Node> {
         NodeKind::Block(..) => process_block(node)?,
         NodeKind::Unary(..) => process_unary(node)?,
         NodeKind::Binary(..) => process_binary(node)?,
-        NodeKind::GroupBy(..) => node,      // process_group_by(node),
-        NodeKind::OrderBy(..) => node,      // process_sort(node),
-        NodeKind::Function { .. } => node,  // TODO
-        NodeKind::Lambda { .. } => node,    // process_lambda(node)?,
-        NodeKind::Ternary { .. } => node,   // TODO
-        NodeKind::Transform { .. } => node, // TODO
-        NodeKind::Parent => node,           // TODO
+        NodeKind::GroupBy(ref mut lhs, ref mut rhs) => process_group_by(node.position, lhs, rhs)?,
+        NodeKind::OrderBy(ref mut lhs, ref mut rhs) => process_order_by(node.position, lhs, rhs)?,
+        NodeKind::Function { .. } => unimplemented!("Function not yet implemented"),
+        NodeKind::Lambda { .. } => unimplemented!("Lambda not yet implemented"),
+        NodeKind::Ternary { .. } => unimplemented!("Ternary not yet implemented"),
+        NodeKind::Transform { .. } => unimplemented!("Transform not yet implemented"),
+        NodeKind::Parent => unimplemented!("Parent not yet implemented"),
         _ => node,
     };
 
@@ -84,6 +85,7 @@ fn process_unary(node: Node) -> Result<Node> {
             }
             Ok(node)
         }
+
         _ => unreachable!(),
     }
 }
@@ -92,10 +94,24 @@ fn process_binary(node: Node) -> Result<Node> {
     let mut node = node;
 
     match node.kind {
-        NodeKind::Binary(BinaryOp::Map, ref mut _lhs, ref mut _rhs) => Ok(node), //process_path(lhs, rhs),
-        NodeKind::Binary(BinaryOp::Predicate, ref mut _lhs, ref mut _rhs) => Ok(node), // process_predicate(node.position, lhs, rhs)
-        NodeKind::Binary(BinaryOp::ContextBind, ref mut _lhs, ref mut _rhs) => Ok(node), // TODO
-        NodeKind::Binary(BinaryOp::PositionalBind, ref mut _lhs, ref mut _rhs) => Ok(node), // TODO
+        NodeKind::Binary(BinaryOp::Map, ref mut lhs, ref mut rhs) => {
+            process_path(node.position, lhs, rhs)
+        }
+        NodeKind::Binary(BinaryOp::Predicate, ref mut lhs, ref mut rhs) => {
+            process_predicate(node.position, lhs, rhs)
+        }
+        NodeKind::Binary(BinaryOp::Bind, ref mut _lhs, ref mut _rhs) => {
+            unimplemented!("Bind not yet implemented")
+        }
+        NodeKind::Binary(BinaryOp::ContextBind, ref mut _lhs, ref mut _rhs) => {
+            unimplemented!("ContextBind not yet implemented")
+        }
+        NodeKind::Binary(BinaryOp::PositionalBind, ref mut _lhs, ref mut _rhs) => {
+            unimplemented!("PositionBind not yet implemented")
+        }
+        NodeKind::Binary(BinaryOp::Apply, ref mut _lhs, ref mut _rhs) => {
+            unimplemented!("Apply not yet implemented")
+        }
         NodeKind::Binary(_, ref mut lhs, ref mut rhs) => {
             *lhs = Box::new(process_ast(std::mem::take(lhs))?);
             *rhs = Box::new(process_ast(std::mem::take(rhs))?);
@@ -105,111 +121,153 @@ fn process_binary(node: Node) -> Result<Node> {
     }
 }
 
-// #[inline]
-// fn process_path(lhs: Box<Node>, rhs: Box<Node>) -> Result<Box<Node>> {
-//     let lhs = process_ast(lhs)?;
-//     let mut rhs = process_ast(rhs)?;
+fn process_path(position: Position, lhs: &mut Box<Node>, rhs: &mut Box<Node>) -> Result<Node> {
+    let left_step = process_ast(std::mem::take(lhs))?;
+    let mut rest = process_ast(std::mem::take(rhs))?;
 
-//     let mut result = {
-//         // If lhs is a Path, start with that, otherwise create a new one
-//         if lhs.is_path() {
-//             lhs
-//         } else {
-//             Box::new(Node::new_path(lhs.position, vec![lhs]))
-//         }
-//     };
+    // If the left_step is a path itself, start with that. Otherwise, start a new path
+    let mut result = if matches!(left_step.kind, NodeKind::Path(_)) {
+        left_step
+    } else {
+        Node::new(NodeKind::Path(vec![left_step]), position)
+    };
 
-//     // TODO: If the lhs is a Parent (parser.js:997)
+    // TODO: If the lhs is a Parent (parser.js:997)
+    // TODO: If the rhs is a Function (parser.js:1001)
 
-//     // TODO: If the rhs is a Function (parser.js:1001)
+    if let NodeKind::Path(ref mut steps) = result.kind {
+        if let NodeKind::Path(ref mut rest_steps) = rest.kind {
+            // If the rest is a path, merge in the steps
+            steps.append(rest_steps);
+        } else {
+            // If there are predicates on the rest, they become stages of the step
+            rest.stages = rest.predicates.take();
+            steps.push(rest);
+        }
 
-//     // If rhs is a Path, merge the steps in
-//     if rhs.is_path() {
-//         result.append_steps(&mut rhs.take_path_steps());
-//     } else {
-//         if rhs.predicates.is_some() {
-//             rhs.stages = rhs.predicates;
-//             rhs.predicates = None;
-//         }
-//         result.push_step(rhs);
-//     }
+        let mut keep_singleton_array = false;
+        let last_index = steps.len() - 1;
 
-//     let last_index = result.path_len() - 1;
-//     let mut keep_singleton_array = false;
+        for (step_index, step) in steps.iter_mut().enumerate() {
+            match step.kind {
+                // Steps can't be literal values other than strings
+                NodeKind::Number(..) | NodeKind::Bool(..) | NodeKind::Null => {
+                    return Err(Box::new(S0213 {
+                        position: step.position,
+                        value: format!("{:#?}", step.kind),
+                    }));
+                }
 
-//     for (step_index, step) in result.path_steps().iter_mut().enumerate() {
-//         match step.kind {
-//             // Steps cannot be literal values
-//             NodeKind::Num(..) | NodeKind::Bool(..) | NodeKind::Null => {
-//                 return Err(Box::new(S0213 {
-//                     position: step.position,
-//                     value: step.kind.to_string(),
-//                 }))
-//             }
-//             // Steps that are string literals should be switched to Name
-//             NodeKind::Str(ref v) => {
-//                 step.kind = NodeKind::Name(v.clone());
-//             }
-//             // If first or last step is an array constructor, it shouldn't be flattened
-//             NodeKind::Unary(ref op) => {
-//                 if matches!(op, UnaryOp::ArrayConstructor(..))
-//                     && (step_index == 0 || step_index == last_index)
-//                 {
-//                     step.cons_array = true;
-//                 }
-//             }
-//             _ => (),
-//         }
+                // Steps that are string literals should become Names
+                NodeKind::String(ref s) => {
+                    step.kind = NodeKind::Name(s.clone());
+                }
 
-//         keep_singleton_array = keep_singleton_array || step.keep_array;
-//     }
+                // If the first or last step is an array constructor, it shouldn't be flattened
+                NodeKind::Unary(UnaryOp::ArrayConstructor(..)) => {
+                    if step_index == 0 || step_index == last_index {
+                        step.cons_array = true;
+                    }
+                }
 
-//     result.keep_singleton_array = keep_singleton_array;
+                _ => (),
+            }
 
-//     Ok(result)
-// }
+            // Any step that signals keeping a singleton array should be plagged on the path
+            keep_singleton_array = keep_singleton_array || step.keep_array;
+        }
 
-// #[inline]
-// fn process_predicate(position: Position, lhs: Box<Node>, rhs: Box<Node>) -> Result<Box<Node>> {
-//     let mut result = process_ast(lhs)?;
-//     let mut is_stages = false;
+        result.keep_singleton_array = keep_singleton_array;
+    }
 
-//     let step = if result.is_path() {
-//         is_stages = true;
-//         let last_index = result.path_len() - 1;
-//         &mut result.path_steps()[last_index]
-//     } else {
-//         &mut result
-//     };
+    Ok(result)
+}
 
-//     if step.group_by.is_some() {
-//         return Err(Box::new(S0209 { position }));
-//     }
+fn process_predicate(position: Position, lhs: &mut Box<Node>, rhs: &mut Box<Node>) -> Result<Node> {
+    let mut result = process_ast(std::mem::take(lhs))?;
+    let mut in_path = false;
 
-//     let predicate = process_ast(rhs)?;
+    let node = if let NodeKind::Path(ref mut steps) = result.kind {
+        in_path = true;
+        let last_index = steps.len() - 1;
+        &mut steps[last_index]
+    } else {
+        &mut result
+    };
 
-//     // TODO: seekingParent (parser.js:1074)
+    // Predicates can't follow group-by
+    if node.group_by.is_some() {
+        return Err(Box::new(S0209 { position }));
+    }
 
-//     if is_stages {
-//         if step.stages.is_none() {
-//             step.stages = Some(vec![predicate]);
-//         } else {
-//             if let Some(ref mut stages) = step.stages {
-//                 stages.push(predicate);
-//             }
-//         }
-//     } else {
-//         if step.predicates.is_none() {
-//             step.predicates = Some(vec![predicate]);
-//         } else {
-//             if let Some(ref mut predicates) = step.predicates {
-//                 predicates.push(predicate);
-//             }
-//         }
-//     }
+    let filter = Node::new(
+        NodeKind::Filter(Box::new(process_ast(std::mem::take(rhs))?)),
+        position,
+    );
 
-//     Ok(result)
-// }
+    // TODO: seekingParent (parser.js:1074)
+
+    // Add the filter to the node. If it's a step in a path, it goes in stages, otherwise in predicated
+    if in_path {
+        match node.stages {
+            None => node.stages = Some(vec![filter]),
+            Some(ref mut stages) => {
+                stages.push(filter);
+            }
+        }
+    } else {
+        match node.predicates {
+            None => node.predicates = Some(vec![filter]),
+            Some(ref mut predicates) => {
+                predicates.push(filter);
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+fn process_group_by(position: Position, lhs: &mut Box<Node>, rhs: &mut Object) -> Result<Node> {
+    let mut result = process_ast(std::mem::take(lhs))?;
+
+    // Can only have a single grouping expression
+    if result.group_by.is_some() {
+        return Err(Box::new(S0210 { position }));
+    }
+
+    // Process all the key, value pairs
+    for pair in rhs.iter_mut() {
+        let key = std::mem::take(&mut pair.0);
+        let value = std::mem::take(&mut pair.1);
+        *pair = (process_ast(key)?, process_ast(value)?);
+    }
+
+    result.group_by = Some((position, std::mem::take(rhs)));
+
+    Ok(result)
+}
+
+fn process_order_by(position: Position, lhs: &mut Box<Node>, rhs: &mut SortTerms) -> Result<Node> {
+    let lhs = process_ast(std::mem::take(lhs))?;
+
+    // If the left hand side is not a path, make it one
+    let mut result = if matches!(lhs.kind, NodeKind::Path(_)) {
+        lhs
+    } else {
+        Node::new(NodeKind::Path(vec![lhs]), position)
+    };
+
+    // Process all the sort terms
+    for pair in rhs.iter_mut() {
+        *pair = (process_ast(std::mem::take(&mut pair.0))?, pair.1);
+    }
+
+    if let NodeKind::Path(ref mut steps) = result.kind {
+        steps.push(Node::new(NodeKind::Sort(std::mem::take(rhs)), position));
+    }
+
+    Ok(result)
+}
 
 // #[inline]
 // fn process_lambda(mut node: Box<Node>) -> Result<Box<Node>> {
@@ -266,3 +324,11 @@ fn process_binary(node: Node) -> Result<Node> {
 //         _ => Ok(node),
 //     }
 // }
+
+/*
+    keep_array is used on individual nodes
+    keep_singleton_array is used on Paths
+    cons_array is for special handling of paths that start or end with an array constructor
+    predicates is used on individual nodes
+    stages are used in steps in a Path
+*/

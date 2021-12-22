@@ -220,6 +220,7 @@ fn parse_number_decimal(src: &[char], index: &mut usize) -> f64 {
     v * f64::powi(0.1, (*index - head) as i32)
 }
 
+// TOOD: This has major accuracy issues with large numbers like 6.022e23
 fn parse_number(src: &[char], index: &mut usize) -> Option<Value> {
     let mut result = 0 as f64;
     let mut sign = 1;
