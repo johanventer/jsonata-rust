@@ -106,13 +106,13 @@ mod tests {
         assert!(!boolean(&Value::Null));
         assert!(!boolean(&Value::Bool(false)));
         assert!(boolean(&Value::Bool(true)));
-        assert!(!boolean(&Value::Number(0.0)));
-        assert!(boolean(&Value::Number(1.0)));
+        assert!(!boolean(&Value::Number(0.0.into())));
+        assert!(boolean(&Value::Number(1.0.into())));
         assert!(!boolean(&Value::String("".to_owned())));
         assert!(boolean(&Value::String("x".to_owned())));
         assert!(!boolean(&Value::new_object()));
         let mut obj = Value::new_object();
-        obj.insert("hello".to_owned(), Value::Null);
+        obj.insert("hello", Value::Null);
         assert!(boolean(&obj));
         assert!(!boolean(&Value::Array(Vec::new())));
         assert!(boolean(&Value::Array(vec![Value::Bool(true)])));

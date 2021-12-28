@@ -47,30 +47,30 @@ mod tests {
     #[test]
     fn bind() {
         let frame = Frame::new();
-        frame.borrow_mut().bind("a", Value::Number(1.0));
+        frame.borrow_mut().bind("a", Value::Number(1.0.into()));
         let a = frame.borrow().lookup("a");
         assert!(a.is_some());
-        assert_eq!(a.unwrap(), Value::Number(1.0));
+        assert_eq!(a.unwrap(), Value::Number(1.0.into()));
     }
 
     #[test]
     fn lookup_through_parent() {
         let parent = Frame::new();
-        parent.borrow_mut().bind("a", Value::Number(1.0));
+        parent.borrow_mut().bind("a", Value::Number(1.0.into()));
         let frame = Frame::new_with_parent(parent);
         let a = frame.borrow().lookup("a");
         assert!(a.is_some());
-        assert_eq!(a.unwrap(), Value::Number(1.0));
+        assert_eq!(a.unwrap(), Value::Number(1.0.into()));
     }
 
     #[test]
     fn lookup_overriding_parent() {
         let parent = Frame::new();
-        parent.borrow_mut().bind("a", Value::Number(1.0));
+        parent.borrow_mut().bind("a", Value::Number(1.0.into()));
         let frame = Frame::new_with_parent(parent);
-        frame.borrow_mut().bind("a", Value::Number(2.0));
+        frame.borrow_mut().bind("a", Value::Number(2.0.into()));
         let a = frame.borrow().lookup("a");
         assert!(a.is_some());
-        assert_eq!(a.unwrap(), Value::Number(2.0));
+        assert_eq!(a.unwrap(), Value::Number(2.0.into()));
     }
 }

@@ -1,23 +1,23 @@
-use std::collections::BTreeMap;
+use crate::json::{Number, Object};
 use std::ops::{Index, IndexMut};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     Undefined,
     Null,
-    Number(f64),
+    Number(Number),
     Bool(bool),
     String(String),
     Array(Vec<Value>),
-    Object(BTreeMap<String, Value>),
+    Object(Object),
 }
 
 impl Value {
     pub fn new_object() -> Value {
-        Value::Object(BTreeMap::new())
+        Value::Object(Object::new())
     }
 
-    pub fn insert(&mut self, key: String, value: Value) {
+    pub fn insert(&mut self, key: &str, value: Value) {
         match *self {
             Value::Object(ref mut map) => {
                 map.insert(key, value);
@@ -28,7 +28,7 @@ impl Value {
 
     pub fn contains(&self, key: &str) -> bool {
         match *self {
-            Value::Object(ref map) => map.contains_key(key),
+            Value::Object(ref map) => map.get(key).is_some(),
             _ => panic!("Tried to call contains on a Value that wasn't an Object"),
         }
     }
@@ -105,7 +105,7 @@ impl Value {
 
     pub fn as_f64(&self) -> f64 {
         match *self {
-            Value::Number(n) => n,
+            Value::Number(n) => n.into(),
             _ => panic!("Tried to call as_f64 on a Value that wasn't a Number"),
         }
     }
@@ -162,6 +162,12 @@ impl PartialEq<&str> for Value {
     }
 }
 
+impl<'a> From<&'a str> for Value {
+    fn from(val: &'a str) -> Value {
+        Value::String(val.into())
+    }
+}
+
 impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self {
@@ -180,11 +186,11 @@ impl std::fmt::Display for Value {
             }
             Value::Object(ref obj) => {
                 f.write_str("{")?;
-                for key in obj.keys() {
+                for (key, value) in obj.iter() {
                     f.write_str("\"")?;
                     f.write_str(key)?;
                     f.write_str("\":")?;
-                    f.write_str(&obj[key].to_string())?;
+                    f.write_str(&value.to_string())?;
                     f.write_str(",")?;
                 }
                 f.write_str("{")

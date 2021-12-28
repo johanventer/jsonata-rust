@@ -11,7 +11,7 @@ pub(crate) fn evaluate(node: &Node, input: &Value, frame: FrameLink) -> Result<V
         NodeKind::Null => Value::Null,
         NodeKind::Bool(b) => Value::Bool(b),
         NodeKind::String(ref s) => Value::String(s.clone()),
-        NodeKind::Number(n) => Value::Number(n),
+        NodeKind::Number(n) => Value::Number(n.into()),
         NodeKind::Block(ref exprs) => evaluate_block(exprs, input, frame)?,
         NodeKind::Unary(ref op) => evaluate_unary_op(node, op, input, frame)?,
         NodeKind::Binary(ref op, ref lhs, ref rhs) => {
@@ -113,7 +113,7 @@ fn evaluate_binary_op(
         | BinaryOp::Divide
         | BinaryOp::Modulus => {
             let lhs = match lhs {
-                Value::Number(n) => n,
+                Value::Number(n) => f64::from(n),
                 _ => {
                     return Err(Box::new(T2001 {
                         position: node.position,
@@ -123,7 +123,7 @@ fn evaluate_binary_op(
             };
 
             let rhs = match rhs {
-                Value::Number(n) => n,
+                Value::Number(n) => f64::from(n),
                 _ => {
                     return Err(Box::new(T2002 {
                         position: node.position,
@@ -132,14 +132,17 @@ fn evaluate_binary_op(
                 }
             };
 
-            Ok(Value::Number(match op {
-                BinaryOp::Add => lhs + rhs,
-                BinaryOp::Subtract => lhs - rhs,
-                BinaryOp::Multiply => lhs * rhs,
-                BinaryOp::Divide => lhs / rhs,
-                BinaryOp::Modulus => lhs % rhs,
-                _ => unreachable!(),
-            }))
+            Ok(Value::Number(
+                (match op {
+                    BinaryOp::Add => lhs + rhs,
+                    BinaryOp::Subtract => lhs - rhs,
+                    BinaryOp::Multiply => lhs * rhs,
+                    BinaryOp::Divide => lhs / rhs,
+                    BinaryOp::Modulus => lhs % rhs,
+                    _ => unreachable!(),
+                })
+                .into(),
+            ))
         }
 
         BinaryOp::LessThan
@@ -153,7 +156,9 @@ fn evaluate_binary_op(
                 }));
             }
 
-            if let (Value::Number(lhs), Value::Number(rhs)) = (&lhs, &rhs) {
+            if let (Value::Number(ref lhs), Value::Number(ref rhs)) = (&lhs, &rhs) {
+                let lhs = f64::from(*lhs);
+                let rhs = f64::from(*rhs);
                 return Ok(Value::Bool(match op {
                     BinaryOp::LessThan => lhs < rhs,
                     BinaryOp::LessThanEqual => lhs <= rhs,
