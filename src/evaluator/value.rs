@@ -1,3 +1,4 @@
+use crate::json::object::Iter;
 use crate::json::{Number, Object};
 use std::ops::{Index, IndexMut};
 
@@ -11,6 +12,8 @@ pub enum Value {
     Array {
         items: Vec<Value>,
         is_sequence: bool,
+        cons: bool,
+        keep_singleton: bool,
     },
     Object(Object),
 }
@@ -49,6 +52,8 @@ impl Value {
         Value::Array {
             items: Vec::new(),
             is_sequence: false,
+            cons: false,
+            keep_singleton: false,
         }
     }
 
@@ -56,6 +61,8 @@ impl Value {
         Value::Array {
             items: Vec::with_capacity(capacity),
             is_sequence: false,
+            cons: false,
+            keep_singleton: false,
         }
     }
 
@@ -63,6 +70,8 @@ impl Value {
         Value::Array {
             items,
             is_sequence: false,
+            cons: false,
+            keep_singleton: false,
         }
     }
 
@@ -89,11 +98,25 @@ impl Value {
         }
     }
 
+    pub fn len(&self) -> usize {
+        match *self {
+            Value::Array { ref items, .. } => items.len(),
+            _ => panic!("Tried to call len on a Value that wasn't an Array"),
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         match *self {
             Value::Array { ref items, .. } => items.is_empty(),
             Value::Object(ref map) => map.is_empty(),
             _ => panic!("Tried to call is_empty on a Value that wasn't an Array or an Object"),
+        }
+    }
+
+    pub fn entries(&self) -> Iter {
+        match *self {
+            Value::Object(ref object) => object.iter(),
+            _ => panic!("Tried to call entries on a Value that wasn't an Object"),
         }
     }
 
@@ -223,6 +246,12 @@ impl std::fmt::Display for Value {
                 f.write_str("{")
             }
         }
+    }
+}
+
+impl Default for Value {
+    fn default() -> Self {
+        Value::Undefined
     }
 }
 

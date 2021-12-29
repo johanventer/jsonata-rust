@@ -7,22 +7,22 @@ pub mod json;
 mod parser;
 
 pub use error::{Error, InvalidJson};
-use evaluator::Frame;
 pub use evaluator::Value;
+use evaluator::{Frame, FrameLink};
 pub use parser::ast::*;
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 pub struct JsonAta {
     ast: Node,
-    // frame: FramePtr,
+    frame: FrameLink,
 }
 
 impl JsonAta {
     pub fn new(expr: &str) -> Result<JsonAta> {
         Ok(Self {
             ast: parser::parse(expr)?,
-            // frame: Frame::new_ptr(),
+            frame: Frame::new(),
         })
     }
 
@@ -30,11 +30,9 @@ impl JsonAta {
         &self.ast
     }
 
-    // pub fn assign_var(&mut self, name: &str, value: &JsonValue) {
-    //     self.frame
-    //         .borrow_mut()
-    //         .bind(name, Rc::new(Value::from_raw(Some(value))));
-    // }
+    pub fn assign_var(&mut self, name: &str, value: Value) {
+        self.frame.borrow_mut().bind(name, value)
+    }
 
     pub fn evaluate(&self, input: Option<&str>) -> Result<Value> {
         let input = match input {
@@ -59,8 +57,7 @@ impl JsonAta {
 
         // self.frame.borrow_mut().bind("$", Rc::clone(&input));
 
-        let frame = Frame::new();
-        let result = evaluator::evaluate(&self.ast, &input, frame)?;
+        let result = evaluator::evaluate(&self.ast, &input, self.frame.clone())?;
         Ok(result)
     }
 }

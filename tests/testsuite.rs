@@ -50,10 +50,12 @@ fn t(resource: &str) {
         let jsonata = JsonAta::new(&expr);
 
         match jsonata {
-            Ok(jsonata) => {
-                // for (key, value) in case["bindings"].entries() {
-                //     jsonata.assign_var(key, value);
-                // }
+            Ok(mut jsonata) => {
+                if case["bindings"].is_object() {
+                    for (key, value) in case["bindings"].entries() {
+                        jsonata.assign_var(key, value.clone());
+                    }
+                }
 
                 let result = jsonata.evaluate_with_value(data);
 

@@ -9,25 +9,58 @@ pub(crate) use frame::{Frame, FrameLink};
 pub use value::{Value, UNDEFINED};
 
 pub(crate) fn evaluate(node: &Node, input: &Value, frame: FrameLink) -> Result<Value> {
-    let result = match node.kind {
+    let mut result = match node.kind {
         NodeKind::Null => Value::Null,
         NodeKind::Bool(b) => Value::Bool(b),
         NodeKind::String(ref s) => Value::String(s.clone()),
         NodeKind::Number(n) => Value::Number(n.into()),
-        NodeKind::Block(ref exprs) => evaluate_block(exprs, input, frame)?,
-        NodeKind::Unary(ref op) => evaluate_unary_op(node, op, input, frame)?,
+        NodeKind::Block(ref exprs) => evaluate_block(exprs, input, frame.clone())?,
+        NodeKind::Unary(ref op) => evaluate_unary_op(node, op, input, frame.clone())?,
         NodeKind::Binary(ref op, ref lhs, ref rhs) => {
-            evaluate_binary_op(node, op, lhs, rhs, input, frame)?
+            evaluate_binary_op(node, op, lhs, rhs, input, frame.clone())?
         }
-        NodeKind::Var(ref name) => evaluate_var(name, input, frame)?,
+        NodeKind::Var(ref name) => evaluate_var(name, input, frame.clone())?,
         NodeKind::Ternary {
             ref cond,
             ref truthy,
             ref falsy,
-        } => evaluate_ternary(cond, truthy, falsy.as_deref(), input, frame)?,
+        } => evaluate_ternary(cond, truthy, falsy.as_deref(), input, frame.clone())?,
+        NodeKind::Path(..) => unimplemented!("Path nodes not yet supported"),
         _ => unimplemented!("TODO: node kind not yet supported: {:#?}", node.kind),
     };
-    Ok(result)
+
+    if let Some(filters) = &node.predicates {
+        for filter in filters {
+            result = evaluate_filter(filter, &result, frame.clone())?;
+        }
+    }
+
+    Ok(
+        if let Value::Array {
+            is_sequence: true,
+            ref mut items,
+            ref mut keep_singleton,
+            ..
+        } = result
+        {
+            if node.keep_array {
+                *keep_singleton = true;
+            }
+            if items.is_empty() {
+                Value::Undefined
+            } else if items.len() == 1 {
+                if *keep_singleton {
+                    result
+                } else {
+                    std::mem::take(&mut items[0])
+                }
+            } else {
+                result
+            }
+        } else {
+            result
+        },
+    )
 }
 
 fn evaluate_block(exprs: &[Node], input: &Value, frame: FrameLink) -> Result<Value> {
@@ -85,8 +118,18 @@ fn evaluate_unary_op(node: &Node, op: &UnaryOp, input: &Value, frame: FrameLink)
                 })),
             }
         }
-        UnaryOp::ArrayConstructor(..) => {
-            unimplemented!("UnaryOp::ArrayConstructor not implemented yet")
+        UnaryOp::ArrayConstructor(ref array) => {
+            let mut result: Vec<Value> = Vec::with_capacity(array.len());
+            for item in array.iter() {
+                let value = evaluate(item, input, frame.clone())?;
+                result.push(value);
+            }
+            Ok(Value::Array {
+                items: result,
+                is_sequence: false,
+                cons: node.cons_array,
+                keep_singleton: false,
+            })
         }
         UnaryOp::ObjectConstructor(ref object) => {
             evaluate_group_expression(node.position, object, input, frame)
@@ -94,29 +137,61 @@ fn evaluate_unary_op(node: &Node, op: &UnaryOp, input: &Value, frame: FrameLink)
     }
 }
 
-#[derive(Debug)]
-struct Group {
-    pub data: Value,
-    pub index: usize,
-}
-
-type Groups = HashMap<String, Group>;
-
 fn evaluate_group_expression(
     position: Position,
     object: &[(Node, Node)],
     input: &Value,
     frame: FrameLink,
 ) -> Result<Value> {
-    let mut groups = Groups::new();
+    struct Group {
+        pub data: Value,
+        pub index: usize,
+    }
+
+    let mut groups: HashMap<String, Group> = HashMap::new();
+
+    let mut evaluate_group_item = |item: &Value| -> Result<Value> {
+        for (index, pair) in object.iter().enumerate() {
+            let key = evaluate(&pair.0, item, frame.clone())?;
+            if !key.is_string() {
+                return Err(Box::new(T1003 {
+                    position,
+                    value: format!("{:#?}", key),
+                }));
+            }
+
+            let key = key.as_str();
+
+            if groups.contains_key(key) {
+                if groups[key].index == index {
+                    return Err(Box::new(D1009 {
+                        position,
+                        value: key.to_owned(),
+                    }));
+                }
+                let group = groups.get_mut(key).unwrap();
+                group.data = append(&group.data, item);
+            } else {
+                groups.insert(
+                    key.to_string(),
+                    Group {
+                        data: item.clone(),
+                        index,
+                    },
+                );
+            }
+        }
+
+        Ok(Value::Undefined)
+    };
 
     if !input.is_array() {
-        evaluate_group_item(position, object, input, frame.clone(), &mut groups)?;
+        evaluate_group_item(input)?;
     } else if input.is_empty() {
-        evaluate_group_item(position, object, &UNDEFINED, frame.clone(), &mut groups)?;
+        evaluate_group_item(&UNDEFINED)?;
     } else {
         for item in input.iter() {
-            evaluate_group_item(position, object, item, frame.clone(), &mut groups)?;
+            evaluate_group_item(item)?;
         }
     }
 
@@ -131,47 +206,6 @@ fn evaluate_group_expression(
     }
 
     Ok(result)
-}
-
-fn evaluate_group_item(
-    position: Position,
-    object: &[(Node, Node)],
-    input: &Value,
-    frame: FrameLink,
-    groups: &mut Groups,
-) -> Result<Value> {
-    for (index, pair) in object.iter().enumerate() {
-        let key = evaluate(&pair.0, input, frame.clone())?;
-        if !key.is_string() {
-            return Err(Box::new(T1003 {
-                position,
-                value: format!("{:#?}", key),
-            }));
-        }
-
-        let key = key.as_str();
-
-        if groups.contains_key(key) {
-            if groups[key].index == index {
-                return Err(Box::new(D1009 {
-                    position,
-                    value: key.to_owned(),
-                }));
-            }
-            let group = groups.get_mut(key).unwrap();
-            group.data = append(&group.data, input);
-        } else {
-            groups.insert(
-                key.to_string(),
-                Group {
-                    data: input.clone(),
-                    index,
-                },
-            );
-        }
-    }
-
-    Ok(Value::Undefined)
 }
 
 fn evaluate_binary_op(
@@ -288,3 +322,99 @@ fn evaluate_binary_op(
         _ => unimplemented!("TODO: binary op not supported yet: {:#?}", *op),
     }
 }
+
+fn evaluate_filter(node: &Node, input: &Value, _frame: FrameLink) -> Result<Value> {
+    let mut results = Value::Array {
+        items: Vec::new(),
+        is_sequence: true,
+        cons: false,
+        keep_singleton: false,
+    };
+
+    match node.kind {
+        NodeKind::Number(n) => {
+            let mut index = n.floor() as isize;
+            let length = if input.is_array() {
+                input.len() as isize
+            } else {
+                1
+            };
+            if index < 0 {
+                // Count from the end of the array
+                index += length;
+            }
+            let item = if let Value::Array { items, .. } = input {
+                items.get(index as usize)
+            } else {
+                Some(input)
+            };
+            if let Some(item) = item {
+                if item.is_array() {
+                    results = item.clone();
+                } else {
+                    results.push(item.clone());
+                }
+            }
+        }
+        _ => unimplemented!("Filters other than numbers are not yet supported"),
+    };
+
+    Ok(results)
+}
+
+/*
+    function* evaluateFilter(predicate, input, environment) {
+        var results = createSequence();
+        if( input && input.tupleStream) {
+            results.tupleStream = true;
+        }
+        if (!Array.isArray(input)) {
+            input = createSequence(input);
+        }
+        if (predicate.type === 'number') {
+            var index = Math.floor(predicate.value);  // round it down
+            if (index < 0) {
+                // count in from end of array
+                index = input.length + index;
+            }
+            var item = input[index];
+            if(typeof item !== 'undefined') {
+                if(Array.isArray(item)) {
+                    results = item;
+                } else {
+                    results.push(item);
+                }
+            }
+        } else {
+            for (index = 0; index < input.length; index++) {
+                var item = input[index];
+                var context = item;
+                var env = environment;
+                if(input.tupleStream) {
+                    context = item['@'];
+                    env = createFrameFromTuple(environment, item);
+                }
+                var res = yield* evaluate(predicate, context, env);
+                if (isNumeric(res)) {
+                    res = [res];
+                }
+                if (isArrayOfNumbers(res)) {
+                    res.forEach(function (ires) {
+                        // round it down
+                        var ii = Math.floor(ires);
+                        if (ii < 0) {
+                            // count in from end of array
+                            ii = input.length + ii;
+                        }
+                        if (ii === index) {
+                            results.push(item);
+                        }
+                    });
+                } else if (fn.boolean(res)) { // truthy
+                    results.push(item);
+                }
+            }
+        }
+        return results;
+    }
+*/

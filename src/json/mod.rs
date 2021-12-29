@@ -1,5 +1,5 @@
 mod number;
-mod object;
+pub(crate) mod object;
 mod parser;
 mod util;
 
