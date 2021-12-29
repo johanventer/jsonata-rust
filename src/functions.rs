@@ -73,6 +73,31 @@ use crate::evaluator::Value;
 //     }
 // }
 
+pub(crate) fn append(arg1: &Value, arg2: &Value) -> Value {
+    if arg1.is_undefined() {
+        return arg2.clone();
+    }
+
+    if arg2.is_undefined() {
+        return arg1.clone();
+    }
+
+    let mut arg1_items = if let Value::Array { items, .. } = arg1 {
+        items.clone()
+    } else {
+        vec![arg1.clone()]
+    };
+
+    let mut arg2_items = if let Value::Array { items, .. } = arg2 {
+        items.clone()
+    } else {
+        vec![arg2.clone()]
+    };
+
+    arg1_items.append(&mut arg2_items);
+    Value::with_items(arg1_items)
+}
+
 pub(crate) fn boolean(arg: &Value) -> bool {
     fn cast(value: &Value) -> bool {
         match *value {
@@ -82,15 +107,15 @@ pub(crate) fn boolean(arg: &Value) -> bool {
             Value::Number(num) => num != 0.0,
             Value::String(ref str) => !str.is_empty(),
             Value::Object(ref obj) => !obj.is_empty(),
-            Value::Array(_) => panic!("unexpected Value::Array"),
+            Value::Array { .. } => panic!("unexpected Value::Array"),
         }
     }
 
     match *arg {
-        Value::Array(ref arr) => match arr.len() {
+        Value::Array { ref items, .. } => match items.len() {
             0 => false,
-            1 => boolean(&arr[0]),
-            _ => arr.iter().any(boolean),
+            1 => boolean(&items[0]),
+            _ => items.iter().any(boolean),
         },
         _ => cast(arg),
     }
@@ -114,15 +139,15 @@ mod tests {
         let mut obj = Value::new_object();
         obj.insert("hello", Value::Null);
         assert!(boolean(&obj));
-        assert!(!boolean(&Value::Array(Vec::new())));
-        assert!(boolean(&Value::Array(vec![Value::Bool(true)])));
-        assert!(!boolean(&Value::Array(vec![Value::Bool(false)])));
-        assert!(!boolean(&Value::Array(vec![
+        assert!(!boolean(&Value::new_array()));
+        assert!(boolean(&Value::with_items(vec![Value::Bool(true)])));
+        assert!(!boolean(&Value::with_items(vec![Value::Bool(false)])));
+        assert!(!boolean(&Value::with_items(vec![
             Value::Bool(false),
             Value::Bool(false),
             Value::Bool(false)
         ])));
-        assert!(boolean(&Value::Array(vec![
+        assert!(boolean(&Value::with_items(vec![
             Value::Bool(false),
             Value::Bool(true),
             Value::Bool(false)

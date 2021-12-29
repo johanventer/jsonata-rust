@@ -17,21 +17,19 @@
 // This makes for some ugly code, but it is faster. Hopefully in the future
 // with MIR support the compiler will get smarter about this.
 
-use std::{str, slice};
-use std::char::decode_utf16;
-use std::convert::TryFrom;
-use crate::{Value, Result};
 use super::number::Number;
 use super::object::Object;
+use crate::{Result, Value};
+use std::char::decode_utf16;
+use std::convert::TryFrom;
+use std::{slice, str};
 
 // This is not actual max precision, but a threshold at which number parsing
 // kicks into checked math.
 const MAX_PRECISION: u64 = 576460752303423500;
 
-
 // How many nested Objects/Arrays are allowed to be parsed
 const DEPTH_LIMIT: usize = 512;
-
 
 // The `Parser` struct keeps track of indexing over our buffer. All niceness
 // has been abandoned in favor of raw pointer magic. Does that make you feel
@@ -54,11 +52,10 @@ struct Parser<'a> {
     length: usize,
 }
 
-
 // Read a byte from the source.
 // Will return an error if there are no more bytes.
 macro_rules! expect_byte {
-    ($parser:ident) => ({
+    ($parser:ident) => {{
         if $parser.is_eof() {
             panic!("Unexpected end of JSON");
             // return Err(Error::UnexpectedEndOfJson);
@@ -67,9 +64,8 @@ macro_rules! expect_byte {
         let ch = $parser.read_byte();
         $parser.bump();
         ch
-    })
+    }};
 }
-
 
 // Expect a sequence of specific bytes in specific order, error otherwise.
 // This is useful for reading the 3 JSON identifiers:
@@ -90,24 +86,21 @@ macro_rules! expect_sequence {
     }
 }
 
-
 // A drop in macro for when we expect to read a byte, but we don't care
 // about any whitespace characters that might occur before it.
 macro_rules! expect_byte_ignore_whitespace {
-    ($parser:ident) => ({
+    ($parser:ident) => {{
         let mut ch = expect_byte!($parser);
 
         // Don't go straight for the loop, assume we are in the clear first.
         match ch {
             // whitespace
-            9 ..= 13 | 32 => {
-                loop {
-                    match expect_byte!($parser) {
-                        9 ..= 13 | 32 => {},
-                        next          => {
-                            ch = next;
-                            break;
-                        }
+            9..=13 | 32 => loop {
+                match expect_byte!($parser) {
+                    9..=13 | 32 => {}
+                    next => {
+                        ch = next;
+                        break;
                     }
                 }
             },
@@ -115,22 +108,22 @@ macro_rules! expect_byte_ignore_whitespace {
         }
 
         ch
-    })
+    }};
 }
 
 // Expect to find EOF or just whitespaces leading to EOF after a JSON value
 macro_rules! expect_eof {
-    ($parser:ident) => ({
+    ($parser:ident) => {{
         while !$parser.is_eof() {
             match $parser.read_byte() {
-                9 ..= 13 | 32 => $parser.bump(),
-                _             => {
+                9..=13 | 32 => $parser.bump(),
+                _ => {
                     $parser.bump();
                     return $parser.unexpected_character();
                 }
             }
         }
-    })
+    }};
 }
 
 // Expect a particular byte to be next. Also available with a variant
@@ -157,34 +150,32 @@ macro_rules! expect {
     })
 }
 
-
 // Look up table that marks which characters are allowed in their raw
 // form in a string.
-const QU: bool = false;  // double quote       0x22
-const BS: bool = false;  // backslash          0x5C
-const CT: bool = false;  // control character  0x00 ..= 0x1F
+const QU: bool = false; // double quote       0x22
+const BS: bool = false; // backslash          0x5C
+const CT: bool = false; // control character  0x00 ..= 0x1F
 const __: bool = true;
 
 static ALLOWED: [bool; 256] = [
-// 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
-  CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, // 0
-  CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, // 1
-  __, __, QU, __, __, __, __, __, __, __, __, __, __, __, __, __, // 2
-  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 3
-  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 4
-  __, __, __, __, __, __, __, __, __, __, __, __, BS, __, __, __, // 5
-  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 6
-  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 7
-  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 8
-  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 9
-  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // A
-  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // B
-  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // C
-  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // D
-  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // E
-  __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // F
+    // 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
+    CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, // 0
+    CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, CT, // 1
+    __, __, QU, __, __, __, __, __, __, __, __, __, __, __, __, __, // 2
+    __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 3
+    __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 4
+    __, __, __, __, __, __, __, __, __, __, __, __, BS, __, __, __, // 5
+    __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 6
+    __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 7
+    __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 8
+    __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // 9
+    __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // A
+    __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // B
+    __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // C
+    __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // D
+    __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // E
+    __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // F
 ];
-
 
 // Expect a string. This is called after encountering, and consuming, a
 // double quote character. This macro has a happy path variant where it
@@ -193,7 +184,7 @@ static ALLOWED: [bool; 256] = [
 // any escapes, it will use a slice straight from the source, avoiding
 // unnecessary buffering.
 macro_rules! expect_string {
-    ($parser:ident) => ({
+    ($parser:ident) => {{
         let result: &str;
         let start = $parser.index;
 
@@ -219,13 +210,12 @@ macro_rules! expect_string {
         }
 
         result
-    })
+    }};
 }
-
 
 // Expect a number. Of some kind.
 macro_rules! expect_number {
-    ($parser:ident, $first:ident) => ({
+    ($parser:ident, $first:ident) => {{
         let mut num = ($first - b'0') as u64;
 
         let result: Number;
@@ -246,11 +236,11 @@ macro_rules! expect_number {
             let ch = $parser.read_byte();
 
             match ch {
-                b'0' ..= b'9' => {
+                b'0'..=b'9' => {
                     $parser.bump();
                     num = num * 10 + (ch - b'0') as u64;
-                },
-                _             => {
+                }
+                _ => {
                     let mut e = 0;
                     result = allow_number_extensions!($parser, num, e, ch);
                     break;
@@ -259,31 +249,30 @@ macro_rules! expect_number {
         }
 
         result
-    })
+    }};
 }
-
 
 // Invoked after parsing an integer, this will account for fractions and/or
 // `e` notation.
 macro_rules! allow_number_extensions {
-    ($parser:ident, $num:ident, $e:ident, $ch:ident) => ({
+    ($parser:ident, $num:ident, $e:ident, $ch:ident) => {{
         match $ch {
-            b'.'        => {
+            b'.' => {
                 $parser.bump();
                 expect_fraction!($parser, $num, $e)
-            },
+            }
             b'e' | b'E' => {
                 $parser.bump();
                 $parser.expect_exponent($num, $e)?
-            },
-            _  => $num.into()
+            }
+            _ => $num.into(),
         }
-    });
+    }};
 
     // Alternative variant that defaults everything to 0. This is actually
     // quite handy as the only number that can begin with zero, has to have
     // a zero mantissa. Leading zeroes are illegal in JSON!
-    ($parser:ident) => ({
+    ($parser:ident) => {{
         if $parser.is_eof() {
             0.into()
         } else {
@@ -292,36 +281,36 @@ macro_rules! allow_number_extensions {
             let ch = $parser.read_byte();
             allow_number_extensions!($parser, num, e, ch)
         }
-    })
+    }};
 }
-
 
 // If a dot `b"."` byte has been read, start reading the decimal fraction
 // of the number.
 macro_rules! expect_fraction {
-    ($parser:ident, $num:ident, $e:ident) => ({
+    ($parser:ident, $num:ident, $e:ident) => {{
         let result: Number;
 
         let ch = expect_byte!($parser);
 
         match ch {
-            b'0' ..= b'9' => {
+            b'0'..=b'9' => {
                 if $num < MAX_PRECISION {
                     $num = $num * 10 + (ch - b'0') as u64;
                     $e -= 1;
                 } else {
-                    match $num.checked_mul(10).and_then(|num| {
-                        num.checked_add((ch - b'0') as u64)
-                    }) {
+                    match $num
+                        .checked_mul(10)
+                        .and_then(|num| num.checked_add((ch - b'0') as u64))
+                    {
                         Some(result) => {
                             $num = result;
                             $e -= 1;
-                        },
+                        }
                         None => {}
                     }
                 }
-            },
-            _ => return $parser.unexpected_character()
+            }
+            _ => return $parser.unexpected_character(),
         }
 
         loop {
@@ -332,23 +321,24 @@ macro_rules! expect_fraction {
             let ch = $parser.read_byte();
 
             match ch {
-                b'0' ..= b'9' => {
+                b'0'..=b'9' => {
                     $parser.bump();
                     if $num < MAX_PRECISION {
                         $num = $num * 10 + (ch - b'0') as u64;
                         $e -= 1;
                     } else {
-                        match $num.checked_mul(10).and_then(|num| {
-                            num.checked_add((ch - b'0') as u64)
-                        }) {
+                        match $num
+                            .checked_mul(10)
+                            .and_then(|num| num.checked_add((ch - b'0') as u64))
+                        {
                             Some(result) => {
                                 $num = result;
                                 $e -= 1;
-                            },
+                            }
                             None => {}
                         }
                     }
-                },
+                }
                 b'e' | b'E' => {
                     $parser.bump();
                     result = $parser.expect_exponent($num, $e)?;
@@ -362,7 +352,7 @@ macro_rules! expect_fraction {
         }
 
         result
-    })
+    }};
 }
 
 impl<'a> Parser<'a> {
@@ -408,19 +398,19 @@ impl<'a> Parser<'a> {
         let at = self.index - 1;
 
         let ch = self.source[at..]
-                     .chars()
-                     .next()
-                     .expect("Must have a character");
+            .chars()
+            .next()
+            .expect("Must have a character");
 
         let (lineno, col) = self.source[..at]
-                                .lines()
-                                .enumerate()
-                                .last()
-                                .unwrap_or((0, ""));
+            .lines()
+            .enumerate()
+            .last()
+            .unwrap_or((0, ""));
 
         let colno = col.chars().count();
 
-        panic!("Unexpected character {}:{}:{}", ch, lineno+1, colno+1);
+        panic!("Unexpected character {}:{}:{}", ch, lineno + 1, colno + 1);
         // Err(Error::UnexpectedCharacter {
         //     ch: ch,
         //     line: lineno + 1,
@@ -432,21 +422,19 @@ impl<'a> Parser<'a> {
     fn read_hexdec_digit(&mut self) -> Result<u16> {
         let ch = expect_byte!(self);
         Ok(match ch {
-            b'0' ..= b'9' => (ch - b'0'),
-            b'a' ..= b'f' => (ch + 10 - b'a'),
-            b'A' ..= b'F' => (ch + 10 - b'A'),
-            _             => return self.unexpected_character(),
+            b'0'..=b'9' => (ch - b'0'),
+            b'a'..=b'f' => (ch + 10 - b'a'),
+            b'A'..=b'F' => (ch + 10 - b'A'),
+            _ => return self.unexpected_character(),
         } as u16)
     }
 
     // Boring
     fn read_hexdec_codepoint(&mut self) -> Result<u16> {
-        Ok(
-            self.read_hexdec_digit()? << 12 |
-            self.read_hexdec_digit()? << 8  |
-            self.read_hexdec_digit()? << 4  |
-            self.read_hexdec_digit()?
-        )
+        Ok(self.read_hexdec_digit()? << 12
+            | self.read_hexdec_digit()? << 8
+            | self.read_hexdec_digit()? << 4
+            | self.read_hexdec_digit()?)
     }
 
     // Oh look, some action. This method reads an escaped unicode
@@ -462,9 +450,9 @@ impl<'a> Parser<'a> {
             Err(_) => {
                 expect_sequence!(self, b'\\', b'u');
 
-                match decode_utf16(
-                    [codepoint, self.read_hexdec_codepoint()?].iter().copied()
-                ).next() {
+                match decode_utf16([codepoint, self.read_hexdec_codepoint()?].iter().copied())
+                    .next()
+                {
                     Some(Ok(code)) => code,
                     _ => {
                         panic!("Failed UTF8 parsing");
@@ -474,7 +462,8 @@ impl<'a> Parser<'a> {
             }
         };
 
-        self.buffer.extend_from_slice(unicode.encode_utf8(&mut buf).as_bytes());
+        self.buffer
+            .extend_from_slice(unicode.encode_utf8(&mut buf).as_bytes());
 
         Ok(())
     }
@@ -501,7 +490,8 @@ impl<'a> Parser<'a> {
         let mut ch = b'\\';
 
         // TODO: Use fastwrite here as well
-        self.buffer.extend_from_slice(&self.source.as_bytes()[start .. self.index - 1]);
+        self.buffer
+            .extend_from_slice(&self.source.as_bytes()[start..self.index - 1]);
 
         loop {
             if ALLOWED[ch as usize] {
@@ -510,28 +500,26 @@ impl<'a> Parser<'a> {
                 continue;
             }
             match ch {
-                b'"'  => break,
+                b'"' => break,
                 b'\\' => {
                     let escaped = expect_byte!(self);
                     let escaped = match escaped {
-                        b'u'  => {
+                        b'u' => {
                             self.read_codepoint()?;
                             ch = expect_byte!(self);
                             continue;
-                        },
-                        b'"'  |
-                        b'\\' |
-                        b'/'  => escaped,
-                        b'b'  => 0x8,
-                        b'f'  => 0xC,
-                        b't'  => b'\t',
-                        b'r'  => b'\r',
-                        b'n'  => b'\n',
-                        _     => return self.unexpected_character()
+                        }
+                        b'"' | b'\\' | b'/' => escaped,
+                        b'b' => 0x8,
+                        b'f' => 0xC,
+                        b't' => b'\t',
+                        b'r' => b'\r',
+                        b'n' => b'\n',
+                        _ => return self.unexpected_character(),
                     };
                     self.buffer.push(escaped);
-                },
-                _ => return self.unexpected_character()
+                }
+                _ => return self.unexpected_character(),
             }
             ch = expect_byte!(self);
         }
@@ -547,7 +535,7 @@ impl<'a> Parser<'a> {
                 // issues here, we construct a new slice from raw parts, which
                 // then has lifetime bound to the outer function scope instead
                 // of the parser itself.
-                slice::from_raw_parts(self.buffer[len .. ].as_ptr(), self.buffer.len() - len)
+                slice::from_raw_parts(self.buffer[len..].as_ptr(), self.buffer.len() - len),
             )
         })
     }
@@ -566,27 +554,30 @@ impl<'a> Parser<'a> {
             }
             let ch = self.read_byte();
             match ch {
-                b'0' ..= b'9' => {
+                b'0'..=b'9' => {
                     self.bump();
-                    match num.checked_mul(10).and_then(|num| {
-                        num.checked_add((ch - b'0') as u64)
-                    }) {
+                    match num
+                        .checked_mul(10)
+                        .and_then(|num| num.checked_add((ch - b'0') as u64))
+                    {
                         Some(result) => num = result,
-                        None         => e = e.checked_add(1).ok_or_else(|| {
-                            panic!("Exceeded depth limit");
-                            // Error::ExceededDepthLimit
-                        })?,
+                        None => {
+                            e = e.checked_add(1).ok_or_else(|| {
+                                panic!("Exceeded depth limit");
+                                // Error::ExceededDepthLimit
+                            })?
+                        }
                     }
-                },
+                }
                 b'.' => {
                     self.bump();
                     return Ok(expect_fraction!(self, num, e));
-                },
+                }
                 b'e' | b'E' => {
                     self.bump();
                     return self.expect_exponent(num, e);
                 }
-                _  => break
+                _ => break,
             }
         }
 
@@ -601,16 +592,16 @@ impl<'a> Parser<'a> {
             b'-' => {
                 ch = expect_byte!(self);
                 -1
-            },
+            }
             b'+' => {
                 ch = expect_byte!(self);
                 1
-            },
-            _    => 1
+            }
+            _ => 1,
         };
 
         let mut e = match ch {
-            b'0' ..= b'9' => (ch - b'0') as i16,
+            b'0'..=b'9' => (ch - b'0') as i16,
             _ => return self.unexpected_character(),
         };
 
@@ -620,11 +611,11 @@ impl<'a> Parser<'a> {
             }
             let ch = self.read_byte();
             match ch {
-                b'0' ..= b'9' => {
+                b'0'..=b'9' => {
                     self.bump();
                     e = e.saturating_mul(10).saturating_add((ch - b'0') as i16);
-                },
-                _  => break
+                }
+                _ => break,
             }
         }
 
@@ -647,12 +638,12 @@ impl<'a> Parser<'a> {
                             // return Err(Error::ExceededDepthLimit);
                         }
 
-                        stack.push(StackBlock(Value::Array(Vec::with_capacity(2)), 0));
+                        stack.push(StackBlock(Value::new_array_with_capacity(2), 0));
                         continue 'parsing;
                     }
 
-                    Value::Array(Vec::new())
-                },
+                    Value::new_array()
+                }
                 b'{' => {
                     ch = expect_byte_ignore_whitespace!(self);
 
@@ -665,7 +656,7 @@ impl<'a> Parser<'a> {
                         let mut object = Object::with_capacity(3);
 
                         if ch != b'"' {
-                            return self.unexpected_character()
+                            return self.unexpected_character();
                         }
 
                         let index = object.insert_index(expect_string!(self), Value::Null);
@@ -679,33 +670,31 @@ impl<'a> Parser<'a> {
                     }
 
                     Value::Object(Object::new())
-                },
+                }
                 b'"' => expect_string!(self).into(),
                 b'0' => Value::Number(allow_number_extensions!(self)),
-                b'1' ..= b'9' => {
-                    Value::Number(expect_number!(self, ch))
-                },
+                b'1'..=b'9' => Value::Number(expect_number!(self, ch)),
                 b'-' => {
                     let ch = expect_byte!(self);
-                    Value::Number(- match ch {
+                    Value::Number(-match ch {
                         b'0' => allow_number_extensions!(self),
-                        b'1' ..= b'9' => expect_number!(self, ch),
-                        _    => return self.unexpected_character()
+                        b'1'..=b'9' => expect_number!(self, ch),
+                        _ => return self.unexpected_character(),
                     })
                 }
                 b't' => {
                     expect_sequence!(self, b'r', b'u', b'e');
                     Value::Bool(true)
-                },
+                }
                 b'f' => {
                     expect_sequence!(self, b'a', b'l', b's', b'e');
                     Value::Bool(false)
-                },
+                }
                 b'n' => {
                     expect_sequence!(self, b'u', b'l', b'l');
                     Value::Null
-                },
-                _    => return self.unexpected_character()
+                }
+                _ => return self.unexpected_character(),
             };
 
             'popping: loop {
@@ -714,10 +703,10 @@ impl<'a> Parser<'a> {
                         expect_eof!(self);
 
                         return Ok(value);
-                    },
+                    }
 
-                    Some(&mut StackBlock(Value::Array(ref mut array), _)) => {
-                        array.push(value);
+                    Some(&mut StackBlock(Value::Array { ref mut items, .. }, ..)) => {
+                        items.push(value);
 
                         ch = expect_byte_ignore_whitespace!(self);
 
@@ -726,13 +715,13 @@ impl<'a> Parser<'a> {
                                 ch = expect_byte_ignore_whitespace!(self);
 
                                 continue 'parsing;
-                            },
-                            b']' => {},
-                            _    => return self.unexpected_character()
+                            }
+                            b']' => {}
+                            _ => return self.unexpected_character(),
                         }
-                    },
+                    }
 
-                    Some(&mut StackBlock(Value::Object(ref mut object), ref mut index )) => {
+                    Some(&mut StackBlock(Value::Object(ref mut object), ref mut index)) => {
                         object.override_at(*index, value);
 
                         ch = expect_byte_ignore_whitespace!(self);
@@ -746,18 +735,18 @@ impl<'a> Parser<'a> {
                                 ch = expect_byte_ignore_whitespace!(self);
 
                                 continue 'parsing;
-                            },
-                            b'}' => {},
-                            _    => return self.unexpected_character()
+                            }
+                            b'}' => {}
+                            _ => return self.unexpected_character(),
                         }
-                    },
+                    }
 
                     _ => unreachable!(),
                 }
 
                 value = match stack.pop() {
                     Some(StackBlock(value, _)) => value,
-                    None                       => break 'popping
+                    None => break 'popping,
                 }
             }
         }
@@ -771,7 +760,6 @@ struct StackBlock(Value, usize);
 pub fn parse(source: &str) -> Result<Value> {
     Parser::new(source).parse()
 }
-
 
 // #[cfg(test)]
 // mod tests {

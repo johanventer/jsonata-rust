@@ -8,9 +8,14 @@ pub enum Value {
     Number(Number),
     Bool(bool),
     String(String),
-    Array(Vec<Value>),
+    Array {
+        items: Vec<Value>,
+        is_sequence: bool,
+    },
     Object(Object),
 }
+
+pub const UNDEFINED: Value = Value::Undefined;
 
 impl Value {
     pub fn new_object() -> Value {
@@ -41,35 +46,52 @@ impl Value {
     }
 
     pub fn new_array() -> Value {
-        Value::Array(Vec::new())
+        Value::Array {
+            items: Vec::new(),
+            is_sequence: false,
+        }
+    }
+
+    pub fn new_array_with_capacity(capacity: usize) -> Value {
+        Value::Array {
+            items: Vec::with_capacity(capacity),
+            is_sequence: false,
+        }
+    }
+
+    pub fn with_items(items: Vec<Value>) -> Value {
+        Value::Array {
+            items,
+            is_sequence: false,
+        }
     }
 
     pub fn push(&mut self, item: Value) {
         match *self {
-            Value::Array(ref mut arr) => {
-                arr.push(item);
+            Value::Array { ref mut items, .. } => {
+                items.push(item);
             }
             _ => panic!("Tried to push into a Value that wasn't an Array"),
         }
     }
 
-    pub fn iter(&mut self) -> std::slice::Iter<'_, Value> {
+    pub fn iter(&self) -> std::slice::Iter<'_, Value> {
         match *self {
-            Value::Array(ref mut arr) => arr.iter(),
+            Value::Array { ref items, .. } => items.iter(),
             _ => panic!("Tried to call iter on a Value that wasn't an Array"),
         }
     }
 
     pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, Value> {
         match *self {
-            Value::Array(ref mut arr) => arr.iter_mut(),
+            Value::Array { ref mut items, .. } => items.iter_mut(),
             _ => panic!("Tried to call iter_mut on a Value that wasn't an Array"),
         }
     }
 
     pub fn is_empty(&self) -> bool {
         match *self {
-            Value::Array(ref arr) => arr.is_empty(),
+            Value::Array { ref items, .. } => items.is_empty(),
             Value::Object(ref map) => map.is_empty(),
             _ => panic!("Tried to call is_empty on a Value that wasn't an Array or an Object"),
         }
@@ -84,19 +106,19 @@ impl Value {
     }
 
     pub fn is_number(&self) -> bool {
-        matches!(*self, Value::Number(_))
+        matches!(*self, Value::Number(..))
     }
 
     pub fn is_bool(&self) -> bool {
-        matches!(*self, Value::Bool(_))
+        matches!(*self, Value::Bool(..))
     }
 
     pub fn is_string(&self) -> bool {
-        matches!(*self, Value::String(_))
+        matches!(*self, Value::String(..))
     }
 
     pub fn is_array(&self) -> bool {
-        matches!(*self, Value::Array(_))
+        matches!(*self, Value::Array { .. })
     }
 
     pub fn is_object(&self) -> bool {
@@ -109,6 +131,13 @@ impl Value {
             _ => panic!("Tried to call as_f64 on a Value that wasn't a Number"),
         }
     }
+
+    pub fn as_str(&self) -> &str {
+        match *self {
+            Value::String(ref s) => s,
+            _ => panic!("Tried to call as_string on a Value that wasn't a String"),
+        }
+    }
 }
 
 impl Index<usize> for Value {
@@ -116,7 +145,7 @@ impl Index<usize> for Value {
 
     fn index(&self, index: usize) -> &Self::Output {
         match *self {
-            Value::Array(ref arr) => &arr[index],
+            Value::Array { ref items, .. } => &items[index],
             _ => panic!("Tried to index a a Value that wasn't an Array"),
         }
     }
@@ -125,13 +154,11 @@ impl Index<usize> for Value {
 impl IndexMut<usize> for Value {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         match *self {
-            Value::Array(ref mut arr) => &mut arr[index],
+            Value::Array { ref mut items, .. } => &mut items[index],
             _ => panic!("Tried to index a a Value that wasn't an Array"),
         }
     }
 }
-
-const UNDEFINED: Value = Value::Undefined;
 
 impl Index<&str> for Value {
     type Output = Value;
@@ -176,9 +203,9 @@ impl std::fmt::Display for Value {
             Value::Number(n) => f.write_str(&n.to_string()),
             Value::Bool(b) => f.write_str(&b.to_string()),
             Value::String(ref s) => f.write_str(s),
-            Value::Array(ref arr) => {
+            Value::Array { ref items, .. } => {
                 f.write_str("[")?;
-                for item in arr.iter() {
+                for item in items.iter() {
                     f.write_str(&item.to_string())?;
                     f.write_str(",")?;
                 }

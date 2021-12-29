@@ -1,10 +1,12 @@
 mod frame;
 mod value;
 
+use std::collections::HashMap;
+
 use crate::functions::*;
-use crate::{error::*, parser::ast::*, Result};
+use crate::{error::*, parser::ast::*, parser::Position, Result};
 pub(crate) use frame::{Frame, FrameLink};
-pub use value::Value;
+pub use value::{Value, UNDEFINED};
 
 pub(crate) fn evaluate(node: &Node, input: &Value, frame: FrameLink) -> Result<Value> {
     let result = match node.kind {
@@ -83,8 +85,93 @@ fn evaluate_unary_op(node: &Node, op: &UnaryOp, input: &Value, frame: FrameLink)
                 })),
             }
         }
-        _ => unimplemented!("TODO: unary op not supported yet {:#?}", op),
+        UnaryOp::ArrayConstructor(..) => {
+            unimplemented!("UnaryOp::ArrayConstructor not implemented yet")
+        }
+        UnaryOp::ObjectConstructor(ref object) => {
+            evaluate_group_expression(node.position, object, input, frame)
+        }
     }
+}
+
+#[derive(Debug)]
+struct Group {
+    pub data: Value,
+    pub index: usize,
+}
+
+type Groups = HashMap<String, Group>;
+
+fn evaluate_group_expression(
+    position: Position,
+    object: &[(Node, Node)],
+    input: &Value,
+    frame: FrameLink,
+) -> Result<Value> {
+    let mut groups = Groups::new();
+
+    if !input.is_array() {
+        evaluate_group_item(position, object, input, frame.clone(), &mut groups)?;
+    } else if input.is_empty() {
+        evaluate_group_item(position, object, &UNDEFINED, frame.clone(), &mut groups)?;
+    } else {
+        for item in input.iter() {
+            evaluate_group_item(position, object, item, frame.clone(), &mut groups)?;
+        }
+    }
+
+    let mut result = Value::new_object();
+
+    for key in groups.keys() {
+        let group = groups.get(key).unwrap();
+        let value = evaluate(&object[group.index].1, &group.data, frame.clone())?;
+        if !value.is_undefined() {
+            result.insert(key, value);
+        }
+    }
+
+    Ok(result)
+}
+
+fn evaluate_group_item(
+    position: Position,
+    object: &[(Node, Node)],
+    input: &Value,
+    frame: FrameLink,
+    groups: &mut Groups,
+) -> Result<Value> {
+    for (index, pair) in object.iter().enumerate() {
+        let key = evaluate(&pair.0, input, frame.clone())?;
+        if !key.is_string() {
+            return Err(Box::new(T1003 {
+                position,
+                value: format!("{:#?}", key),
+            }));
+        }
+
+        let key = key.as_str();
+
+        if groups.contains_key(key) {
+            if groups[key].index == index {
+                return Err(Box::new(D1009 {
+                    position,
+                    value: key.to_owned(),
+                }));
+            }
+            let group = groups.get_mut(key).unwrap();
+            group.data = append(&group.data, input);
+        } else {
+            groups.insert(
+                key.to_string(),
+                Group {
+                    data: input.clone(),
+                    index,
+                },
+            );
+        }
+    }
+
+    Ok(Value::Undefined)
 }
 
 fn evaluate_binary_op(
