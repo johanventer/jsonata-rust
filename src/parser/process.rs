@@ -200,7 +200,10 @@ fn process_predicate(position: Position, lhs: &mut Box<Node>, rhs: &mut Box<Node
         return Err(Box::new(S0209 { position }));
     }
 
-    let filter = process_ast(std::mem::take(rhs))?;
+    let filter = Node::new(
+        NodeKind::Filter(Box::new(process_ast(std::mem::take(rhs))?)),
+        position,
+    );
 
     // TODO: seekingParent (parser.js:1074)
 

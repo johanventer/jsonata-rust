@@ -25,7 +25,7 @@ pub(crate) fn evaluate(node: &Node, input: &Value, frame: FrameLink) -> Result<V
             ref truthy,
             ref falsy,
         } => evaluate_ternary(cond, truthy, falsy.as_deref(), input, frame.clone())?,
-        NodeKind::Path(..) => unimplemented!("Path nodes not yet supported"),
+        NodeKind::Path(ref steps) => evaluate_path(node, steps, input, frame.clone())?,
         _ => unimplemented!("TODO: node kind not yet supported: {:#?}", node.kind),
     };
 
@@ -332,28 +332,33 @@ fn evaluate_filter(node: &Node, input: &Value, _frame: FrameLink) -> Result<Valu
     };
 
     match node.kind {
-        NodeKind::Number(n) => {
-            let mut index = n.floor() as isize;
-            let length = if input.is_array() {
-                input.len() as isize
-            } else {
-                1
-            };
-            if index < 0 {
-                // Count from the end of the array
-                index += length;
-            }
-            let item = if let Value::Array { items, .. } = input {
-                items.get(index as usize)
-            } else {
-                Some(input)
-            };
-            if let Some(item) = item {
-                if item.is_array() {
-                    results = item.clone();
-                } else {
-                    results.push(item.clone());
+        NodeKind::Filter(ref filter) => {
+            match filter.kind {
+                NodeKind::Number(n) => {
+                    let mut index = n.floor() as isize;
+                    let length = if input.is_array() {
+                        input.len() as isize
+                    } else {
+                        1
+                    };
+                    if index < 0 {
+                        // Count from the end of the array
+                        index += length;
+                    }
+                    let item = if let Value::Array { items, .. } = input {
+                        items.get(index as usize)
+                    } else {
+                        Some(input)
+                    };
+                    if let Some(item) = item {
+                        if item.is_array() {
+                            results = item.clone();
+                        } else {
+                            results.push(item.clone());
+                        }
+                    }
                 }
+                _ => unimplemented!("Filters other than numbers are not yet supported"),
             }
         }
         _ => unimplemented!("Filters other than numbers are not yet supported"),
@@ -362,59 +367,88 @@ fn evaluate_filter(node: &Node, input: &Value, _frame: FrameLink) -> Result<Valu
     Ok(results)
 }
 
+fn evaluate_path(
+    _node: &Node,
+    _steps: &[Node],
+    _input: &Value,
+    _frame: FrameLink,
+) -> Result<Value> {
+    unimplemented!("Path nodes not yet supported");
+
+    // for (index, step) in steps.iter().enumerate() {}
+}
+
 /*
-    function* evaluateFilter(predicate, input, environment) {
-        var results = createSequence();
-        if( input && input.tupleStream) {
-            results.tupleStream = true;
-        }
-        if (!Array.isArray(input)) {
-            input = createSequence(input);
-        }
-        if (predicate.type === 'number') {
-            var index = Math.floor(predicate.value);  // round it down
-            if (index < 0) {
-                // count in from end of array
-                index = input.length + index;
-            }
-            var item = input[index];
-            if(typeof item !== 'undefined') {
-                if(Array.isArray(item)) {
-                    results = item;
-                } else {
-                    results.push(item);
-                }
-            }
+
+    function* evaluatePath(expr, input, environment) {
+        var inputSequence;
+        // expr is an array of steps
+        // if the first step is a variable reference ($...), including root reference ($$),
+        //   then the path is absolute rather than relative
+        if (Array.isArray(input) && expr.steps[0].type !== 'variable') {
+            inputSequence = input;
         } else {
-            for (index = 0; index < input.length; index++) {
-                var item = input[index];
-                var context = item;
-                var env = environment;
-                if(input.tupleStream) {
-                    context = item['@'];
-                    env = createFrameFromTuple(environment, item);
+            // if input is not an array, make it so
+            inputSequence = createSequence(input);
+        }
+
+        var resultSequence;
+        var isTupleStream = false;
+        var tupleBindings = undefined;
+
+        // evaluate each step in turn
+        for(var ii = 0; ii < expr.steps.length; ii++) {
+            var step = expr.steps[ii];
+
+            if(step.tuple) {
+                isTupleStream = true;
+            }
+
+            // if the first step is an explicit array constructor, then just evaluate that (i.e. don't iterate over a context array)
+            if(ii === 0 && step.consarray) {
+                resultSequence = yield * evaluate(step, inputSequence, environment);
+            } else {
+                if(isTupleStream) {
+                    tupleBindings = yield * evaluateTupleStep(step, inputSequence, tupleBindings, environment);
+                } else {
+                    resultSequence = yield * evaluateStep(step, inputSequence, environment, ii === expr.steps.length - 1);
                 }
-                var res = yield* evaluate(predicate, context, env);
-                if (isNumeric(res)) {
-                    res = [res];
-                }
-                if (isArrayOfNumbers(res)) {
-                    res.forEach(function (ires) {
-                        // round it down
-                        var ii = Math.floor(ires);
-                        if (ii < 0) {
-                            // count in from end of array
-                            ii = input.length + ii;
-                        }
-                        if (ii === index) {
-                            results.push(item);
-                        }
-                    });
-                } else if (fn.boolean(res)) { // truthy
-                    results.push(item);
+            }
+
+            if (!isTupleStream && (typeof resultSequence === 'undefined' || resultSequence.length === 0)) {
+                break;
+            }
+
+            if(typeof step.focus === 'undefined') {
+                inputSequence = resultSequence;
+            }
+
+        }
+
+        if(isTupleStream) {
+            if(expr.tuple) {
+                // tuple stream is carrying ancestry information - keep this
+                resultSequence = tupleBindings;
+            } else {
+                resultSequence = createSequence();
+                for (ii = 0; ii < tupleBindings.length; ii++) {
+                    resultSequence.push(tupleBindings[ii]['@']);
                 }
             }
         }
-        return results;
+
+        if(expr.keepSingletonArray) {
+            // if the array is explicitly constructed in the expression and marked to promote singleton sequences to array
+            if(Array.isArray(resultSequence) && resultSequence.cons && !resultSequence.sequence) {
+                resultSequence = createSequence(resultSequence);
+            }
+            resultSequence.keepSingleton = true;
+        }
+
+        if (expr.hasOwnProperty('group')) {
+            resultSequence = yield* evaluateGroupExpression(expr.group, isTupleStream ? tupleBindings : resultSequence, environment)
+        }
+
+        return resultSequence;
     }
 */
