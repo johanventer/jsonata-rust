@@ -2,7 +2,7 @@ use crate::json::object::Iter;
 use crate::json::{Number, Object};
 use std::ops::{Index, IndexMut};
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub enum Value {
     Undefined,
     Null,
@@ -144,6 +144,20 @@ impl Value {
         matches!(*self, Value::Array { .. })
     }
 
+    pub fn is_sequence(&self) -> bool {
+        match *self {
+            Value::Array { is_sequence, .. } => is_sequence,
+            _ => false,
+        }
+    }
+
+    pub fn cons(&self) -> bool {
+        match *self {
+            Value::Array { cons, .. } => cons,
+            _ => false,
+        }
+    }
+
     pub fn is_object(&self) -> bool {
         matches!(*self, Value::Object(_))
     }
@@ -190,6 +204,21 @@ impl Index<&str> for Value {
         match *self {
             Value::Object(ref obj) => obj.get(index).unwrap_or(&UNDEFINED),
             _ => panic!("Tried to index a Value that wasn't an Object"),
+        }
+    }
+}
+
+impl PartialEq<Value> for Value {
+    fn eq(&self, other: &Value) -> bool {
+        match (self, other) {
+            (Self::Number(l0), Self::Number(r0)) => l0 == r0,
+            (Self::Bool(l0), Self::Bool(r0)) => l0 == r0,
+            (Self::String(l0), Self::String(r0)) => l0 == r0,
+            (Self::Array { items: l_items, .. }, Self::Array { items: r_items, .. }) => {
+                l_items == r_items
+            }
+            (Self::Object(l0), Self::Object(r0)) => l0 == r0,
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
         }
     }
 }

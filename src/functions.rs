@@ -1,7 +1,7 @@
 // use json::{stringify, JsonValue};
 // use std::rc::Rc;
 
-use crate::evaluator::Value;
+use crate::evaluator::{Value, UNDEFINED};
 
 // pub(crate) fn lookup(input: Rc<Value>, key: &str) -> Rc<Value> {
 //     let result = if input.is_array() {
@@ -118,6 +118,34 @@ pub(crate) fn boolean(arg: &Value) -> bool {
             _ => items.iter().any(boolean),
         },
         _ => cast(arg),
+    }
+}
+
+pub(crate) fn lookup(input: &Value, key: &str) -> Value {
+    match input {
+        Value::Array { .. } => {
+            let mut result = Value::Array {
+                items: Vec::new(),
+                is_sequence: true,
+                cons: false,
+                keep_singleton: false,
+            };
+
+            for input in input.iter() {
+                let res = lookup(input, key);
+                match res {
+                    Value::Undefined => {}
+                    Value::Array { items, .. } => {
+                        items.into_iter().for_each(|item| result.push(item));
+                    }
+                    _ => result.push(res),
+                };
+            }
+
+            result
+        }
+        Value::Object(..) => input.get(key).unwrap_or(&UNDEFINED).clone(),
+        _ => Value::Undefined,
     }
 }
 

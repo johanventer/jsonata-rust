@@ -26,6 +26,7 @@ pub(crate) fn evaluate(node: &Node, input: &Value, frame: FrameLink) -> Result<V
             ref falsy,
         } => evaluate_ternary(cond, truthy, falsy.as_deref(), input, frame.clone())?,
         NodeKind::Path(ref steps) => evaluate_path(node, steps, input, frame.clone())?,
+        NodeKind::Name(ref name) => lookup(input, name),
         _ => unimplemented!("TODO: node kind not yet supported: {:#?}", node.kind),
     };
 
@@ -324,7 +325,7 @@ fn evaluate_binary_op(
 }
 
 fn evaluate_filter(node: &Node, input: &Value, _frame: FrameLink) -> Result<Value> {
-    let mut results = Value::Array {
+    let mut result = Value::Array {
         items: Vec::new(),
         is_sequence: true,
         cons: false,
@@ -352,9 +353,9 @@ fn evaluate_filter(node: &Node, input: &Value, _frame: FrameLink) -> Result<Valu
                     };
                     if let Some(item) = item {
                         if item.is_array() {
-                            results = item.clone();
+                            result = item.clone();
                         } else {
-                            results.push(item.clone());
+                            result.push(item.clone());
                         }
                     }
                 }
@@ -364,91 +365,117 @@ fn evaluate_filter(node: &Node, input: &Value, _frame: FrameLink) -> Result<Valu
         _ => unimplemented!("Filters other than numbers are not yet supported"),
     };
 
-    Ok(results)
+    Ok(result)
 }
 
-fn evaluate_path(
-    _node: &Node,
-    _steps: &[Node],
-    _input: &Value,
-    _frame: FrameLink,
-) -> Result<Value> {
-    unimplemented!("Path nodes not yet supported");
+fn evaluate_path(node: &Node, steps: &[Node], input: &Value, frame: FrameLink) -> Result<Value> {
+    // FIXME: How do I avoid these clones? It's so frustrating
+    let mut input = if input.is_array() && !matches!(steps[0].kind, NodeKind::Var(..)) {
+        input.clone()
+    } else {
+        Value::with_items(vec![input.clone()])
+    };
 
-    // for (index, step) in steps.iter().enumerate() {}
-}
+    let mut result = Value::Undefined;
 
-/*
-
-    function* evaluatePath(expr, input, environment) {
-        var inputSequence;
-        // expr is an array of steps
-        // if the first step is a variable reference ($...), including root reference ($$),
-        //   then the path is absolute rather than relative
-        if (Array.isArray(input) && expr.steps[0].type !== 'variable') {
-            inputSequence = input;
+    for (index, step) in steps.iter().enumerate() {
+        result = if index == 0 && step.cons_array {
+            evaluate(step, &input, frame.clone())?
         } else {
-            // if input is not an array, make it so
-            inputSequence = createSequence(input);
+            evaluate_step(step, &input, frame.clone(), index == steps.len() - 1)?
+        };
+
+        if result.is_undefined() || (result.is_array() && result.is_empty()) {
+            break;
         }
 
-        var resultSequence;
-        var isTupleStream = false;
-        var tupleBindings = undefined;
-
-        // evaluate each step in turn
-        for(var ii = 0; ii < expr.steps.length; ii++) {
-            var step = expr.steps[ii];
-
-            if(step.tuple) {
-                isTupleStream = true;
-            }
-
-            // if the first step is an explicit array constructor, then just evaluate that (i.e. don't iterate over a context array)
-            if(ii === 0 && step.consarray) {
-                resultSequence = yield * evaluate(step, inputSequence, environment);
-            } else {
-                if(isTupleStream) {
-                    tupleBindings = yield * evaluateTupleStep(step, inputSequence, tupleBindings, environment);
-                } else {
-                    resultSequence = yield * evaluateStep(step, inputSequence, environment, ii === expr.steps.length - 1);
-                }
-            }
-
-            if (!isTupleStream && (typeof resultSequence === 'undefined' || resultSequence.length === 0)) {
-                break;
-            }
-
-            if(typeof step.focus === 'undefined') {
-                inputSequence = resultSequence;
-            }
-
-        }
-
-        if(isTupleStream) {
-            if(expr.tuple) {
-                // tuple stream is carrying ancestry information - keep this
-                resultSequence = tupleBindings;
-            } else {
-                resultSequence = createSequence();
-                for (ii = 0; ii < tupleBindings.length; ii++) {
-                    resultSequence.push(tupleBindings[ii]['@']);
-                }
-            }
-        }
-
-        if(expr.keepSingletonArray) {
-            // if the array is explicitly constructed in the expression and marked to promote singleton sequences to array
-            if(Array.isArray(resultSequence) && resultSequence.cons && !resultSequence.sequence) {
-                resultSequence = createSequence(resultSequence);
-            }
-            resultSequence.keepSingleton = true;
-        }
-
-        if (expr.hasOwnProperty('group')) {
-            resultSequence = yield* evaluateGroupExpression(expr.group, isTupleStream ? tupleBindings : resultSequence, environment)
-        }
-
-        return resultSequence;
+        // if step.focus.is_none() {
+        input = result.clone();
+        // }
     }
-*/
+
+    if node.keep_singleton_array {
+        if let Value::Array {
+            ref cons,
+            ref mut keep_singleton,
+            ref mut is_sequence,
+            ..
+        } = result
+        {
+            if *cons && !*is_sequence {
+                *is_sequence = true;
+            }
+            *keep_singleton = true;
+        } else {
+            unreachable!("The result should be a sequence at this point")
+        }
+    }
+
+    if let Some((position, ref object)) = node.group_by {
+        result = evaluate_group_expression(position, object, &result, frame)?;
+    }
+
+    Ok(result)
+}
+
+fn evaluate_step(node: &Node, input: &Value, frame: FrameLink, last_step: bool) -> Result<Value> {
+    let mut result = Value::Array {
+        items: Vec::new(),
+        is_sequence: true,
+        cons: false,
+        keep_singleton: false,
+    };
+
+    if let NodeKind::Sort(ref sorts) = node.kind {
+        result = evaluate_sorts(sorts, input, frame.clone())?;
+        if let Some(ref stages) = node.stages {
+            result = evaluate_stages(stages, &result, frame)?;
+        }
+        return Ok(result);
+    }
+
+    for input in input.iter() {
+        let mut input_result = evaluate(node, input, frame.clone())?;
+        if let Some(ref stages) = node.stages {
+            for stage in stages {
+                input_result = evaluate_filter(stage, &input_result, frame.clone())?;
+            }
+        }
+        if !input_result.is_undefined() {
+            result.push(input_result);
+        }
+    }
+
+    Ok(
+        if last_step && result.len() == 1 && result[0].is_array() && !result[0].is_sequence() {
+            std::mem::take(&mut result[0])
+        } else {
+            // Flatten the sequence
+            let mut result_sequence = Value::Array {
+                items: Vec::new(),
+                is_sequence: true,
+                cons: false,
+                keep_singleton: false,
+            };
+            for result_item in result.iter_mut() {
+                if !result_item.is_array() || result_item.cons() {
+                    result_sequence.push(std::mem::take(result_item));
+                } else {
+                    for item in result_item.iter_mut() {
+                        result_sequence.push(std::mem::take(item))
+                    }
+                }
+            }
+
+            result_sequence
+        },
+    )
+}
+
+fn evaluate_sorts(_sorts: &[(Node, bool)], _inputt: &Value, _frame: FrameLink) -> Result<Value> {
+    unimplemented!("Sorts not yet implemented")
+}
+
+fn evaluate_stages(_stages: &[Node], _input: &Value, _frame: FrameLink) -> Result<Value> {
+    unimplemented!("Stages not yet implemented")
+}
