@@ -49,6 +49,7 @@ impl DiyFp {
         }
     }
     */
+    #[allow(clippy::transmute_float_to_int)]
     pub unsafe fn from_f64(d: f64) -> Self {
         let u: u64 = mem::transmute(d);
 

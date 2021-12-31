@@ -49,6 +49,7 @@ unsafe fn write_num(n: &mut u64, curr: &mut isize, buf_ptr: *mut u8, lut_ptr: *c
     }
 }
 
+#[allow(clippy::comparison_chain)]
 pub unsafe fn write<W: io::Write>(
     wr: &mut W,
     positive: bool,

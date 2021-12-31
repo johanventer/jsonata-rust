@@ -142,6 +142,7 @@ impl Number {
     /// assert_eq!(price_b.as_fixed_point_u64(2), Some(700));
     /// assert_eq!(price_c.as_fixed_point_u64(2), Some(1020));
     /// ```
+    #[allow(clippy::comparison_chain)]
     pub fn as_fixed_point_u64(&self, point: u16) -> Option<u64> {
         if self.category != POSITIVE {
             return None;
@@ -169,6 +170,7 @@ impl Number {
     /// assert_eq!(balance_a.as_fixed_point_i64(2), Some(-149));
     /// assert_eq!(balance_b.as_fixed_point_i64(2), Some(4200));
     /// ```
+    #[allow(clippy::comparison_chain)]
     pub fn as_fixed_point_i64(&self, point: u16) -> Option<i64> {
         if self.is_nan() {
             return None;
@@ -194,6 +196,7 @@ impl Number {
 
 impl PartialEq for Number {
     #[inline]
+    #[allow(clippy::comparison_chain)]
     fn eq(&self, other: &Number) -> bool {
         if self.is_zero() && other.is_zero() || self.is_nan() && other.is_nan() {
             return true;
@@ -206,7 +209,7 @@ impl PartialEq for Number {
         let e_diff = self.exponent - other.exponent;
 
         if e_diff == 0 {
-            return self.mantissa == other.mantissa;
+            self.mantissa == other.mantissa
         } else if e_diff > 0 {
             let power = decimal_power(e_diff as u16);
 
@@ -368,24 +371,28 @@ impl From<f32> for Number {
 }
 
 impl PartialEq<f64> for Number {
+    #[allow(clippy::cmp_owned)]
     fn eq(&self, other: &f64) -> bool {
         f64::from(*self) == *other
     }
 }
 
 impl PartialEq<f32> for Number {
+    #[allow(clippy::cmp_owned)]
     fn eq(&self, other: &f32) -> bool {
         f32::from(*self) == *other
     }
 }
 
 impl PartialEq<Number> for f64 {
+    #[allow(clippy::cmp_owned)]
     fn eq(&self, other: &Number) -> bool {
         f64::from(*other) == *self
     }
 }
 
 impl PartialEq<Number> for f32 {
+    #[allow(clippy::cmp_owned)]
     fn eq(&self, other: &Number) -> bool {
         f32::from(*other) == *self
     }
@@ -486,12 +493,14 @@ macro_rules! impl_signed {
 macro_rules! impl_integer {
     ($t:ty) => {
         impl PartialEq<$t> for Number {
+            #[allow(clippy::cmp_owned)]
             fn eq(&self, other: &$t) -> bool {
                 *self == Number::from(*other)
             }
         }
 
         impl PartialEq<Number> for $t {
+            #[allow(clippy::cmp_owned)]
             fn eq(&self, other: &Number) -> bool {
                 Number::from(*self) == *other
             }

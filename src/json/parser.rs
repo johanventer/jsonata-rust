@@ -196,7 +196,7 @@ macro_rules! expect_string {
             }
             if ch == b'"' {
                 unsafe {
-                    let ptr = $parser.byte_ptr.offset(start as isize);
+                    let ptr = $parser.byte_ptr.add(start);
                     let len = $parser.index - 1 - start;
                     result = str::from_utf8_unchecked(slice::from_raw_parts(ptr, len));
                 }
@@ -384,7 +384,7 @@ impl<'a> Parser<'a> {
     fn read_byte(&mut self) -> u8 {
         debug_assert!(self.index < self.length, "Reading out of bounds");
 
-        unsafe { *self.byte_ptr.offset(self.index as isize) }
+        unsafe { *self.byte_ptr.add(self.index) }
     }
 
     // Manually increment the index. Calling `read_byte` and then `bump`
@@ -559,7 +559,7 @@ impl<'a> Parser<'a> {
                         .and_then(|num| num.checked_add((ch - b'0') as u64))
                     {
                         Some(result) => num = result,
-                        None => e = e.checked_add(1).ok_or_else(|| Error::ExceededDepthLimit)?,
+                        None => e = e.checked_add(1).ok_or(Error::ExceededDepthLimit)?,
                     }
                 }
                 b'.' => {

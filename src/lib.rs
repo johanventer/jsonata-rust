@@ -37,7 +37,7 @@ impl JsonAta {
         &self.ast
     }
 
-    pub fn assign_var(&mut self, name: &str, value: Value) {
+    pub fn assign_var(&mut self, _name: &str, _value: Value) {
         // self.frame.borrow_mut().bind(name, value)
         todo!()
     }
@@ -51,7 +51,7 @@ impl JsonAta {
         self.evaluate_with_value(input)
     }
 
-    pub fn evaluate_with_value(&self, input: Value) -> Result<Value> {
+    pub fn evaluate_with_value(&self, _input: Value) -> Result<Value> {
         // let mut input = Rc::new(Value::from_raw(input));
         // if input.is_array() {
         //     input = Rc::new(Value::wrap(Rc::clone(&input)));

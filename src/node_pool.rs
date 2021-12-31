@@ -15,7 +15,7 @@ pub struct NodePool<Node: Sized + PartialEq> {
 impl<Node: Sized + PartialEq> NodePool<Node> {
     pub fn new() -> Self {
         NodePool {
-            nodes: Vec::new(),
+            nodes: Vec::with_capacity(10),
             free_list: Vec::new(),
         }
     }
