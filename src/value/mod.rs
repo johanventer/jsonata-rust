@@ -119,6 +119,13 @@ impl Value {
         }
     }
 
+    pub fn as_f32(&self) -> f32 {
+        match *self.pool.borrow().get(self.index) {
+            ValueKind::Number(n) => n.into(),
+            _ => panic!("Not a number"),
+        }
+    }
+
     pub fn as_f64(&self) -> f64 {
         match *self.pool.borrow().get(self.index) {
             ValueKind::Number(n) => n.into(),
@@ -344,12 +351,6 @@ impl PartialEq<String> for Value {
     }
 }
 
-impl fmt::Debug for Value {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.pool.borrow().get(self.index).fmt(f)
-    }
-}
-
 pub struct Members<'pool> {
     pool: &'pool ValuePool,
     array: *const Vec<usize>,
@@ -424,6 +425,16 @@ impl<'pool> Iterator for Entries<'pool> {
     }
 }
 
+impl fmt::Debug for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.pool.borrow().get(self.index) {
+            ValueKind::Array(..) => f.debug_list().entries(self.members()).finish(),
+            ValueKind::Object(..) => f.debug_map().entries(self.entries()).finish(),
+            _ => ValueKind::fmt(self.pool.borrow().get(self.index), f),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -438,11 +449,11 @@ mod tests {
         a.push(ValueKind::Number(2.into()));
         a.push(ValueKind::Number(1.into()));
         let mut iter = a.members();
-        assert_eq!(iter.next().unwrap(), ValueKind::Number(5.into()));
-        assert_eq!(iter.next().unwrap(), ValueKind::Number(4.into()));
-        assert_eq!(iter.next().unwrap(), ValueKind::Number(3.into()));
-        assert_eq!(iter.next().unwrap(), ValueKind::Number(2.into()));
-        assert_eq!(iter.next().unwrap(), ValueKind::Number(1.into()));
+        assert!((5.0 - iter.next().unwrap().as_f64()).abs() < f64::EPSILON);
+        assert!((4.0 - iter.next().unwrap().as_f64()).abs() < f64::EPSILON);
+        assert!((3.0 - iter.next().unwrap().as_f64()).abs() < f64::EPSILON);
+        assert!((2.0 - iter.next().unwrap().as_f64()).abs() < f64::EPSILON);
+        assert!((1.0 - iter.next().unwrap().as_f64()).abs() < f64::EPSILON);
         assert!(iter.next().is_none());
     }
 
@@ -469,6 +480,6 @@ mod tests {
         let v = Value::new_string(pool, "hello world");
         let v = v.wrap_in_array();
         assert!(v.is_array());
-        assert_eq!(v.get_member(0), "hello world");
+        assert_eq!(v.get_member(0).as_string(), "hello world");
     }
 }

@@ -74,20 +74,20 @@ fn t(resource: &str) {
                                         < 1e-10
                                 );
                             } else {
-                                assert_eq!(case.get_entry("result"), result);
+                                assert!(result == case.get_entry("result"));
                             }
                         }
                     }
                     Err(error) => {
                         assert!(!case.get_entry("code").is_null());
-                        assert_eq!(case.get_entry("code"), error.code());
+                        assert!(case.get_entry("code") == error.code());
                     }
                 }
             }
             Err(error) => {
                 // The parsing error is expected, let's make sure it matches
                 assert!(!case.get_entry("code").is_null());
-                assert_eq!(case.get_entry("code"), error.code());
+                assert!(case.get_entry("code") == error.code());
             }
         }
     }

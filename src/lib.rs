@@ -1,3 +1,4 @@
+// TODO: Fix visibility of all these modules
 pub mod ast;
 pub mod error;
 pub mod evaluator;
@@ -12,6 +13,8 @@ pub mod tokenizer;
 pub mod value;
 
 pub use error::Error;
+
+/// The Result type used by this crate
 pub type Result<T> = std::result::Result<T, Error>;
 
 use ast::Node;
@@ -45,13 +48,13 @@ impl JsonAta {
     pub fn evaluate(&self, input: Option<&str>) -> Result<Value> {
         let input = match input {
             Some(input) => json::parse(input).unwrap(),
-            None => Value::new_undefined(self.pool.clone()),
+            None => self.pool.undefined(),
         };
 
         self.evaluate_with_value(input)
     }
 
-    pub fn evaluate_with_value(&self, _input: Value) -> Result<Value> {
+    pub fn evaluate_with_value(&self, input: Value) -> Result<Value> {
         // let mut input = Rc::new(Value::from_raw(input));
         // if input.is_array() {
         //     input = Rc::new(Value::wrap(Rc::clone(&input)));
@@ -66,6 +69,6 @@ impl JsonAta {
         // self.frame.borrow_mut().bind("$", Rc::clone(&input));
 
         let evaluator = Evaluator::new(self.pool.clone());
-        evaluator.evaluate()
+        evaluator.evaluate(&self.ast, input)
     }
 }

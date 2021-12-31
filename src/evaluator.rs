@@ -1,3 +1,4 @@
+use super::ast::*;
 use super::value::{Value, ValuePool};
 use super::Result;
 
@@ -10,7 +11,7 @@ impl Evaluator {
         Evaluator { pool }
     }
 
-    pub fn evaluate(&self) -> Result<Value> {
+    pub fn evaluate(&self, _node: &Node, _input: Value) -> Result<Value> {
         Ok(Value::new_undefined(self.pool.clone()))
     }
 }

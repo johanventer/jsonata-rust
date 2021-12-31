@@ -9,7 +9,6 @@ pub struct ArrayProps {
     cons: bool,
 }
 
-#[derive(Debug)]
 pub enum ValueKind {
     Undefined,
     Null,
@@ -129,5 +128,23 @@ impl From<bool> for ValueKind {
 impl From<&str> for ValueKind {
     fn from(v: &str) -> Self {
         ValueKind::String(v.into())
+    }
+}
+
+impl std::fmt::Debug for ValueKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Undefined => write!(f, "undefined"),
+            Self::Null => write!(f, "null"),
+            Self::Number(n) => write!(f, "{}", n.to_string()),
+            Self::Bool(b) => write!(f, "{}", if *b { "true" } else { "false" }),
+            Self::String(s) => write!(f, "\"{}\"", s),
+            Self::Array(a, _) => write!(f, "<array({})>", a.len()),
+            Self::Object(o) => write!(
+                f,
+                "<object{{{}}}>",
+                o.keys().cloned().collect::<Vec<String>>().join(", ")
+            ),
+        }
     }
 }
