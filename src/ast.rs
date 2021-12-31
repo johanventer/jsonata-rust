@@ -1,4 +1,4 @@
-use super::Position;
+use super::position::Position;
 
 // Object constructor, represented by tuples of (key, value)
 pub type Object = Vec<(Node, Node)>;

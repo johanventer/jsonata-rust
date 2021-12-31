@@ -1,28 +1,35 @@
-// use std::rc::Rc;
-
-mod error;
-mod evaluator;
-mod functions;
+pub mod ast;
+pub mod error;
+pub mod evaluator;
+pub mod functions;
 pub mod json;
-mod parser;
+pub mod node_pool;
+pub mod parser;
+pub mod position;
+pub mod process;
+pub mod symbol;
+pub mod tokenizer;
+pub mod value;
 
-pub use error::{Error, InvalidJson};
-pub use evaluator::Value;
-use evaluator::{Frame, FrameLink};
-pub use parser::ast::*;
+pub use error::Error;
+pub type Result<T> = std::result::Result<T, Error>;
 
-pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
+use ast::Node;
+use evaluator::Evaluator;
+use value::{Value, ValuePool};
 
 pub struct JsonAta {
     ast: Node,
-    frame: FrameLink,
+    pool: ValuePool,
+    // frame: FrameLink,
 }
 
 impl JsonAta {
     pub fn new(expr: &str) -> Result<JsonAta> {
         Ok(Self {
             ast: parser::parse(expr)?,
-            frame: Frame::new(),
+            pool: ValuePool::new(),
+            // frame: Frame::new(),
         })
     }
 
@@ -31,13 +38,14 @@ impl JsonAta {
     }
 
     pub fn assign_var(&mut self, name: &str, value: Value) {
-        self.frame.borrow_mut().bind(name, value)
+        // self.frame.borrow_mut().bind(name, value)
+        todo!()
     }
 
     pub fn evaluate(&self, input: Option<&str>) -> Result<Value> {
         let input = match input {
             Some(input) => json::parse(input).unwrap(),
-            None => Value::Undefined,
+            None => Value::new_undefined(self.pool.clone()),
         };
 
         self.evaluate_with_value(input)
@@ -57,7 +65,7 @@ impl JsonAta {
 
         // self.frame.borrow_mut().bind("$", Rc::clone(&input));
 
-        let result = evaluator::evaluate(&self.ast, &input, self.frame.clone())?;
-        Ok(result)
+        let evaluator = Evaluator::new(self.pool.clone());
+        evaluator.evaluate()
     }
 }

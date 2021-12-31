@@ -1,12 +1,7 @@
-mod frame;
-mod value;
+pub mod frame;
 
+use crate::{Error, Position, Result, Value, ValuePool};
 use std::collections::HashMap;
-
-use crate::functions::*;
-use crate::{error::*, parser::ast::*, parser::Position, Result};
-pub(crate) use frame::{Frame, FrameLink};
-pub use value::{Value, UNDEFINED};
 
 pub(crate) fn evaluate(node: &Node, input: &Value, frame: FrameLink) -> Result<Value> {
     let mut result = match node.kind {
@@ -26,7 +21,7 @@ pub(crate) fn evaluate(node: &Node, input: &Value, frame: FrameLink) -> Result<V
             ref falsy,
         } => evaluate_ternary(cond, truthy, falsy.as_deref(), input, frame.clone())?,
         NodeKind::Path(ref steps) => evaluate_path(node, steps, input, frame.clone())?,
-        NodeKind::Name(ref name) => lookup(input, name),
+        NodeKind::Name(ref name) => todo!("Reimplemnt lookup"), //lookup(input, name),
         _ => unimplemented!("TODO: node kind not yet supported: {:#?}", node.kind),
     };
 

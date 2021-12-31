@@ -1,7 +1,7 @@
 // use json::{stringify, JsonValue};
 // use std::rc::Rc;
 
-use crate::evaluator::{Value, UNDEFINED};
+// use super::value::Value;
 
 // pub(crate) fn lookup(input: Rc<Value>, key: &str) -> Rc<Value> {
 //     let result = if input.is_array() {
@@ -73,112 +73,112 @@ use crate::evaluator::{Value, UNDEFINED};
 //     }
 // }
 
-pub(crate) fn append(arg1: &Value, arg2: &Value) -> Value {
-    if arg1.is_undefined() {
-        return arg2.clone();
-    }
+// pub(crate) fn append(arg1: &Value, arg2: &Value) -> Value {
+//     if arg1.is_undefined() {
+//         return arg2.clone();
+//     }
 
-    if arg2.is_undefined() {
-        return arg1.clone();
-    }
+//     if arg2.is_undefined() {
+//         return arg1.clone();
+//     }
 
-    let mut arg1_items = if let Value::Array { items, .. } = arg1 {
-        items.clone()
-    } else {
-        vec![arg1.clone()]
-    };
+//     let mut arg1_items = if let Value::Array { items, .. } = arg1 {
+//         items.clone()
+//     } else {
+//         vec![arg1.clone()]
+//     };
 
-    let mut arg2_items = if let Value::Array { items, .. } = arg2 {
-        items.clone()
-    } else {
-        vec![arg2.clone()]
-    };
+//     let mut arg2_items = if let Value::Array { items, .. } = arg2 {
+//         items.clone()
+//     } else {
+//         vec![arg2.clone()]
+//     };
 
-    arg1_items.append(&mut arg2_items);
-    Value::with_items(arg1_items)
-}
+//     arg1_items.append(&mut arg2_items);
+//     Value::with_items(arg1_items)
+// }
 
-pub(crate) fn boolean(arg: &Value) -> bool {
-    fn cast(value: &Value) -> bool {
-        match *value {
-            Value::Undefined => false,
-            Value::Null => false,
-            Value::Bool(b) => b,
-            Value::Number(num) => num != 0.0,
-            Value::String(ref str) => !str.is_empty(),
-            Value::Object(ref obj) => !obj.is_empty(),
-            Value::Array { .. } => panic!("unexpected Value::Array"),
-        }
-    }
+// pub(crate) fn boolean(arg: &Value) -> bool {
+//     fn cast(value: &Value) -> bool {
+//         match *value {
+//             Value::Undefined => false,
+//             Value::Null => false,
+//             Value::Bool(b) => b,
+//             Value::Number(num) => num != 0.0,
+//             Value::String(ref str) => !str.is_empty(),
+//             Value::Object(ref obj) => !obj.is_empty(),
+//             Value::Array { .. } => panic!("unexpected Value::Array"),
+//         }
+//     }
 
-    match *arg {
-        Value::Array { ref items, .. } => match items.len() {
-            0 => false,
-            1 => boolean(&items[0]),
-            _ => items.iter().any(boolean),
-        },
-        _ => cast(arg),
-    }
-}
+//     match *arg {
+//         Value::Array { ref items, .. } => match items.len() {
+//             0 => false,
+//             1 => boolean(&items[0]),
+//             _ => items.iter().any(boolean),
+//         },
+//         _ => cast(arg),
+//     }
+// }
 
-pub(crate) fn lookup(input: &Value, key: &str) -> Value {
-    match input {
-        Value::Array { .. } => {
-            let mut result = Value::Array {
-                items: Vec::new(),
-                is_sequence: true,
-                cons: false,
-                keep_singleton: false,
-            };
+// pub(crate) fn lookup(input: &Value, key: &str) -> Value {
+//     match input {
+//         Value::Array { .. } => {
+//             let mut result = Value::Array {
+//                 items: Vec::new(),
+//                 is_sequence: true,
+//                 cons: false,
+//                 keep_singleton: false,
+//             };
 
-            for input in input.iter() {
-                let res = lookup(input, key);
-                match res {
-                    Value::Undefined => {}
-                    Value::Array { items, .. } => {
-                        items.into_iter().for_each(|item| result.push(item));
-                    }
-                    _ => result.push(res),
-                };
-            }
+//             for input in input.iter() {
+//                 let res = lookup(input, key);
+//                 match res {
+//                     Value::Undefined => {}
+//                     Value::Array { items, .. } => {
+//                         items.into_iter().for_each(|item| result.push(item));
+//                     }
+//                     _ => result.push(res),
+//                 };
+//             }
 
-            result
-        }
-        Value::Object(..) => input.get(key).unwrap_or(&UNDEFINED).clone(),
-        _ => Value::Undefined,
-    }
-}
+//             result
+//         }
+//         Value::Object(..) => input.get(key).unwrap_or(&UNDEFINED).clone(),
+//         _ => Value::Undefined,
+//     }
+// }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
 
-    #[test]
-    fn test_boolean() {
-        assert!(!boolean(&Value::Undefined));
-        assert!(!boolean(&Value::Null));
-        assert!(!boolean(&Value::Bool(false)));
-        assert!(boolean(&Value::Bool(true)));
-        assert!(!boolean(&Value::Number(0.0.into())));
-        assert!(boolean(&Value::Number(1.0.into())));
-        assert!(!boolean(&Value::String("".to_owned())));
-        assert!(boolean(&Value::String("x".to_owned())));
-        assert!(!boolean(&Value::new_object()));
-        let mut obj = Value::new_object();
-        obj.insert("hello", Value::Null);
-        assert!(boolean(&obj));
-        assert!(!boolean(&Value::new_array()));
-        assert!(boolean(&Value::with_items(vec![Value::Bool(true)])));
-        assert!(!boolean(&Value::with_items(vec![Value::Bool(false)])));
-        assert!(!boolean(&Value::with_items(vec![
-            Value::Bool(false),
-            Value::Bool(false),
-            Value::Bool(false)
-        ])));
-        assert!(boolean(&Value::with_items(vec![
-            Value::Bool(false),
-            Value::Bool(true),
-            Value::Bool(false)
-        ])));
-    }
-}
+//     #[test]
+//     fn test_boolean() {
+//         assert!(!boolean(&Value::Undefined));
+//         assert!(!boolean(&Value::Null));
+//         assert!(!boolean(&Value::Bool(false)));
+//         assert!(boolean(&Value::Bool(true)));
+//         assert!(!boolean(&Value::Number(0.0.into())));
+//         assert!(boolean(&Value::Number(1.0.into())));
+//         assert!(!boolean(&Value::String("".to_owned())));
+//         assert!(boolean(&Value::String("x".to_owned())));
+//         assert!(!boolean(&Value::new_object()));
+//         let mut obj = Value::new_object();
+//         obj.insert("hello", Value::Null);
+//         assert!(boolean(&obj));
+//         assert!(!boolean(&Value::new_array()));
+//         assert!(boolean(&Value::with_items(vec![Value::Bool(true)])));
+//         assert!(!boolean(&Value::with_items(vec![Value::Bool(false)])));
+//         assert!(!boolean(&Value::with_items(vec![
+//             Value::Bool(false),
+//             Value::Bool(false),
+//             Value::Bool(false)
+//         ])));
+//         assert!(boolean(&Value::with_items(vec![
+//             Value::Bool(false),
+//             Value::Bool(true),
+//             Value::Bool(false)
+//         ])));
+//     }
+// }

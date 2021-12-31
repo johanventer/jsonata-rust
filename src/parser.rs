@@ -1,47 +1,8 @@
-pub(crate) mod ast;
-mod process;
-mod symbol;
-mod tokenizer;
-
-use crate::error::*;
-use crate::Result;
-
-use ast::*;
-use process::process_ast;
-use symbol::Symbol;
-use tokenizer::*;
-
-#[derive(Copy, Clone, Debug)]
-pub struct Position {
-    pub line: usize,
-    pub column: usize,
-    pub source_pos: usize,
-}
-
-impl Default for Position {
-    fn default() -> Self {
-        Self {
-            line: 0,
-            column: 0,
-            source_pos: 0,
-        }
-    }
-}
-
-impl Position {
-    pub(crate) fn advance(&mut self, x: usize) {
-        self.column += x;
-        self.source_pos += x;
-    }
-
-    pub(crate) fn advance1(&mut self) {
-        self.advance(1);
-    }
-
-    pub(crate) fn advance2(&mut self) {
-        self.advance(2);
-    }
-}
+use super::ast::*;
+use super::process::process_ast;
+use super::symbol::Symbol;
+use super::tokenizer::*;
+use super::{Error, Result};
 
 pub struct Parser {
     tokenizer: Tokenizer,
@@ -68,18 +29,18 @@ impl Parser {
 
     pub(super) fn expect(&mut self, expected: TokenKind, infix: bool) -> Result<()> {
         if self.token.kind == TokenKind::End {
-            return Err(Box::new(S0203 {
-                position: self.token.position,
-                expected: expected.to_string(),
-            }));
+            return Err(Error::expected_token_before_end(
+                self.token.position,
+                &expected,
+            ));
         }
 
         if self.token.kind != expected {
-            return Err(Box::new(S0202 {
-                position: self.token.position,
-                expected: expected.to_string(),
-                actual: self.token.kind.to_string(),
-            }));
+            return Err(Error::unexpected_token(
+                self.token.position,
+                &expected,
+                &self.token.kind,
+            ));
         }
 
         self.next(infix)?;
@@ -106,10 +67,10 @@ pub(crate) fn parse(source: &str) -> Result<Node> {
     let mut parser = Parser::new(source)?;
     let ast = parser.expression(0)?;
     if !matches!(parser.token().kind, TokenKind::End) {
-        return Err(Box::new(S0201 {
-            position: parser.token().position,
-            value: parser.token().to_string(),
-        }));
+        return Err(Error::syntax_error(
+            parser.token().position,
+            &parser.token().kind,
+        ));
     }
     process_ast(ast)
 }

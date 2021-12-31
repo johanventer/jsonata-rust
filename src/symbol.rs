@@ -1,9 +1,7 @@
-use crate::error::*;
-use crate::Result;
-
 use super::ast::*;
+use super::parser::Parser;
 use super::tokenizer::{Token, TokenKind};
-use super::Parser;
+use super::{Error, Result};
 
 pub(super) trait Symbol {
     fn lbp(&self) -> u32;
@@ -140,10 +138,7 @@ impl Symbol for Token {
                 ))
             }
 
-            _ => Err(Box::new(S0211 {
-                position: self.position,
-                symbol: self.to_string(),
-            })),
+            _ => Err(Error::invalid_unary(self.position, &self.kind)),
         }
     }
 
@@ -214,10 +209,10 @@ impl Symbol for Token {
                         // All of the args must be Variable nodes
                         for arg in &args {
                             if !matches!(arg.kind, NodeKind::Var(..)) {
-                                return Err(Box::new(S0208 {
-                                    position: arg.position,
-                                    arg: "TODO".to_owned(),
-                                }));
+                                return Err(Error::invalid_function_param(
+                                    arg.position,
+                                    &self.kind,
+                                ));
                             }
                         }
 
@@ -249,9 +244,7 @@ impl Symbol for Token {
             // Variable assignment
             TokenKind::Bind => {
                 if !matches!(left.kind, NodeKind::Var(..)) {
-                    return Err(Box::new(S0212 {
-                        position: left.position,
-                    }));
+                    return Err(Error::ExpectedVarLeft(left.position));
                 }
 
                 Ok(Node::new(
@@ -298,10 +291,7 @@ impl Symbol for Token {
                 let rhs = parser.expression(self.lbp())?;
 
                 if !matches!(rhs.kind, NodeKind::Var(..)) {
-                    return Err(Box::new(S0214 {
-                        position: rhs.position,
-                        op: '@'.to_string(),
-                    }));
+                    return Err(Error::expected_var_right(rhs.position, "@"));
                 }
 
                 Ok(Node::new(
@@ -315,10 +305,7 @@ impl Symbol for Token {
                 let rhs = parser.expression(self.lbp())?;
 
                 if !matches!(rhs.kind, NodeKind::Var(..)) {
-                    return Err(Box::new(S0214 {
-                        position: rhs.position,
-                        op: '#'.to_string(),
-                    }));
+                    return Err(Error::expected_var_right(rhs.position, "#"));
                 }
 
                 Ok(Node::new(
@@ -382,10 +369,7 @@ impl Symbol for Token {
                 }
             }
 
-            _ => Err(Box::new(S0201 {
-                position: self.position,
-                value: self.to_string(),
-            })),
+            _ => Err(Error::syntax_error(self.position, &self.kind)),
         }
     }
 }

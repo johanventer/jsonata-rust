@@ -18,8 +18,8 @@
 // with MIR support the compiler will get smarter about this.
 
 use super::number::Number;
-use super::object::Object;
-use crate::{Result, Value};
+use crate::value::ValuePool;
+use crate::{Error, Result, Value};
 use std::char::decode_utf16;
 use std::convert::TryFrom;
 use std::{slice, str};
@@ -50,6 +50,8 @@ struct Parser<'a> {
 
     // Length of the source
     length: usize,
+
+    pool: ValuePool,
 }
 
 // Read a byte from the source.
@@ -57,8 +59,7 @@ struct Parser<'a> {
 macro_rules! expect_byte {
     ($parser:ident) => {{
         if $parser.is_eof() {
-            panic!("Unexpected end of JSON");
-            // return Err(Error::UnexpectedEndOfJson);
+            return Err(Error::UnexpectedEndOfJson);
         }
 
         let ch = $parser.read_byte();
@@ -356,13 +357,14 @@ macro_rules! expect_fraction {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(source: &'a str) -> Self {
+    pub fn new(source: &'a str, pool: ValuePool) -> Self {
         Parser {
             buffer: Vec::with_capacity(30),
-            source: source,
+            source,
             byte_ptr: source.as_ptr(),
             index: 0,
             length: source.len(),
+            pool,
         }
     }
 
@@ -410,12 +412,11 @@ impl<'a> Parser<'a> {
 
         let colno = col.chars().count();
 
-        panic!("Unexpected character {}:{}:{}", ch, lineno + 1, colno + 1);
-        // Err(Error::UnexpectedCharacter {
-        //     ch: ch,
-        //     line: lineno + 1,
-        //     column: colno + 1,
-        // })
+        Err(Error::UnexpectedCharacter {
+            ch,
+            line: lineno + 1,
+            column: colno + 1,
+        })
     }
 
     // Boring
@@ -454,10 +455,7 @@ impl<'a> Parser<'a> {
                     .next()
                 {
                     Some(Ok(code)) => code,
-                    _ => {
-                        panic!("Failed UTF8 parsing");
-                        //return Err(Error::FailedUtf8Parsing),
-                    }
+                    _ => return Err(Error::FailedUtf8Parsing),
                 }
             }
         };
@@ -561,12 +559,7 @@ impl<'a> Parser<'a> {
                         .and_then(|num| num.checked_add((ch - b'0') as u64))
                     {
                         Some(result) => num = result,
-                        None => {
-                            e = e.checked_add(1).ok_or_else(|| {
-                                panic!("Exceeded depth limit");
-                                // Error::ExceededDepthLimit
-                            })?
-                        }
+                        None => e = e.checked_add(1).ok_or_else(|| Error::ExceededDepthLimit)?,
                     }
                 }
                 b'.' => {
@@ -634,65 +627,69 @@ impl<'a> Parser<'a> {
 
                     if ch != b']' {
                         if stack.len() == DEPTH_LIMIT {
-                            panic!("Exceeded depth limit");
-                            // return Err(Error::ExceededDepthLimit);
+                            return Err(Error::ExceededDepthLimit);
                         }
 
-                        stack.push(StackBlock(Value::new_array_with_capacity(2), 0));
+                        stack.push(StackBlock(
+                            Value::new_array_with_capacity(self.pool.clone(), 2),
+                            None,
+                        ));
                         continue 'parsing;
                     }
 
-                    Value::new_array()
+                    Value::new_array(self.pool.clone())
                 }
                 b'{' => {
                     ch = expect_byte_ignore_whitespace!(self);
 
                     if ch != b'}' {
                         if stack.len() == DEPTH_LIMIT {
-                            panic!("Exceeded depth limit");
-                            //return Err(Error::ExceededDepthLimit);
+                            return Err(Error::ExceededDepthLimit);
                         }
 
-                        let mut object = Object::with_capacity(3);
+                        let object = Value::new_object_with_capacity(self.pool.clone(), 3);
 
                         if ch != b'"' {
                             return self.unexpected_character();
                         }
 
-                        let index = object.insert_index(expect_string!(self), Value::Null);
+                        let key = expect_string!(self);
                         expect!(self, b':');
 
-                        stack.push(StackBlock(Value::Object(object), index));
+                        stack.push(StackBlock(object, Some(key)));
 
                         ch = expect_byte_ignore_whitespace!(self);
 
                         continue 'parsing;
                     }
 
-                    Value::Object(Object::new())
+                    Value::new_object(self.pool.clone())
                 }
-                b'"' => expect_string!(self).into(),
-                b'0' => Value::Number(allow_number_extensions!(self)),
-                b'1'..=b'9' => Value::Number(expect_number!(self, ch)),
+                b'"' => Value::new_string(self.pool.clone(), expect_string!(self)),
+                b'0' => Value::new_number(self.pool.clone(), allow_number_extensions!(self)),
+                b'1'..=b'9' => Value::new_number(self.pool.clone(), expect_number!(self, ch)),
                 b'-' => {
                     let ch = expect_byte!(self);
-                    Value::Number(-match ch {
-                        b'0' => allow_number_extensions!(self),
-                        b'1'..=b'9' => expect_number!(self, ch),
-                        _ => return self.unexpected_character(),
-                    })
+                    Value::new_number(
+                        self.pool.clone(),
+                        -match ch {
+                            b'0' => allow_number_extensions!(self),
+                            b'1'..=b'9' => expect_number!(self, ch),
+                            _ => return self.unexpected_character(),
+                        },
+                    )
                 }
                 b't' => {
                     expect_sequence!(self, b'r', b'u', b'e');
-                    Value::Bool(true)
+                    Value::new_bool(self.pool.clone(), true)
                 }
                 b'f' => {
                     expect_sequence!(self, b'a', b'l', b's', b'e');
-                    Value::Bool(false)
+                    Value::new_bool(self.pool.clone(), false)
                 }
                 b'n' => {
                     expect_sequence!(self, b'u', b'l', b'l');
-                    Value::Null
+                    Value::new_null(self.pool.clone())
                 }
                 _ => return self.unexpected_character(),
             };
@@ -705,43 +702,43 @@ impl<'a> Parser<'a> {
                         return Ok(value);
                     }
 
-                    Some(&mut StackBlock(Value::Array { ref mut items, .. }, ..)) => {
-                        items.push(value);
+                    Some(StackBlock(ref stack_value, ref mut key)) => {
+                        if stack_value.is_array() {
+                            stack_value.push_index(value.index);
 
-                        ch = expect_byte_ignore_whitespace!(self);
+                            ch = expect_byte_ignore_whitespace!(self);
 
-                        match ch {
-                            b',' => {
-                                ch = expect_byte_ignore_whitespace!(self);
+                            match ch {
+                                b',' => {
+                                    ch = expect_byte_ignore_whitespace!(self);
 
-                                continue 'parsing;
+                                    continue 'parsing;
+                                }
+                                b']' => {}
+                                _ => return self.unexpected_character(),
                             }
-                            b']' => {}
-                            _ => return self.unexpected_character(),
+                        } else if stack_value.is_object() {
+                            stack_value.insert_index(key.unwrap(), value.index);
+
+                            ch = expect_byte_ignore_whitespace!(self);
+
+                            match ch {
+                                b',' => {
+                                    expect!(self, b'"');
+                                    *key = Some(expect_string!(self));
+                                    expect!(self, b':');
+
+                                    ch = expect_byte_ignore_whitespace!(self);
+
+                                    continue 'parsing;
+                                }
+                                b'}' => {}
+                                _ => return self.unexpected_character(),
+                            }
+                        } else {
+                            unreachable!()
                         }
                     }
-
-                    Some(&mut StackBlock(Value::Object(ref mut object), ref mut index)) => {
-                        object.override_at(*index, value);
-
-                        ch = expect_byte_ignore_whitespace!(self);
-
-                        match ch {
-                            b',' => {
-                                expect!(self, b'"');
-                                *index = object.insert_index(expect_string!(self), Value::Null);
-                                expect!(self, b':');
-
-                                ch = expect_byte_ignore_whitespace!(self);
-
-                                continue 'parsing;
-                            }
-                            b'}' => {}
-                            _ => return self.unexpected_character(),
-                        }
-                    }
-
-                    _ => unreachable!(),
                 }
 
                 value = match stack.pop() {
@@ -753,143 +750,11 @@ impl<'a> Parser<'a> {
     }
 }
 
-struct StackBlock(Value, usize);
+struct StackBlock<'a>(Value, Option<&'a str>);
 
 // All that hard work, and in the end it's just a single function in the API.
 #[inline]
 pub fn parse(source: &str) -> Result<Value> {
-    Parser::new(source).parse()
+    let pool = ValuePool::new();
+    Parser::new(source, pool).parse()
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::stringify;
-//     use crate::Value;
-
-//     use crate::object;
-//     use crate::array;
-
-//     use std::fs::File;
-//     use std::io::prelude::*;
-
-//     #[test]
-//     fn it_should_parse_escaped_forward_slashes_with_quotes() {
-//         // used to get around the fact that rust strings don't escape forward slashes
-//         let mut file = File::open("tests/test_json_slashes_quotes").unwrap();
-//         let mut contents = String::new();
-//         file.read_to_string(&mut contents).unwrap();
-
-//         let actual = parse(&contents).unwrap();
-//         let serialized = stringify(actual.clone());
-
-//         assert_eq!(serialized, contents);
-//     }
-
-//     #[test]
-//     fn it_should_parse_escaped_quotes() {
-//         let contents = String::from("{\"ab\":\"c\\\"d\\\"e\"}");
-
-//         let actual = parse(&contents).unwrap();
-//         let serialized = stringify(actual.clone());
-
-//         assert_eq!(serialized, contents);
-//     }
-
-//     #[test]
-//     fn it_should_parse_basic_json_values() {
-//         let s = "{\"a\":1,\"b\":true,\"c\":false,\"d\":null,\"e\":2}";
-//         let actual = parse(s).unwrap();
-//         let mut expected = object! {
-//             a: 1,
-//             b: true,
-//             c: false,
-//             e: 2,
-//         };
-//         expected["d"] = JsonValue::Null;
-
-//         assert_eq!(actual, expected);
-//     }
-
-//     #[test]
-//     fn it_should_parse_json_arrays() {
-//         let s = "{\"a\":1,\"b\":true,\"c\":false,\"d\":null,\"e\":2,\"f\":[1,2,3,false,true,[],{}]}";
-//         let actual = parse(s).unwrap();
-//         let mut expected = object! {
-//             a: 1,
-//             b: true,
-//             c: false,
-//             e: 2,
-//         };
-//         expected["d"] = JsonValue::Null;
-//         expected["f"] = array![
-//             1,2,3,
-//             false,
-//             true,
-//             [],
-//             {},
-//         ];
-
-//         assert_eq!(actual, expected);
-//     }
-
-//     #[test]
-//     fn it_should_parse_json_nested_object() {
-//         let s = "{\"a\":1,\"b\":{\"c\":2,\"d\":{\"e\":{\"f\":{\"g\":3,\"h\":[]}}},\"i\":4,\"j\":[],\"k\":{\"l\":5,\"m\":{}}}}";
-//         let actual = parse(s).unwrap();
-//         let expected = object! {
-//             a: 1,
-//             b: {
-//                 c: 2,
-//                 d: {
-//                     e: {
-//                         f: {
-//                             g: 3,
-//                             h: []
-//                         }
-//                     }
-//                 },
-//                 i: 4,
-//                 j: [],
-//                 k: {
-//                     l: 5,
-//                     m: {}
-//                 }
-//             }
-//         };
-
-//         assert_eq!(actual, expected);
-//     }
-
-//     #[test]
-//     fn it_should_parse_json_complex_object() {
-//         let s = "{\"a\":1,\"b\":{\"c\":2,\"d\":{\"e\":{\"f\":{\"g\":3,\"h\":[{\"z\":1},{\"y\":2,\"x\":[{},{}]}]}}},\"i\":4,\"j\":[],\"k\":{\"l\":5,\"m\":{}}}}";
-//         let actual = parse(s).unwrap();
-//         let expected = object! {
-//             a: 1,
-//             b: {
-//                 c: 2,
-//                 d: {
-//                     e: {
-//                         f: {
-//                             g: 3,
-//                             h: [
-//                                 { z: 1 },
-//                                 { y: 2, x: [{}, {}]}
-//                             ]
-//                         }
-//                     }
-//                 },
-//                 i: 4,
-//                 j: [],
-//                 k: {
-//                     l: 5,
-//                     m: {}
-//                 }
-//             }
-//         };
-
-//         assert_eq!(actual, expected);
-//     }
-
-// }

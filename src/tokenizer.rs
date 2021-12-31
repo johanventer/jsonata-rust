@@ -1,8 +1,7 @@
 use std::{char, str};
 
-use super::Position;
-use crate::error::*;
-use crate::Result;
+use super::position::Position;
+use super::{Error, Result};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
@@ -181,11 +180,7 @@ impl Tokenizer {
                     self.position.advance2();
                     loop {
                         match self.source[self.position.source_pos..] {
-                            [] => {
-                                return Err(Box::new(S0106 {
-                                    position: comment_start,
-                                }))
-                            }
+                            [] => return Err(Error::UnterminatedComment(comment_start)),
                             ['*', '/', ..] => {
                                 self.position.advance2();
                                 break;
@@ -251,10 +246,7 @@ impl Tokenizer {
                     if let Ok(number) = number.parse::<f64>() {
                         break self.emit(Num(number));
                     } else {
-                        break Err(Box::new(S0102 {
-                            position: self.position,
-                            number,
-                        }));
+                        break Err(Error::NumberOutOfRange(self.position, number));
                     }
                 }
                 ['.', ..] => op1!(Period),
@@ -291,11 +283,7 @@ impl Tokenizer {
                     break loop {
                         match self.source[self.position.source_pos..] {
                             // End of string missing
-                            [] => {
-                                break Err(Box::new(S0101 {
-                                    position: string_start,
-                                }))
-                            }
+                            [] => break Err(Error::UnterminatedStringLiteral(string_start)),
                             // Escape sequence
                             ['\\', escape_char, ..] => {
                                 self.position.advance1();
@@ -340,9 +328,7 @@ impl Tokenizer {
                                         // parsed to a codepoint and then turned into a char to be
                                         // appended
                                         if self.source.len() < self.position.source_pos + 5 {
-                                            break Err(Box::new(S0104 {
-                                                position: self.position,
-                                            }));
+                                            break Err(Error::InvalidUnicodeEscape(self.position));
                                         }
 
                                         let chars: &String = &self.source[self.position.source_pos
@@ -360,18 +346,11 @@ impl Tokenizer {
                                             string.push(character);
                                             self.position.advance(5);
                                         } else {
-                                            break Err(Box::new(S0104 {
-                                                position: self.position,
-                                            }));
+                                            break Err(Error::InvalidUnicodeEscape(self.position));
                                         }
                                     }
                                     // Invalid escape sequence
-                                    c => {
-                                        break Err(Box::new(S0103 {
-                                            position: self.position,
-                                            escape_char: c.to_string(),
-                                        }))
-                                    }
+                                    c => break Err(Error::unsupported_escape(self.position, c)),
                                 }
                             }
                             // Any other char
@@ -409,11 +388,7 @@ impl Tokenizer {
                             self.position.advance(value.len() + 1);
                             break self.emit(Name(value));
                         }
-                        None => {
-                            break Err(Box::new(S0105 {
-                                position: self.position,
-                            }))
-                        }
+                        None => break Err(Error::UnterminatedQuoteProp(self.position)),
                     }
                 }
                 // Names

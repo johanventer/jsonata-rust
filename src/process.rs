@@ -1,8 +1,7 @@
-// use crate::error::*;
-use crate::Result;
+use super::position::Position;
+use super::{Error, Result};
 
-use super::{ast::*, Position};
-use crate::error::*;
+use super::ast::*;
 
 pub fn process_ast(node: Node) -> Result<Node> {
     let mut node = node;
@@ -152,10 +151,7 @@ fn process_path(position: Position, lhs: &mut Box<Node>, rhs: &mut Box<Node>) ->
             match step.kind {
                 // Steps can't be literal values other than strings
                 NodeKind::Number(..) | NodeKind::Bool(..) | NodeKind::Null => {
-                    return Err(Box::new(S0213 {
-                        position: step.position,
-                        value: format!("{:#?}", step.kind),
-                    }));
+                    return Err(Error::invalid_step(step.position, "TODO"));
                 }
 
                 // Steps that are string literals should become Names
@@ -197,7 +193,7 @@ fn process_predicate(position: Position, lhs: &mut Box<Node>, rhs: &mut Box<Node
 
     // Predicates can't follow group-by
     if node.group_by.is_some() {
-        return Err(Box::new(S0209 { position }));
+        return Err(Error::InvalidPredicate(position));
     }
 
     let filter = Node::new(
@@ -232,7 +228,7 @@ fn process_group_by(position: Position, lhs: &mut Box<Node>, rhs: &mut Object) -
 
     // Can only have a single grouping expression
     if result.group_by.is_some() {
-        return Err(Box::new(S0210 { position }));
+        return Err(Error::MultipleGroupBy(position));
     }
 
     // Process all the key, value pairs
