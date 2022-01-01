@@ -6,14 +6,15 @@ use std::path;
 use test_generator::test_resources;
 
 use jsonata::json;
+use jsonata::value::ValuePool;
 use jsonata::JsonAta;
 
 // TODO: timelimit, depth
-
 #[test_resources("tests/testsuite/groups/*/*.json")]
 fn t(resource: &str) {
+    let pool = ValuePool::new();
     let test = fs::read_to_string(resource).expect("Could not read test case");
-    let mut test = json::parse(&test).unwrap();
+    let mut test = json::parse_with_pool(&test, pool.clone()).unwrap();
 
     // If it's not an array, make it an array
     if !test.is_array() {
@@ -42,12 +43,12 @@ fn t(resource: &str) {
             );
             let json = fs::read_to_string(&dataset_file)
                 .unwrap_or_else(|_e| panic!("Could not read dataset file: {}", dataset_file));
-            json::parse(&json).unwrap()
+            json::parse_with_pool(&json, pool.clone()).unwrap()
         } else {
             case.pool.undefined()
         };
 
-        let jsonata = JsonAta::new(&expr);
+        let jsonata = JsonAta::new_with_pool(&expr, pool.clone());
 
         match jsonata {
             Ok(mut jsonata) => {
@@ -71,7 +72,7 @@ fn t(resource: &str) {
                             if case.get_entry("result").is_number() {
                                 assert!(
                                     (case.get_entry("result").as_f64() - result.as_f64()).abs()
-                                        < 1e-10
+                                        < f64::EPSILON
                                 );
                             } else {
                                 assert!(result == case.get_entry("result"));
@@ -79,6 +80,9 @@ fn t(resource: &str) {
                         }
                     }
                     Err(error) => {
+                        println!("{}", error);
+                        println!("CASE CODE: {:#?}", case.get_entry("code"));
+                        println!("ERROR CODE: {:#?}", error.code());
                         assert!(!case.get_entry("code").is_null());
                         assert!(case.get_entry("code") == error.code());
                     }
@@ -86,6 +90,8 @@ fn t(resource: &str) {
             }
             Err(error) => {
                 // The parsing error is expected, let's make sure it matches
+                println!("XXCASE CODE: {:#?}", case.get_entry("code"));
+                println!("ERROR CODE: {:#?}", error.code());
                 assert!(!case.get_entry("code").is_null());
                 assert!(case.get_entry("code") == error.code());
             }

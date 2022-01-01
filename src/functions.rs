@@ -1,3 +1,72 @@
+use super::value::{ArrayFlags, Value, ValueKind};
+use super::Evaluator;
+
+impl Evaluator {
+    pub fn lookup(&self, input: Value, key: &str) -> Value {
+        match *input.as_ref() {
+            ValueKind::Array { .. } => {
+                let result = self.array(ArrayFlags::SEQUENCE);
+
+                for input in input.members() {
+                    let res = self.lookup(input, key);
+                    match *res.as_ref() {
+                        ValueKind::Undefined => {}
+                        ValueKind::Array { .. } => {
+                            res.members().for_each(|item| result.push_index(item.index));
+                        }
+                        _ => result.push_index(res.index),
+                    };
+                }
+
+                result
+            }
+            ValueKind::Object(..) => input.get_entry(key),
+            _ => self.pool.undefined(),
+        }
+    }
+
+    pub fn append(&self, arg1: Value, arg2: Value) -> Value {
+        if arg1.is_undefined() {
+            return arg2;
+        }
+
+        if arg2.is_undefined() {
+            return arg1;
+        }
+
+        let arg1 = arg1.wrap_in_array_if_needed();
+        let arg2 = arg2.wrap_in_array_if_needed();
+
+        let result = self.array_with_capacity(arg1.len() + arg2.len());
+        arg1.members().for_each(|m| result.push_index(m.index));
+        arg2.members().for_each(|m| result.push_index(m.index));
+
+        result
+    }
+
+    pub fn boolean(&self, arg: Value) -> bool {
+        fn cast(value: &Value) -> bool {
+            match *value.as_ref() {
+                ValueKind::Undefined => false,
+                ValueKind::Null => false,
+                ValueKind::Bool(b) => b,
+                ValueKind::Number(num) => num != 0.0,
+                ValueKind::String(ref str) => !str.is_empty(),
+                ValueKind::Object(ref obj) => !obj.is_empty(),
+                ValueKind::Array { .. } => panic!("unexpected Value::Array"),
+            }
+        }
+
+        match *arg.as_ref() {
+            ValueKind::Array { .. } => match arg.len() {
+                0 => false,
+                1 => self.boolean(arg.get_member(0)),
+                _ => arg.members().any(|v| self.boolean(v)),
+            },
+            _ => cast(&arg),
+        }
+    }
+}
 // use json::{stringify, JsonValue};
 // use std::rc::Rc;
 
@@ -31,30 +100,6 @@
 //     result
 // }
 
-// pub(crate) fn append(mut arg1: Rc<Value>, arg2: Rc<Value>) -> Rc<Value> {
-//     if arg1.is_undef() {
-//         return arg2;
-//     }
-
-//     if arg2.is_undef() {
-//         return arg1;
-//     }
-
-//     if !arg1.is_array() {
-//         arg1 = Rc::new(Value::seq_from(arg1));
-//     }
-
-//     if !arg2.is_array() {
-//         arg1.arr_mut().push(arg2);
-//     } else {
-//         arg2.arr()
-//             .iter()
-//             .for_each(|v| arg1.arr_mut().push(Rc::clone(v)));
-//     }
-
-//     arg1
-// }
-
 // pub(crate) fn string(arg: Rc<Value>) -> Option<String> {
 //     // TODO: Prettify output (functions.js:108)
 
@@ -71,31 +116,6 @@
 //     } else {
 //         Some("".to_owned())
 //     }
-// }
-
-// pub(crate) fn append(arg1: &Value, arg2: &Value) -> Value {
-//     if arg1.is_undefined() {
-//         return arg2.clone();
-//     }
-
-//     if arg2.is_undefined() {
-//         return arg1.clone();
-//     }
-
-//     let mut arg1_items = if let Value::Array { items, .. } = arg1 {
-//         items.clone()
-//     } else {
-//         vec![arg1.clone()]
-//     };
-
-//     let mut arg2_items = if let Value::Array { items, .. } = arg2 {
-//         items.clone()
-//     } else {
-//         vec![arg2.clone()]
-//     };
-
-//     arg1_items.append(&mut arg2_items);
-//     Value::with_items(arg1_items)
 // }
 
 // pub(crate) fn boolean(arg: &Value) -> bool {
@@ -118,34 +138,6 @@
 //             _ => items.iter().any(boolean),
 //         },
 //         _ => cast(arg),
-//     }
-// }
-
-// pub(crate) fn lookup(input: &Value, key: &str) -> Value {
-//     match input {
-//         Value::Array { .. } => {
-//             let mut result = Value::Array {
-//                 items: Vec::new(),
-//                 is_sequence: true,
-//                 cons: false,
-//                 keep_singleton: false,
-//             };
-
-//             for input in input.iter() {
-//                 let res = lookup(input, key);
-//                 match res {
-//                     Value::Undefined => {}
-//                     Value::Array { items, .. } => {
-//                         items.into_iter().for_each(|item| result.push(item));
-//                     }
-//                     _ => result.push(res),
-//                 };
-//             }
-
-//             result
-//         }
-//         Value::Object(..) => input.get(key).unwrap_or(&UNDEFINED).clone(),
-//         _ => Value::Undefined,
 //     }
 // }
 

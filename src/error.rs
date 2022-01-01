@@ -57,33 +57,12 @@
 // "T0411": "Context value is not a compatible type with argument {{index}} of function {{token}}",
 // "T0412": "Argument {{index}} of function {{token}} must be an array of {{type}}",
 // "D1001": "Number out of range: {{value}}",
-// define_error!(D1002, "Cannot negate a non-numeric value `{}`", value);
-// define_error!(
-//     T1003,
-//     "Key in object structure must evaluate to a string; got: {}",
-//     value
-// );
 // "D1004": "Regular expression matches zero length string",
 // "T1005": "Attempted to invoke a non-function. Did you mean ${{{token}}}?",
 // "T1006": "Attempted to invoke a non-function",
 // "T1007": "Attempted to partially apply a non-function. Did you mean ${{{token}}}?",
 // "T1008": "Attempted to partially apply a non-function",
-// define_error!(
-//     D1009,
-//     "Multiple key definitions evaluate to same key: {}",
-//     value
-// );
 // // "T1010": "The matcher function argument passed to function {{token}} does not return the correct object structure",
-// define_error!(
-//     T2001,
-//     "The left side of the `{}` operator must evaluate to a number",
-//     op
-// );
-// define_error!(
-//     T2002,
-//     "The right side of the `{}` operator must evaluate to a number",
-//     op
-// );
 // define_error!(
 //     T2003,
 //     "The left side of the range operator (..) must evaluate to an integer"
@@ -96,18 +75,6 @@
 // "T2006": "The right side of the function application operator ~> must be a function",
 // "T2007": "Type mismatch when comparing values {{value}} and {{value2}} in order-by clause",
 // "T2008": "The expressions within an order-by clause must evaluate to numeric or string values",
-// define_error!(
-//     T2009,
-//     "The values {} and {} either side of operator {} must be of the same data type",
-//     lhs,
-//     rhs,
-//     op
-// );
-// define_error!(
-//     T2010,
-//     "The expressions either side of operator `{}` must evaluate to numeric or string values",
-//     op
-// );
 // "T2011": "The insert/update clause of the transform expression must evaluate to an object: {{value}}",
 // "T2012": "The delete clause of the transform expression must evaluate to a string or array of strings: {{value}}",
 // "T2013": "The transform expression clones the input object using the $clone() function.  This has been overridden in the current scope by a non-function.",
@@ -158,6 +125,8 @@
 // "D3140": "Malformed URL passed to ${{{functionName}}}(): {{value}}",
 // "D3141": "{{{message}}}"
 
+use crate::{ast::BinaryOp, value::Value};
+
 use super::position::Position;
 use super::tokenizer::TokenKind;
 use std::{char, error, fmt};
@@ -195,6 +164,15 @@ pub enum Error {
     ExpectedVarLeft(Position),                 // S0212
     InvalidStep(Position, String),             // S0213
     ExpectedVarRight(Position, String),        // S0214
+
+    // Evaluation errors
+    NegatingNonNumeric(Position, String),               // D1002
+    MultipleKeys(Position, String),                     // D1009
+    NonStringKey(Position, String),                     // T1003
+    LeftSideNotNumber(Position, String),                // T2001
+    RightSideNotNumber(Position, String),               // T2002
+    BinaryOpMismatch(Position, String, String, String), // T2009
+    BinaryOpTypes(Position, String),                    // T2010
 }
 
 impl error::Error for Error {}
@@ -207,27 +185,36 @@ impl Error {
             Error::UnexpectedEndOfJson => "I02",
             Error::ExceededDepthLimit => "I03",
             Error::FailedUtf8Parsing => "I04",
-            Error::WrongType(_) => "I05",
+            Error::WrongType(..) => "I05",
 
             // Lexing errors
-            Error::UnterminatedStringLiteral(_) => "S0101",
-            Error::NumberOutOfRange(_, _) => "S0102",
-            Error::UnsupportedEscape(_, _) => "S0103",
-            Error::InvalidUnicodeEscape(_) => "S0104",
-            Error::UnterminatedQuoteProp(_) => "S0105",
-            Error::UnterminatedComment(_) => "S0106",
+            Error::UnterminatedStringLiteral(..) => "S0101",
+            Error::NumberOutOfRange(..) => "S0102",
+            Error::UnsupportedEscape(..) => "S0103",
+            Error::InvalidUnicodeEscape(..) => "S0104",
+            Error::UnterminatedQuoteProp(..) => "S0105",
+            Error::UnterminatedComment(..) => "S0106",
 
             // Parsing errors
-            Error::SyntaxError(_, _) => "S0201",
-            Error::UnexpectedToken(_, _, _) => "S0202",
-            Error::ExpectedTokenBeforeEnd(_, _) => "S0203",
-            Error::InvalidFunctionParam(_, _) => "S0208",
-            Error::InvalidPredicate(_) => "S0209",
-            Error::MultipleGroupBy(_) => "S0210",
-            Error::InvalidUnary(_, _) => "S0211",
-            Error::ExpectedVarLeft(_) => "S0212",
-            Error::InvalidStep(_, _) => "S0213",
-            Error::ExpectedVarRight(_, _) => "S0214",
+            Error::SyntaxError(..) => "S0201",
+            Error::UnexpectedToken(..) => "S0202",
+            Error::ExpectedTokenBeforeEnd(..) => "S0203",
+            Error::InvalidFunctionParam(..) => "S0208",
+            Error::InvalidPredicate(..) => "S0209",
+            Error::MultipleGroupBy(..) => "S0210",
+            Error::InvalidUnary(..) => "S0211",
+            Error::ExpectedVarLeft(..) => "S0212",
+            Error::InvalidStep(..) => "S0213",
+            Error::ExpectedVarRight(..) => "S0214",
+
+            // Evaluation errors
+            Error::NegatingNonNumeric(..) => "D1002",
+            Error::MultipleKeys(..) => "D1009",
+            Error::NonStringKey(..) => "T1003",
+            Error::LeftSideNotNumber(..) => "T2001",
+            Error::RightSideNotNumber(..) => "T2002",
+            Error::BinaryOpMismatch(..) => "T2009",
+            Error::BinaryOpTypes(..) => "T2010",
         }
     }
 
@@ -266,9 +253,38 @@ impl Error {
     pub fn unsupported_escape(p: Position, c: char) -> Self {
         Error::UnsupportedEscape(p, c.to_string())
     }
+
+    pub fn negating_non_numeric(p: Position, v: Value) -> Self {
+        Error::NegatingNonNumeric(p, format!("{:#?}", v))
+    }
+
+    pub fn non_string_key(p: Position, v: Value) -> Self {
+        Error::NonStringKey(p, format!("{:#?}", v))
+    }
+
+    pub fn multiple_keys(p: Position, k: Value) -> Self {
+        Error::MultipleKeys(p, format!("{:#?}", k))
+    }
+
+    pub fn left_side_not_number(p: Position, o: &BinaryOp) -> Self {
+        Error::LeftSideNotNumber(p, o.to_string())
+    }
+
+    pub fn right_side_not_number(p: Position, o: &BinaryOp) -> Self {
+        Error::RightSideNotNumber(p, o.to_string())
+    }
+
+    pub fn binary_op_mismatch(p: Position, l: Value, r: Value, o: &BinaryOp) -> Self {
+        Error::BinaryOpMismatch(p, format!("{:#?}", l), format!("{:#?}", r), o.to_string())
+    }
+
+    pub fn binary_op_types(p: Position, o: &BinaryOp) -> Self {
+        Error::BinaryOpTypes(p, o.to_string())
+    }
 }
 
 impl fmt::Display for Error {
+    #[allow(clippy::many_single_char_names)]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use Error::*;
 
@@ -312,41 +328,38 @@ impl fmt::Display for Error {
             MultipleGroupBy(ref p) => {
                 write!(f, "{}: Each step can only have one grouping expression", p)
             }
-            InvalidUnary(ref p, ref k) => {
-                write!(
-                    f,
-                    "{}: The symbol `{}` cannot be used as a unary operator",
-                    p, k
-                )
-            }
-            InvalidFunctionParam(ref p, ref k) => {
-                write!(f, "{}: Parameter `{}` of function definition must be a variable name (start with $)", p, k)
-            }
-            ExpectedVarLeft(ref p) => write!(
-                f,
-                "{}: The left side of `:=` must be a variable name (start with $)",
-                p
-            ),
-            ExpectedVarRight(ref p, ref k) => write!(
-                f,
-                "{}: The right side of `{}` must be a variable name (start with $)",
-                p, k
-            ),
-            UnterminatedComment(ref p) => write!(f, "{}: Comment has no closing tag", p),
-            NumberOutOfRange(ref p, ref n) => write!(f, "{}: Number out of range: {}", p, n),
-            InvalidUnicodeEscape(ref p) => write!(
-                f,
-                "{}: The escape sequence \\u must be followed by 4 hex digits",
-                p
-            ),
-            UnsupportedEscape(ref p, ref c) => {
-                write!(f, "{}: Unsupported escape sequence: \\{}", p, c)
-            }
-            UnterminatedQuoteProp(ref p) => write!(
-                f,
-                "{}: Quoted property name must be terminated with a backquote (`)",
-                p
-            ),
+            InvalidUnary(ref p, ref k) => 
+                write!(f, "{}: The symbol `{}` cannot be used as a unary operator", p, k),
+            InvalidFunctionParam(ref p, ref k) => 
+                write!(f, "{}: Parameter `{}` of function definition must be a variable name (start with $)", p, k),
+            ExpectedVarLeft(ref p) => 
+                write!(f, "{}: The left side of `:=` must be a variable name (start with $)", p),
+            ExpectedVarRight(ref p, ref k) => 
+                write!(f, "{}: The right side of `{}` must be a variable name (start with $)", p, k),
+            UnterminatedComment(ref p) => 
+                write!(f, "{}: Comment has no closing tag", p),
+            NumberOutOfRange(ref p, ref n) => 
+                write!(f, "{}: Number out of range: {}", p, n),
+            InvalidUnicodeEscape(ref p) => 
+                write!(f, "{}: The escape sequence \\u must be followed by 4 hex digits", p),
+            UnsupportedEscape(ref p, ref c) => 
+                write!(f, "{}: Unsupported escape sequence: \\{}", p, c),
+            UnterminatedQuoteProp(ref p) => 
+                write!(f, "{}: Quoted property name must be terminated with a backquote (`)", p),
+            NegatingNonNumeric(ref p, ref v) => 
+                write!(f, "{}: Cannot negate a non-numeric value `{}`", p, v),
+            NonStringKey(ref p, ref v) => 
+                write!( f, "{}: Key in object structure must evaluate to a string; got: {}", p, v),
+            MultipleKeys(ref p, ref k) => 
+                write!( f, "{}: Multiple key definitions evaluate to same key: {}", p, k),
+            LeftSideNotNumber(ref p, ref o) => 
+                write!( f, "{}: The left side of the `{}` operator must evaluate to a number", p, o),
+            RightSideNotNumber(ref p, ref o) => 
+                write!( f, "{}: The right side of the `{}` operator must evaluate to a number", p, o),
+            BinaryOpMismatch(ref p,ref l ,ref r ,ref o ) => 
+                write!(f, "{}: The values {} and {} either side of operator {} must be of the same data type", p, l, r, o),
+            BinaryOpTypes(ref p, ref o) => 
+                write!(f, "{}: The expressions either side of operator `{}` must evaluate to numeric or string values", p, o),
         }
     }
 }

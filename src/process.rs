@@ -16,7 +16,7 @@ pub fn process_ast(node: Node) -> Result<Node> {
         NodeKind::OrderBy(ref mut lhs, ref mut rhs) => process_order_by(node.position, lhs, rhs)?,
         NodeKind::Function { .. } => unimplemented!("Function not yet implemented"),
         NodeKind::Lambda { .. } => unimplemented!("Lambda not yet implemented"),
-        NodeKind::Ternary { .. } => unimplemented!("Ternary not yet implemented"),
+        NodeKind::Ternary { .. } => process_ternary(node)?,
         NodeKind::Transform { .. } => unimplemented!("Transform not yet implemented"),
         NodeKind::Parent => unimplemented!("Parent not yet implemented"),
         _ => node,
@@ -46,6 +46,26 @@ fn process_block(node: Node) -> Result<Node> {
             *expr = process_ast(std::mem::take(expr))?;
         }
     }
+    Ok(node)
+}
+
+fn process_ternary(node: Node) -> Result<Node> {
+    let mut node = node;
+    if let NodeKind::Ternary {
+        ref mut cond,
+        ref mut truthy,
+        ref mut falsy,
+    } = node.kind
+    {
+        *cond = Box::new(process_ast(std::mem::take(cond))?);
+        *truthy = Box::new(process_ast(std::mem::take(truthy))?);
+        if let Some(ref mut falsy) = falsy {
+            *falsy = Box::new(process_ast(std::mem::take(falsy))?);
+        }
+    } else {
+        unreachable!()
+    }
+
     Ok(node)
 }
 
@@ -98,9 +118,6 @@ fn process_binary(node: Node) -> Result<Node> {
         }
         NodeKind::Binary(BinaryOp::Predicate, ref mut lhs, ref mut rhs) => {
             process_predicate(node.position, lhs, rhs)
-        }
-        NodeKind::Binary(BinaryOp::Bind, ref mut _lhs, ref mut _rhs) => {
-            unimplemented!("Bind not yet implemented")
         }
         NodeKind::Binary(BinaryOp::ContextBind, ref mut _lhs, ref mut _rhs) => {
             unimplemented!("ContextBind not yet implemented")

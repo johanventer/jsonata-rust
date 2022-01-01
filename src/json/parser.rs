@@ -758,3 +758,8 @@ pub fn parse(source: &str) -> Result<Value> {
     let pool = ValuePool::new();
     Parser::new(source, pool).parse()
 }
+
+#[inline]
+pub fn parse_with_pool(source: &str, pool: ValuePool) -> Result<Value> {
+    Parser::new(source, pool).parse()
+}

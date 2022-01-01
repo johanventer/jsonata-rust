@@ -1,13 +1,14 @@
+use std::marker::PhantomData;
+use std::ops::Deref;
 use std::{collections::HashMap, fmt};
 
 mod kind;
 mod pool;
 
-pub use kind::ValueKind;
+pub use kind::{ArrayFlags, ValueKind};
 pub use pool::ValuePool;
 
 use crate::json::Number;
-use kind::ArrayProps;
 
 /// A thin wrapper around the index to a `ValueKind` within a `ValuePool`.
 ///
@@ -45,8 +46,8 @@ impl Value {
         Value { pool, index }
     }
 
-    pub fn new_number(pool: ValuePool, value: Number) -> Value {
-        let index = pool.borrow_mut().insert(ValueKind::Number(value));
+    pub fn new_number<T: Into<Number>>(pool: ValuePool, value: T) -> Value {
+        let index = pool.borrow_mut().insert(ValueKind::Number(value.into()));
         Value { pool, index }
     }
 
@@ -60,14 +61,21 @@ impl Value {
     pub fn new_array(pool: ValuePool) -> Value {
         let index = pool
             .borrow_mut()
-            .insert(ValueKind::Array(Vec::new(), ArrayProps::default()));
+            .insert(ValueKind::Array(Vec::new(), ArrayFlags::empty()));
+        Value { pool, index }
+    }
+
+    pub fn new_array_with_flags(pool: ValuePool, flags: ArrayFlags) -> Value {
+        let index = pool
+            .borrow_mut()
+            .insert(ValueKind::Array(Vec::new(), flags));
         Value { pool, index }
     }
 
     pub fn new_array_with_capacity(pool: ValuePool, capacity: usize) -> Value {
         let index = pool.borrow_mut().insert(ValueKind::Array(
             Vec::with_capacity(capacity),
-            ArrayProps::default(),
+            ArrayFlags::empty(),
         ));
         Value { pool, index }
     }
@@ -112,6 +120,14 @@ impl Value {
         matches!(self.pool.borrow().get(self.index), ValueKind::Object(..))
     }
 
+    pub fn as_ref(&self) -> ValueRef {
+        ValueRef {
+            // TODO: This is wrong, it doesn't tie ValueRef to the lifetime of the pool. How to fix?
+            pool: PhantomData,
+            kind: self.pool.borrow().get(self.index) as *const ValueKind,
+        }
+    }
+
     pub fn as_bool(&self) -> bool {
         match *self.pool.borrow().get(self.index) {
             ValueKind::Bool(b) => b,
@@ -137,6 +153,20 @@ impl Value {
         match self.pool.borrow().get(self.index) {
             ValueKind::String(s) => s.clone(),
             _ => panic!("Not a string"),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        match self.pool.borrow().get(self.index) {
+            ValueKind::Array(array, _) => array.len(),
+            _ => panic!("Not an array"),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self.pool.borrow().get(self.index) {
+            ValueKind::Array(array, _) => array.is_empty(),
+            _ => panic!("Not an array"),
         }
     }
 
@@ -247,6 +277,14 @@ impl Value {
         array
     }
 
+    pub fn wrap_in_array_if_needed(self) -> Value {
+        if self.is_array() {
+            self
+        } else {
+            self.wrap_in_array()
+        }
+    }
+
     /// Create an iterator over the members of an array.
     ///
     /// # Panics
@@ -270,6 +308,34 @@ impl Value {
             _ => panic!("Not an object"),
         }
     }
+
+    pub fn get_flags(&self) -> ArrayFlags {
+        match self.pool.borrow().get(self.index) {
+            ValueKind::Array(_, flags) => *flags,
+            _ => panic!("Not an array"),
+        }
+    }
+
+    pub fn set_flags(&self, new_flags: ArrayFlags) {
+        match self.pool.borrow_mut().get_mut(self.index) {
+            ValueKind::Array(_, ref mut flags) => *flags = new_flags,
+            _ => panic!("Not an array"),
+        }
+    }
+
+    pub fn add_flags(&self, flags_to_add: ArrayFlags) {
+        match self.pool.borrow_mut().get_mut(self.index) {
+            ValueKind::Array(_, ref mut flags) => flags.insert(flags_to_add),
+            _ => panic!("Not an array"),
+        }
+    }
+
+    pub fn has_flags(&self, check_flags: ArrayFlags) -> bool {
+        match self.pool.borrow().get(self.index) {
+            ValueKind::Array(_, flags) => flags.contains(check_flags),
+            _ => false,
+        }
+    }
 }
 
 /// Compares two `Value`s for equality by comparing their underlying `ValueKind`s.
@@ -278,7 +344,23 @@ impl Value {
 /// directly compare `Value`s to determine if their underlying `ValueKind`s are equal.
 impl PartialEq<Value> for Value {
     fn eq(&self, other: &Value) -> bool {
-        self.pool.borrow().get(self.index) == self.pool.borrow().get(other.index)
+        match self.pool.borrow().get(self.index) {
+            ValueKind::Array(..) => {
+                if !(other.is_array() && other.len() == self.len()) {
+                    return false;
+                }
+
+                self.members().zip(other.members()).all(|(l, r)| l == r)
+            }
+            ValueKind::Object(..) => {
+                if !other.is_object() {
+                    return false;
+                }
+
+                self.entries().all(|(k, v)| v == other.get_entry(k))
+            }
+            _ => self.pool.borrow().get(self.index) == self.pool.borrow().get(other.index),
+        }
     }
 }
 
@@ -336,7 +418,7 @@ impl PartialEq<f64> for Value {
 impl PartialEq<&str> for Value {
     fn eq(&self, other: &&str) -> bool {
         match self.pool.borrow().get(self.index) {
-            ValueKind::String(s) => s == *other,
+            ValueKind::String(s) => *s == **other,
             _ => false,
         }
     }
@@ -432,6 +514,21 @@ impl fmt::Debug for Value {
             ValueKind::Object(..) => f.debug_map().entries(self.entries()).finish(),
             _ => ValueKind::fmt(self.pool.borrow().get(self.index), f),
         }
+    }
+}
+
+pub struct ValueRef<'pool> {
+    pool: PhantomData<&'pool ValuePool>,
+    kind: *const ValueKind,
+}
+
+impl Deref for ValueRef<'_> {
+    type Target = ValueKind;
+
+    fn deref(&self) -> &Self::Target {
+        // SAFETY: The reference's lifetime is tied to the pool, as long the ValueKind is not
+        // removed from the pool then this is safe.
+        unsafe { &*self.kind }
     }
 }
 

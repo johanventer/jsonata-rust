@@ -1,12 +1,15 @@
+use bitflags::bitflags;
 use std::collections::HashMap;
 
 use crate::json::Number;
 
-#[derive(Default, Debug)]
-pub struct ArrayProps {
-    is_sequence: bool,
-    keep_singleton: bool,
-    cons: bool,
+bitflags! {
+    pub struct ArrayFlags: u32 {
+        const SEQUENCE  = 0b00000001;
+        const SINGLETON = 0b00000010;
+        const CONS      = 0b00000100;
+        const WRAPPED   = 0b00001000;
+    }
 }
 
 pub enum ValueKind {
@@ -15,7 +18,7 @@ pub enum ValueKind {
     Number(Number),
     Bool(bool),
     String(String),
-    Array(Vec<usize>, ArrayProps),
+    Array(Vec<usize>, ArrayFlags),
     Object(HashMap<String, usize>),
 }
 
@@ -25,7 +28,11 @@ impl PartialEq<ValueKind> for ValueKind {
             (Self::Number(l0), Self::Number(r0)) => l0 == r0,
             (Self::Bool(l0), Self::Bool(r0)) => l0 == r0,
             (Self::String(l0), Self::String(r0)) => l0 == r0,
-            (Self::Array(l0, ..), Self::Array(r0, ..)) => l0 == r0,
+            (Self::Array(l0, ..), Self::Array(r0, ..)) => {
+                println!("l0: {:#?}", l0);
+                println!("r0: {:#?}", r0);
+                l0 == r0
+            }
             (Self::Object(l0), Self::Object(r0)) => l0 == r0,
             _ => core::mem::discriminant(self) == core::mem::discriminant(other),
         }
