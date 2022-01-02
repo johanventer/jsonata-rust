@@ -631,17 +631,13 @@ impl<'a> Parser<'a> {
                         }
 
                         stack.push(StackBlock(
-                            Value::new_array_with_capacity(
-                                self.pool.clone(),
-                                2,
-                                ArrayFlags::empty(),
-                            ),
+                            self.pool.array_with_capacity(2, ArrayFlags::empty()),
                             None,
                         ));
                         continue 'parsing;
                     }
 
-                    Value::new_array(self.pool.clone())
+                    self.pool.array(ArrayFlags::empty())
                 }
                 b'{' => {
                     ch = expect_byte_ignore_whitespace!(self);
@@ -651,7 +647,7 @@ impl<'a> Parser<'a> {
                             return Err(Error::ExceededDepthLimit);
                         }
 
-                        let object = Value::new_object_with_capacity(self.pool.clone(), 3);
+                        let object = self.pool.object_with_capacity(3);
 
                         if ch != b'"' {
                             return self.unexpected_character();
@@ -667,33 +663,30 @@ impl<'a> Parser<'a> {
                         continue 'parsing;
                     }
 
-                    Value::new_object(self.pool.clone())
+                    self.pool.object()
                 }
-                b'"' => Value::new_string(self.pool.clone(), expect_string!(self)),
-                b'0' => Value::new_number(self.pool.clone(), allow_number_extensions!(self)),
-                b'1'..=b'9' => Value::new_number(self.pool.clone(), expect_number!(self, ch)),
+                b'"' => self.pool.clone().string(expect_string!(self)),
+                b'0' => self.pool.clone().number(allow_number_extensions!(self)),
+                b'1'..=b'9' => self.pool.clone().number(expect_number!(self, ch)),
                 b'-' => {
                     let ch = expect_byte!(self);
-                    Value::new_number(
-                        self.pool.clone(),
-                        -match ch {
-                            b'0' => allow_number_extensions!(self),
-                            b'1'..=b'9' => expect_number!(self, ch),
-                            _ => return self.unexpected_character(),
-                        },
-                    )
+                    self.pool.clone().number(-match ch {
+                        b'0' => allow_number_extensions!(self),
+                        b'1'..=b'9' => expect_number!(self, ch),
+                        _ => return self.unexpected_character(),
+                    })
                 }
                 b't' => {
                     expect_sequence!(self, b'r', b'u', b'e');
-                    Value::new_bool(self.pool.clone(), true)
+                    self.pool.bool(true)
                 }
                 b'f' => {
                     expect_sequence!(self, b'a', b'l', b's', b'e');
-                    Value::new_bool(self.pool.clone(), false)
+                    self.pool.bool(false)
                 }
                 b'n' => {
                     expect_sequence!(self, b'u', b'l', b'l');
-                    Value::new_null(self.pool.clone())
+                    self.pool.null()
                 }
                 _ => return self.unexpected_character(),
             };

@@ -1,11 +1,16 @@
 use std::{
     cell::{Ref, RefCell, RefMut},
+    collections::HashMap,
     fmt::Debug,
     rc::Rc,
 };
 
-use super::{Value, ValueKind};
+use super::{ArrayFlags, Value, ValueKind};
+use crate::ast::Node;
+use crate::functions::FunctionContext;
+use crate::json::Number;
 use crate::node_pool::NodePool;
+use crate::Result;
 
 /// A reference counted `NodePool` of `ValueKind`.
 ///
@@ -23,6 +28,7 @@ impl ValuePool {
         pool
     }
 
+    #[inline]
     pub fn undefined(&self) -> Value {
         Value {
             pool: self.clone(),
@@ -30,12 +36,136 @@ impl ValuePool {
         }
     }
 
+    #[inline]
     pub fn borrow(&self) -> Ref<'_, NodePool<ValueKind>> {
         (*self.0).borrow()
     }
 
+    #[inline]
     pub fn borrow_mut(&self) -> RefMut<'_, NodePool<ValueKind>> {
         (*self.0).borrow_mut()
+    }
+
+    #[inline]
+    pub fn value(&self, kind: ValueKind) -> Value {
+        Value {
+            pool: self.clone(),
+            index: self.borrow_mut().insert(kind),
+        }
+    }
+
+    #[inline]
+    pub fn null(&self) -> Value {
+        Value {
+            pool: self.clone(),
+            index: self.borrow_mut().insert(ValueKind::Null),
+        }
+    }
+
+    #[inline]
+    pub fn bool(&self, value: bool) -> Value {
+        Value {
+            pool: self.clone(),
+            index: self.borrow_mut().insert(ValueKind::Bool(value)),
+        }
+    }
+
+    #[inline]
+    pub fn number<T: Into<Number>>(&self, value: T) -> Value {
+        Value {
+            pool: self.clone(),
+            index: self.borrow_mut().insert(ValueKind::Number(value.into())),
+        }
+    }
+
+    #[inline]
+    pub fn string(&self, value: &str) -> Value {
+        Value {
+            pool: self.clone(),
+            index: self
+                .borrow_mut()
+                .insert(ValueKind::String(value.to_owned())),
+        }
+    }
+
+    #[inline]
+    pub fn array(&self, flags: ArrayFlags) -> Value {
+        Value {
+            pool: self.clone(),
+            index: self
+                .borrow_mut()
+                .insert(ValueKind::Array(Vec::new(), flags)),
+        }
+    }
+
+    #[inline]
+    pub fn array_with_flags(&self, flags: ArrayFlags) -> Value {
+        Value {
+            pool: self.clone(),
+            index: self
+                .borrow_mut()
+                .insert(ValueKind::Array(Vec::new(), flags)),
+        }
+    }
+
+    #[inline]
+    pub fn array_with_capacity(&self, capacity: usize, flags: ArrayFlags) -> Value {
+        Value {
+            pool: self.clone(),
+            index: self
+                .borrow_mut()
+                .insert(ValueKind::Array(Vec::with_capacity(capacity), flags)),
+        }
+    }
+
+    #[inline]
+    pub fn object(&self) -> Value {
+        Value {
+            pool: self.clone(),
+            index: self.borrow_mut().insert(ValueKind::Object(HashMap::new())),
+        }
+    }
+
+    #[inline]
+    pub fn object_with_capacity(&self, capacity: usize) -> Value {
+        Value {
+            pool: self.clone(),
+            index: self
+                .borrow_mut()
+                .insert(ValueKind::Object(HashMap::with_capacity(capacity))),
+        }
+    }
+
+    #[inline]
+    pub fn lambda(&self, node: Node) -> Value {
+        Value {
+            pool: self.clone(),
+            index: self.borrow_mut().insert(ValueKind::Lambda(node)),
+        }
+    }
+
+    #[inline]
+    pub fn nativefn0(&self, func: fn(FunctionContext) -> Result<Value>) -> Value {
+        Value {
+            pool: self.clone(),
+            index: self.borrow_mut().insert(ValueKind::NativeFn0(func)),
+        }
+    }
+
+    #[inline]
+    pub fn nativefn1(&self, func: fn(FunctionContext, Value) -> Result<Value>) -> Value {
+        Value {
+            pool: self.clone(),
+            index: self.borrow_mut().insert(ValueKind::NativeFn1(func)),
+        }
+    }
+
+    #[inline]
+    pub fn nativefn2(&self, func: fn(FunctionContext, Value, Value) -> Result<Value>) -> Value {
+        Value {
+            pool: self.clone(),
+            index: self.borrow_mut().insert(ValueKind::NativeFn2(func)),
+        }
     }
 }
 

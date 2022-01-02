@@ -9,11 +9,8 @@ mod pool;
 pub use kind::{ArrayFlags, ValueKind};
 pub use pool::ValuePool;
 
-use crate::ast::{Node, NodeKind};
-use crate::functions::FunctionContext;
-use crate::json::Number;
+use crate::ast::NodeKind;
 use crate::node_pool::{NodePool, NodeRef};
-use crate::Result;
 
 /// A thin wrapper around the index to a `ValueKind` within a `ValuePool`.
 ///
@@ -31,97 +28,6 @@ pub struct Value {
 }
 
 impl Value {
-    pub fn new(pool: ValuePool, kind: ValueKind) -> Value {
-        let index = pool.borrow_mut().insert(kind);
-        Value { pool, index }
-    }
-
-    pub fn new_undefined(pool: ValuePool) -> Value {
-        let index = pool.borrow_mut().insert(ValueKind::Undefined);
-        Value { pool, index }
-    }
-
-    pub fn new_null(pool: ValuePool) -> Value {
-        let index = pool.borrow_mut().insert(ValueKind::Null);
-        Value { pool, index }
-    }
-
-    pub fn new_bool(pool: ValuePool, value: bool) -> Value {
-        let index = pool.borrow_mut().insert(ValueKind::Bool(value));
-        Value { pool, index }
-    }
-
-    pub fn new_number<T: Into<Number>>(pool: ValuePool, value: T) -> Value {
-        let index = pool.borrow_mut().insert(ValueKind::Number(value.into()));
-        Value { pool, index }
-    }
-
-    pub fn new_string(pool: ValuePool, value: &str) -> Value {
-        let index = pool
-            .borrow_mut()
-            .insert(ValueKind::String(value.to_owned()));
-        Value { pool, index }
-    }
-
-    pub fn new_array(pool: ValuePool) -> Value {
-        let index = pool
-            .borrow_mut()
-            .insert(ValueKind::Array(Vec::new(), ArrayFlags::empty()));
-        Value { pool, index }
-    }
-
-    pub fn new_array_with_flags(pool: ValuePool, flags: ArrayFlags) -> Value {
-        let index = pool
-            .borrow_mut()
-            .insert(ValueKind::Array(Vec::new(), flags));
-        Value { pool, index }
-    }
-
-    pub fn new_array_with_capacity(pool: ValuePool, capacity: usize, flags: ArrayFlags) -> Value {
-        let index = pool
-            .borrow_mut()
-            .insert(ValueKind::Array(Vec::with_capacity(capacity), flags));
-        Value { pool, index }
-    }
-
-    pub fn new_object(pool: ValuePool) -> Value {
-        let index = pool.borrow_mut().insert(ValueKind::Object(HashMap::new()));
-        Value { pool, index }
-    }
-
-    pub fn new_object_with_capacity(pool: ValuePool, capacity: usize) -> Value {
-        let index = pool
-            .borrow_mut()
-            .insert(ValueKind::Object(HashMap::with_capacity(capacity)));
-        Value { pool, index }
-    }
-
-    pub fn new_lambda(pool: ValuePool, node: Node) -> Value {
-        let index = pool.borrow_mut().insert(ValueKind::Lambda(node));
-        Value { pool, index }
-    }
-
-    pub fn new_nativefn0(pool: ValuePool, func: fn(FunctionContext) -> Result<Value>) -> Value {
-        let index = pool.borrow_mut().insert(ValueKind::NativeFn0(func));
-        Value { pool, index }
-    }
-
-    pub fn new_nativefn1(
-        pool: ValuePool,
-        func: fn(FunctionContext, Value) -> Result<Value>,
-    ) -> Value {
-        let index = pool.borrow_mut().insert(ValueKind::NativeFn1(func));
-        Value { pool, index }
-    }
-
-    pub fn new_nativefn2(
-        pool: ValuePool,
-        func: fn(FunctionContext, Value, Value) -> Result<Value>,
-    ) -> Value {
-        let index = pool.borrow_mut().insert(ValueKind::NativeFn2(func));
-        Value { pool, index }
-    }
-
     pub fn is_undefined(&self) -> bool {
         matches!(self.pool.borrow().get(self.index), ValueKind::Undefined)
     }
@@ -348,7 +254,7 @@ impl Value {
 
     /// Wraps an existing value in an array.
     pub fn wrap_in_array(self, flags: ArrayFlags) -> Value {
-        let array = Value::new_array_with_capacity(self.pool, 1, flags);
+        let array = self.pool.array_with_capacity(1, flags);
         array.push_index(self.index);
         array
     }
@@ -607,7 +513,7 @@ mod tests {
     #[test]
     fn members_iter() {
         let pool = ValuePool::new();
-        let a = Value::new_array(pool);
+        let a = pool.array(ArrayFlags::empty());
         a.push(ValueKind::Number(5.into()));
         a.push(ValueKind::Number(4.into()));
         a.push(ValueKind::Number(3.into()));
@@ -626,7 +532,7 @@ mod tests {
     fn entries_iter() {
         let map = HashMap::from([("a", "1"), ("b", "2"), ("c", "3"), ("d", "4"), ("e", "5")]);
         let pool = ValuePool::new();
-        let o = Value::new_object(pool);
+        let o = pool.object();
         map.iter().for_each(|(k, v)| o.insert(*k, (*v).into()));
         let entries: Vec<(String, String)> = o
             .entries()
@@ -642,7 +548,7 @@ mod tests {
     #[test]
     fn wrap_in_array() {
         let pool = ValuePool::new();
-        let v = Value::new_string(pool, "hello world");
+        let v = pool.string("hello world");
         let v = v.wrap_in_array(ArrayFlags::empty());
         assert!(v.is_array());
         assert_eq!(v.get_member(0).as_string(), "hello world");

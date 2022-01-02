@@ -26,13 +26,13 @@ impl<'a> FunctionContext<'a> {
 }
 
 pub fn fn_test(context: FunctionContext) -> Result<Value> {
-    Ok(Value::new_string(context.pool, "Hello From Rust!"))
+    Ok(context.pool.string("Hello From Rust!"))
 }
 
 pub fn fn_lookup_internal(context: FunctionContext, input: Value, key: &str) -> Value {
     match *input.as_ref() {
         ValueKind::Array { .. } => {
-            let result = Value::new_array_with_flags(context.pool.clone(), ArrayFlags::SEQUENCE);
+            let result = context.pool.array_with_flags(ArrayFlags::SEQUENCE);
 
             for input in input.members() {
                 let res = fn_lookup_internal(context.clone(), input, key);
@@ -104,7 +104,7 @@ pub fn fn_boolean_internal(arg: Value) -> bool {
 }
 
 pub fn fn_boolean(context: FunctionContext, arg: Value) -> Result<Value> {
-    Ok(Value::new_bool(context.pool, fn_boolean_internal(arg)))
+    Ok(context.pool.bool(fn_boolean_internal(arg)))
 }
 
 pub fn fn_filter(context: FunctionContext, arr: Value, func: Value) -> Result<Value> {
@@ -116,11 +116,11 @@ pub fn fn_filter(context: FunctionContext, arr: Value, func: Value) -> Result<Va
     debug_assert!(arr.is_array());
     debug_assert!(func.is_function());
 
-    let result = Value::new_array_with_flags(context.pool.clone(), ArrayFlags::SEQUENCE);
+    let result = context.pool.array_with_flags(ArrayFlags::SEQUENCE);
 
     for (index, item) in arr.members().enumerate() {
-        let args = Value::new_array(context.pool.clone());
-        let index_arg = Value::new_number(context.pool.clone(), index);
+        let args = context.pool.array(ArrayFlags::empty());
+        let index_arg = context.pool.number(index);
         let arity = func.arity();
 
         args.push_index(item.index);
@@ -149,7 +149,7 @@ pub fn fn_string(context: FunctionContext, arg: Value) -> Result<Value> {
     return if arg.is_string() {
         Ok(arg)
     } else if arg.is_function() {
-        Ok(Value::new_string(context.pool, ""))
+        Ok(context.pool.string(""))
 
     // TODO: Check for infinite numbers
     // } else if arg.is_number() && arg.is_infinite() {
@@ -158,19 +158,16 @@ pub fn fn_string(context: FunctionContext, arg: Value) -> Result<Value> {
 
     // TODO: Proper JSON stringify of Value, pretty printing
     } else {
-        Ok(Value::new_string(context.pool, &format!("{:?}", arg)))
+        Ok(context.pool.string(&format!("{:?}", arg)))
     };
 }
 
 pub fn fn_count(context: FunctionContext, arg: Value) -> Result<Value> {
-    Ok(Value::new_number(
-        context.pool,
-        if arg.is_undefined() {
-            0
-        } else if arg.is_array() {
-            arg.len()
-        } else {
-            1
-        },
-    ))
+    Ok(context.pool.number(if arg.is_undefined() {
+        0
+    } else if arg.is_array() {
+        arg.len()
+    } else {
+        1
+    }))
 }

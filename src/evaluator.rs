@@ -3,7 +3,6 @@ use std::collections::{hash_map, HashMap};
 use super::ast::*;
 use super::frame::Frame;
 use super::functions::*;
-use super::json::Number;
 use super::position::Position;
 use super::value::{ArrayFlags, Value, ValueKind, ValuePool};
 use super::{Error, Result};
@@ -15,46 +14,6 @@ pub struct Evaluator {
 impl Evaluator {
     pub fn new(pool: ValuePool) -> Self {
         Evaluator { pool }
-    }
-
-    #[inline]
-    fn null(&self) -> Value {
-        Value::new_null(self.pool.clone())
-    }
-
-    #[inline]
-    pub fn bool(&self, b: bool) -> Value {
-        Value::new_bool(self.pool.clone(), b)
-    }
-
-    #[inline]
-    fn string(&self, s: &str) -> Value {
-        Value::new_string(self.pool.clone(), s)
-    }
-
-    #[inline]
-    fn number<T: Into<Number>>(&self, n: T) -> Value {
-        Value::new_number(self.pool.clone(), n.into())
-    }
-
-    #[inline]
-    pub fn array(&self, flags: ArrayFlags) -> Value {
-        Value::new_array_with_flags(self.pool.clone(), flags)
-    }
-
-    #[inline]
-    pub fn array_with_capacity(&self, capacity: usize, flags: ArrayFlags) -> Value {
-        Value::new_array_with_capacity(self.pool.clone(), capacity, flags)
-    }
-
-    #[inline]
-    fn object(&self) -> Value {
-        Value::new_object(self.pool.clone())
-    }
-
-    #[inline]
-    fn lambda(&self, node: &Node) -> Value {
-        Value::new_lambda(self.pool.clone(), node.clone())
     }
 
     fn fn_context(&self, position: Position, input: Value, frame: Frame) -> FunctionContext<'_> {
@@ -69,10 +28,10 @@ impl Evaluator {
 
     pub fn evaluate(&self, node: &Node, input: Value, frame: Frame) -> Result<Value> {
         let mut result = match node.kind {
-            NodeKind::Null => self.null(),
-            NodeKind::Bool(b) => self.bool(b),
-            NodeKind::String(ref s) => self.string(s),
-            NodeKind::Number(n) => self.number(n),
+            NodeKind::Null => self.pool.null(),
+            NodeKind::Bool(b) => self.pool.bool(b),
+            NodeKind::String(ref s) => self.pool.string(s),
+            NodeKind::Number(n) => self.pool.number(n),
             NodeKind::Block(ref exprs) => self.evaluate_block(exprs, input, frame.clone())?,
             NodeKind::Unary(ref op) => self.evaluate_unary_op(node, op, input, frame.clone())?,
             NodeKind::Binary(ref op, ref lhs, ref rhs) => {
@@ -90,7 +49,7 @@ impl Evaluator {
                 input,
                 name,
             ),
-            NodeKind::Lambda { .. } => self.lambda(node),
+            NodeKind::Lambda { .. } => self.pool.lambda(node.clone()),
             NodeKind::Function {
                 ref proc,
                 ref args,
@@ -166,13 +125,13 @@ impl Evaluator {
                 let result = self.evaluate(value, input, frame)?;
                 let result = match *result.as_ref() {
                     ValueKind::Undefined => Ok(self.pool.undefined()),
-                    ValueKind::Number(num) if !num.is_nan() => Ok(self.number(-num)),
+                    ValueKind::Number(num) if !num.is_nan() => Ok(self.pool.number(-num)),
                     _ => Err(Error::negating_non_numeric(node.position, result.clone())),
                 };
                 result
             }
             UnaryOp::ArrayConstructor(ref array) => {
-                let mut result = self.array(if node.cons_array {
+                let mut result = self.pool.array(if node.cons_array {
                     ArrayFlags::CONS
                 } else {
                     ArrayFlags::empty()
@@ -245,7 +204,7 @@ impl Evaluator {
             }
         }
 
-        let result = self.object();
+        let result = self.pool.object();
 
         for key in groups.keys() {
             let group = groups.get(key).unwrap();
@@ -308,7 +267,7 @@ impl Evaluator {
                 if result.is_infinite() {
                     Err(Error::NumberOfOutRange(result))
                 } else {
-                    Ok(self.number(result))
+                    Ok(self.pool.number(result))
                 }
             }
 
@@ -329,7 +288,7 @@ impl Evaluator {
                 {
                     let lhs = f64::from(*lhs);
                     let rhs = f64::from(*rhs);
-                    return Ok(self.bool(match op {
+                    return Ok(self.pool.bool(match op {
                         BinaryOp::LessThan => lhs < rhs,
                         BinaryOp::LessThanEqual => lhs <= rhs,
                         BinaryOp::GreaterThan => lhs > rhs,
@@ -341,7 +300,7 @@ impl Evaluator {
                 if let (ValueKind::String(ref lhs), ValueKind::String(ref rhs)) =
                     (&*lhs.as_ref(), &*rhs.as_ref())
                 {
-                    return Ok(self.bool(match op {
+                    return Ok(self.pool.bool(match op {
                         BinaryOp::LessThan => lhs < rhs,
                         BinaryOp::LessThanEqual => lhs <= rhs,
                         BinaryOp::GreaterThan => lhs > rhs,
@@ -355,10 +314,10 @@ impl Evaluator {
 
             BinaryOp::Equal | BinaryOp::NotEqual => {
                 if lhs.is_undefined() || rhs.is_undefined() {
-                    return Ok(self.bool(false));
+                    return Ok(self.pool.bool(false));
                 }
 
-                Ok(self.bool(match op {
+                Ok(self.pool.bool(match op {
                     BinaryOp::Equal => lhs == rhs,
                     BinaryOp::NotEqual => lhs != rhs,
                     _ => unreachable!(),
@@ -391,7 +350,7 @@ impl Evaluator {
                     unreachable!()
                 }
 
-                let result = self.array_with_capacity(size, ArrayFlags::SEQUENCE);
+                let result = self.pool.array_with_capacity(size, ArrayFlags::SEQUENCE);
                 for index in lhs..rhs + 1 {
                     result.push(ValueKind::Number(index.into()));
                 }
@@ -475,7 +434,7 @@ impl Evaluator {
         frame: Frame,
         last_step: bool,
     ) -> Result<Value> {
-        let mut result = self.array(ArrayFlags::SEQUENCE);
+        let mut result = self.pool.array(ArrayFlags::SEQUENCE);
 
         if let NodeKind::Sort(ref sorts) = step.kind {
             result = self.evaluate_sorts(sorts, input, frame.clone())?;
@@ -507,7 +466,7 @@ impl Evaluator {
             {
                 result.get_member(0)
             } else {
-                let result_sequence = self.array(ArrayFlags::SEQUENCE);
+                let result_sequence = self.pool.array(ArrayFlags::SEQUENCE);
 
                 for result_item in result.members() {
                     if !result_item.is_array() || result_item.has_flags(ArrayFlags::CONS) {
@@ -537,7 +496,7 @@ impl Evaluator {
     }
 
     fn evaluate_filter(&self, node: &Node, input: Value, frame: Frame) -> Result<Value> {
-        let mut result = self.array(ArrayFlags::SEQUENCE);
+        let mut result = self.pool.array(ArrayFlags::SEQUENCE);
         let input = input.wrap_in_array_if_needed(ArrayFlags::empty());
 
         let get_index = |n: f64| {
@@ -617,7 +576,7 @@ impl Evaluator {
             }
         }
 
-        let evaluated_args = self.array(ArrayFlags::empty());
+        let evaluated_args = self.pool.array(ArrayFlags::empty());
         for arg in args {
             let arg = self.evaluate(arg, input.clone(), frame.clone())?;
             evaluated_args.push_index(arg.index);

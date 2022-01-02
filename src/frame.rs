@@ -60,7 +60,7 @@ mod tests {
     fn bind() {
         let frame = Frame::new();
         let pool = ValuePool::new();
-        frame.bind("a", Value::new_number(pool, 1));
+        frame.bind("a", pool.number(1));
         let a = frame.lookup("a");
         assert!(a.is_some());
         assert_eq!(a.unwrap(), 1);
@@ -70,7 +70,7 @@ mod tests {
     fn lookup_through_parent() {
         let parent = Frame::new();
         let pool = ValuePool::new();
-        parent.bind("a", Value::new_number(pool, 1));
+        parent.bind("a", pool.number(1));
         let frame = Frame::new_with_parent(parent);
         let a = frame.lookup("a");
         assert!(a.is_some());
@@ -81,9 +81,9 @@ mod tests {
     fn lookup_overriding_parent() {
         let parent = Frame::new();
         let pool = ValuePool::new();
-        parent.bind("a", Value::new_number(pool.clone(), 1));
+        parent.bind("a", pool.number(1));
         let frame = Frame::new_with_parent(parent);
-        frame.bind("a", Value::new_number(pool, 2));
+        frame.bind("a", pool.number(2));
         let a = frame.lookup("a");
         assert!(a.is_some());
         assert_eq!(a.unwrap(), 2);

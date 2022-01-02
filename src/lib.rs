@@ -85,18 +85,18 @@ impl JsonAta {
 
         macro_rules! bind {
             ($name:literal, $new:ident, $fn:ident) => {
-                self.frame.bind($name, Value::$new(self.pool.clone(), $fn));
+                self.frame.bind($name, self.pool.$new($fn));
             };
         }
 
         self.frame.bind("$", input.clone());
-        bind!("test", new_nativefn0, fn_test);
-        bind!("lookup", new_nativefn2, fn_lookup);
-        bind!("append", new_nativefn2, fn_append);
-        bind!("boolean", new_nativefn1, fn_boolean);
-        bind!("filter", new_nativefn2, fn_filter);
-        bind!("string", new_nativefn1, fn_string);
-        bind!("count", new_nativefn1, fn_count);
+        bind!("test", nativefn0, fn_test);
+        bind!("lookup", nativefn2, fn_lookup);
+        bind!("append", nativefn2, fn_append);
+        bind!("boolean", nativefn1, fn_boolean);
+        bind!("filter", nativefn2, fn_filter);
+        bind!("string", nativefn1, fn_string);
+        bind!("count", nativefn1, fn_count);
 
         let evaluator = Evaluator::new(self.pool.clone());
         evaluator.evaluate(&self.ast, input, self.frame.clone())
