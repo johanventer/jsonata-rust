@@ -52,6 +52,7 @@ impl Evaluator {
                 ValueKind::String(ref str) => !str.is_empty(),
                 ValueKind::Object(ref obj) => !obj.is_empty(),
                 ValueKind::Array { .. } => unreachable!(),
+                ValueKind::Lambda(..) => true,
             }
         }
 

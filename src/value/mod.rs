@@ -8,6 +8,7 @@ mod pool;
 pub use kind::{ArrayFlags, ValueKind};
 pub use pool::ValuePool;
 
+use crate::ast::Node;
 use crate::json::Number;
 use crate::node_pool::{NodePool, NodeRef};
 
@@ -89,6 +90,11 @@ impl Value {
         let index = pool
             .borrow_mut()
             .insert(ValueKind::Object(HashMap::with_capacity(capacity)));
+        Value { pool, index }
+    }
+
+    pub fn new_lambda(pool: ValuePool, node: Node) -> Value {
+        let index = pool.borrow_mut().insert(ValueKind::Lambda(node));
         Value { pool, index }
     }
 

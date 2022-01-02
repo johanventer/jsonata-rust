@@ -14,8 +14,18 @@ pub fn process_ast(node: Node) -> Result<Node> {
         NodeKind::Binary(..) => process_binary(node)?,
         NodeKind::GroupBy(ref mut lhs, ref mut rhs) => process_group_by(node.position, lhs, rhs)?,
         NodeKind::OrderBy(ref mut lhs, ref mut rhs) => process_order_by(node.position, lhs, rhs)?,
-        NodeKind::Function { .. } => unimplemented!("Function not yet implemented"),
-        NodeKind::Lambda { .. } => unimplemented!("Lambda not yet implemented"),
+        NodeKind::Function {
+            ref mut proc,
+            ref mut args,
+            ..
+        } => {
+            process_function(proc, args)?;
+            node
+        }
+        NodeKind::Lambda { ref mut body, .. } => {
+            process_lambda(body)?;
+            node
+        }
         NodeKind::Ternary { .. } => process_ternary(node)?,
         NodeKind::Transform { .. } => unimplemented!("Transform not yet implemented"),
         NodeKind::Parent => unimplemented!("Parent not yet implemented"),
@@ -282,21 +292,19 @@ fn process_order_by(position: Position, lhs: &mut Box<Node>, rhs: &mut SortTerms
     Ok(result)
 }
 
-// #[inline]
-// fn process_lambda(mut node: Box<Node>) -> Result<Box<Node>> {
-//     if let NodeKind::Lambda { args, body, .. } = node.kind {
-//         //let body = tail_call_optimize(process_ast(body)?)?;
+fn process_function(proc: &mut Box<Node>, args: &mut Vec<Node>) -> Result<()> {
+    *proc = Box::new(process_ast(std::mem::take(&mut *proc))?);
+    for arg in args.iter_mut() {
+        *arg = process_ast(std::mem::take(arg))?;
+    }
+    Ok(())
+}
 
-//         node.kind = NodeKind::Lambda {
-//             args,
-//             body: process_ast(body)?.into(),
-//         };
-
-//         Ok(node)
-//     } else {
-//         unreachable!()
-//     }
-// }
+fn process_lambda(body: &mut Box<Node>) -> Result<()> {
+    *body = Box::new(process_ast(std::mem::take(&mut *body))?);
+    // TODO: Tail call optimize
+    Ok(())
+}
 
 // fn tail_call_optimize(mut node: Box<Node>) -> Result<Box<Node>> {
 //     match node.kind {

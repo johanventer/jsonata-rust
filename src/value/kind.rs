@@ -1,6 +1,7 @@
 use bitflags::bitflags;
 use std::collections::HashMap;
 
+use crate::ast::Node;
 use crate::json::Number;
 
 bitflags! {
@@ -20,6 +21,7 @@ pub enum ValueKind {
     String(String),
     Array(Vec<usize>, ArrayFlags),
     Object(HashMap<String, usize>),
+    Lambda(Node),
 }
 
 impl PartialEq<ValueKind> for ValueKind {
@@ -152,6 +154,7 @@ impl std::fmt::Debug for ValueKind {
                 "<object{{{}}}>",
                 o.keys().cloned().collect::<Vec<String>>().join(", ")
             ),
+            Self::Lambda(..) => write!(f, "<lambda>"),
         }
     }
 }

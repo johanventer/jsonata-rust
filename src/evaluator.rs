@@ -51,6 +51,11 @@ impl Evaluator {
         Value::new_object(self.pool.clone())
     }
 
+    #[inline]
+    fn lambda(&self, node: &Node) -> Value {
+        Value::new_lambda(self.pool.clone(), node.clone())
+    }
+
     pub fn evaluate(&self, node: &Node, input: Value, frame: Frame) -> Result<Value> {
         let mut result = match node.kind {
             NodeKind::Null => self.null(),
@@ -70,6 +75,12 @@ impl Evaluator {
             } => self.evaluate_ternary(cond, truthy, falsy.as_deref(), input, frame.clone())?,
             NodeKind::Path(ref steps) => self.evaluate_path(node, steps, input, frame.clone())?,
             NodeKind::Name(ref name) => self.lookup(input, name),
+            NodeKind::Lambda { .. } => self.lambda(node),
+            NodeKind::Function {
+                ref proc,
+                ref args,
+                is_partial,
+            } => self.evaluate_function(node, input, proc, args, is_partial, frame.clone())?,
 
             _ => unimplemented!("TODO: node kind not yet supported: {:#?}", node.kind),
         };
@@ -523,5 +534,53 @@ impl Evaluator {
         };
 
         Ok(result)
+    }
+
+    fn evaluate_function(
+        &self,
+        _node: &Node,
+        input: Value,
+        proc: &Node,
+        args: &[Node],
+        _is_partial: bool,
+        frame: Frame,
+    ) -> Result<Value> {
+        let evaluated_proc = self.evaluate(proc, input.clone(), frame.clone())?;
+
+        // TODO: Help the user out with a T1005 error
+
+        let evaluated_args = self.array(ArrayFlags::empty());
+        for arg in args {
+            let arg = self.evaluate(arg, input.clone(), frame.clone())?;
+            evaluated_args.push_index(arg.index);
+        }
+
+        match *evaluated_proc.as_ref() {
+            ValueKind::Lambda(ref lambda) => {
+                if let NodeKind::Lambda { ref body, ref args } = lambda.kind {
+                    // Create a new frame for use in the lambda, so it can have locals
+                    let frame = Frame::new_with_parent(frame);
+
+                    // Bind the arguments to their respective names
+                    for (index, arg) in args.iter().enumerate() {
+                        if let NodeKind::Var(ref name) = arg.kind {
+                            frame.bind(name, evaluated_args.get_member(index));
+                        } else {
+                            unreachable!()
+                        }
+                    }
+
+                    // Evaluate the lambda!
+                    Ok(self.evaluate(body, input, frame)?)
+                } else {
+                    unreachable!()
+                }
+            }
+            _ => {
+                // TODO: T1006
+                println!("{:#?}", evaluated_proc);
+                unreachable!()
+            }
+        }
     }
 }

@@ -6,14 +6,14 @@ pub type Object = Vec<(Node, Node)>;
 // Sort terms, representend by expresions and a bool indicating descending/ascending
 pub type SortTerms = Vec<(Node, bool)>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UnaryOp {
     Minus(Box<Node>),
     ArrayConstructor(Vec<Node>),
     ObjectConstructor(Object),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum BinaryOp {
     Add,
     Subtract,
@@ -68,7 +68,7 @@ impl std::fmt::Display for BinaryOp {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum NodeKind {
     Empty,
     Null,
@@ -112,7 +112,7 @@ pub enum NodeKind {
     Sort(SortTerms),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Node {
     pub kind: NodeKind,
     pub position: Position,

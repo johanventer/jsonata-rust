@@ -65,6 +65,7 @@ impl Debug for ValuePool {
                 ValueKind::String(value) => write!(f, "{}", value)?,
                 ValueKind::Array(array, _) => f.debug_list().entries(array.iter()).finish()?,
                 ValueKind::Object(object) => f.debug_map().entries(object.iter()).finish()?,
+                ValueKind::Lambda(..) => write!(f, "<lambda>")?,
             };
             writeln!(f)?;
         }
