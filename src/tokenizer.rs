@@ -243,10 +243,11 @@ impl Tokenizer {
 
                     let token = &self.source[number_start..self.position.source_pos];
                     let number: String = token.iter().collect();
-                    if let Ok(number) = number.parse::<f64>() {
-                        break self.emit(Num(number));
+                    let number_f64 = number.parse::<f64>().unwrap_or(f64::NAN);
+                    if number_f64.is_nan() || number_f64.is_infinite() {
+                        break Err(Error::LexedNumberOutOfRange(self.position, number));
                     } else {
-                        break Err(Error::NumberOutOfRange(self.position, number));
+                        break self.emit(Num(number_f64));
                     }
                 }
                 ['.', ..] => op1!(Period),

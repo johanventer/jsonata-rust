@@ -37,24 +37,27 @@ fn main() {
         None => opt.expr.expect("No JSONata expression provided"),
     };
 
-    let jsonata = JsonAta::new(&expr).expect("Could not parse JSONata expression");
+    let jsonata = JsonAta::new(&expr);
 
-    if opt.ast {
-        // TODO(johan): JSON formatting of the AST
-        println!("{:#?}", jsonata.ast());
-        return;
-    }
+    match jsonata {
+        Ok(jsonata) => {
+            if opt.ast {
+                println!("{:#?}", jsonata.ast());
+                return;
+            }
 
-    let input = match opt.input_file {
-        Some(input_file) => {
-            std::fs::read_to_string(input_file).expect("Could not read the JSON input file")
+            let input = match opt.input_file {
+                Some(input_file) => {
+                    std::fs::read_to_string(input_file).expect("Could not read the JSON input file")
+                }
+                None => opt.input.unwrap_or_else(|| "{}".to_string()),
+            };
+
+            match jsonata.evaluate(Some(&input)) {
+                Ok(result) => println!("{:#?}", result),
+                Err(error) => println!("{}", error),
+            }
         }
-        None => opt.input.unwrap_or_else(|| "{}".to_string()),
-    };
-
-    let result = jsonata
-        .evaluate(Some(&input))
-        .expect("Failed to evaluate JSONata");
-
-    println!("{:#?}", result);
+        Err(error) => println!("{}", error),
+    }
 }

@@ -9,6 +9,8 @@ pub use kind::{ArrayFlags, ValueKind};
 pub use pool::ValuePool;
 
 use crate::json::Number;
+use crate::node_pool::{NodePool, NodeRef};
+use crate::{Error, Result};
 
 /// A thin wrapper around the index to a `ValueKind` within a `ValuePool`.
 ///
@@ -72,11 +74,10 @@ impl Value {
         Value { pool, index }
     }
 
-    pub fn new_array_with_capacity(pool: ValuePool, capacity: usize) -> Value {
-        let index = pool.borrow_mut().insert(ValueKind::Array(
-            Vec::with_capacity(capacity),
-            ArrayFlags::empty(),
-        ));
+    pub fn new_array_with_capacity(pool: ValuePool, capacity: usize, flags: ArrayFlags) -> Value {
+        let index = pool
+            .borrow_mut()
+            .insert(ValueKind::Array(Vec::with_capacity(capacity), flags));
         Value { pool, index }
     }
 
@@ -120,12 +121,18 @@ impl Value {
         matches!(self.pool.borrow().get(self.index), ValueKind::Object(..))
     }
 
-    pub fn as_ref(&self) -> ValueRef {
-        ValueRef {
-            // TODO: This is wrong, it doesn't tie ValueRef to the lifetime of the pool. How to fix?
-            pool: PhantomData,
-            kind: self.pool.borrow().get(self.index) as *const ValueKind,
-        }
+    pub fn as_ref(&self) -> NodeRef<ValueKind> {
+        // This looks weird, but I need a way around the borrow checker (both compile-time and the
+        // runtime borrow checking on the pool) to get a NodeRef that doesn't borrow the pool for the
+        // entirety of its lifetime.
+
+        let pool_ref = self.pool.borrow();
+        let pool_ptr = &*pool_ref as *const NodePool<ValueKind>;
+
+        // Safety: The pointer was just created, and will still be valid as long as the pool lives.
+        let node_ref = unsafe { pool_ptr.as_ref().unwrap().get_ref(self.index) };
+
+        node_ref
     }
 
     pub fn as_bool(&self) -> bool {
@@ -265,23 +272,19 @@ impl Value {
         drop(self);
     }
 
-    /// Wraps an existing value in an array by creating a new array in the pool and adding this
-    /// `Value`'s index as the only item.
-    ///
-    /// This is used extensively throughout evaluation to implement the rules of sequences, and
-    /// one of the actions that has a major advantage using the pool implementation. If there wasn't
-    /// a pool, the entire input would need to be cloned which could be very costly.
-    pub fn wrap_in_array(self) -> Value {
-        let array = Value::new_array_with_capacity(self.pool, 1);
+    /// Wraps an existing value in an array.
+    pub fn wrap_in_array(self, flags: ArrayFlags) -> Value {
+        let array = Value::new_array_with_capacity(self.pool, 1, flags);
         array.push_index(self.index);
         array
     }
 
-    pub fn wrap_in_array_if_needed(self) -> Value {
+    /// Wraps an existing value in an array if it's not already an array.
+    pub fn wrap_in_array_if_needed(self, flags: ArrayFlags) -> Value {
         if self.is_array() {
             self
         } else {
-            self.wrap_in_array()
+            self.wrap_in_array(flags)
         }
     }
 
@@ -292,7 +295,7 @@ impl Value {
     /// If the `ValueKind` wrapped by this `Value` is not a `ValueKind::Array`.
     pub fn members(&self) -> Members {
         match self.pool.borrow().get(self.index) {
-            ValueKind::Array(ref array, _) => Members::new(&self.pool, array),
+            ValueKind::Array(ref array, _) => unsafe { Members::new(&self.pool, array) },
             _ => panic!("Not an array"),
         }
     }
@@ -346,18 +349,18 @@ impl PartialEq<Value> for Value {
     fn eq(&self, other: &Value) -> bool {
         match self.pool.borrow().get(self.index) {
             ValueKind::Array(..) => {
-                if !(other.is_array() && other.len() == self.len()) {
-                    return false;
+                if other.is_array() && other.len() == self.len() {
+                    self.members().zip(other.members()).all(|(l, r)| l == r)
+                } else {
+                    false
                 }
-
-                self.members().zip(other.members()).all(|(l, r)| l == r)
             }
             ValueKind::Object(..) => {
-                if !other.is_object() {
-                    return false;
+                if other.is_object() {
+                    self.entries().all(|(k, v)| v == other.get_entry(k))
+                } else {
+                    false
                 }
-
-                self.entries().all(|(k, v)| v == other.get_entry(k))
             }
             _ => self.pool.borrow().get(self.index) == self.pool.borrow().get(other.index),
         }
@@ -435,16 +438,17 @@ impl PartialEq<String> for Value {
 
 pub struct Members<'pool> {
     pool: &'pool ValuePool,
-    array: *const Vec<usize>,
-    index: usize,
+    inner: std::slice::Iter<'pool, usize>,
 }
 
 impl<'pool> Members<'pool> {
-    pub fn new(pool: &'pool ValuePool, array: *const Vec<usize>) -> Self {
+    /// # Safety
+    /// The iterator's lifetime is tied to the pool, and as long as the array is not
+    /// removed from the pool during the lifetime of this iterator then this is safe.
+    pub unsafe fn new(pool: &'pool ValuePool, array: *const Vec<usize>) -> Self {
         Self {
             pool,
-            array,
-            index: 0,
+            inner: (*array).iter(),
         }
     }
 }
@@ -452,23 +456,12 @@ impl<'pool> Members<'pool> {
 impl<'pool> Iterator for Members<'pool> {
     type Item = Value;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        // SAFETY: The iterator's lifetime is tied to the pool, and as long as the array is not
-        // removed from the pool during the lifetime of the iterator then this is safe.
-        let array = unsafe { &*self.array };
-
-        if array.is_empty() || self.index > array.len() - 1 {
-            None
-        } else {
-            let next = Some(Value {
-                pool: self.pool.clone(),
-                index: array[self.index],
-            });
-
-            self.index += 1;
-
-            next
-        }
+        self.inner.next().map(|index| Value {
+            pool: self.pool.clone(),
+            index: *index,
+        })
     }
 }
 
@@ -492,18 +485,17 @@ impl<'pool> Entries<'pool> {
 impl<'pool> Iterator for Entries<'pool> {
     type Item = (&'pool String, Value);
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        let next = self.inner.next();
-        match next {
-            Some((k, v)) => Some((
-                k,
+        self.inner.next().map(|(key, index)| {
+            (
+                key,
                 Value {
                     pool: self.pool.clone(),
-                    index: *v,
+                    index: *index,
                 },
-            )),
-            None => None,
-        }
+            )
+        })
     }
 }
 
@@ -517,6 +509,8 @@ impl fmt::Debug for Value {
     }
 }
 
+// FIXME: This is going to break if the pool grows as it will reallocate and
+// the pointer will no longer be correct
 pub struct ValueRef<'pool> {
     pool: PhantomData<&'pool ValuePool>,
     kind: *const ValueKind,
@@ -575,7 +569,7 @@ mod tests {
     fn wrap_in_array() {
         let pool = ValuePool::new();
         let v = Value::new_string(pool, "hello world");
-        let v = v.wrap_in_array();
+        let v = v.wrap_in_array(ArrayFlags::empty());
         assert!(v.is_array());
         assert_eq!(v.get_member(0).as_string(), "hello world");
     }

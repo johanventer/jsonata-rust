@@ -56,7 +56,6 @@
 // "T0410": "Argument {{index}} of function {{token}} does not match function signature",
 // "T0411": "Context value is not a compatible type with argument {{index}} of function {{token}}",
 // "T0412": "Argument {{index}} of function {{token}} must be an array of {{type}}",
-// "D1001": "Number out of range: {{value}}",
 // "D1004": "Regular expression matches zero length string",
 // "T1005": "Attempted to invoke a non-function. Did you mean ${{{token}}}?",
 // "T1006": "Attempted to invoke a non-function",
@@ -131,48 +130,48 @@ use super::position::Position;
 use super::tokenizer::TokenKind;
 use std::{char, error, fmt};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub enum Error {
     // JSON parsing errors
     UnexpectedCharacter {
-        //I01
         ch: char,
         line: usize,
         column: usize,
     },
-    UnexpectedEndOfJson, // I02
-    ExceededDepthLimit,  // I03
-    FailedUtf8Parsing,   // I04
-    WrongType(String),   // I05
+    UnexpectedEndOfJson,
+    ExceededDepthLimit,
+    FailedUtf8Parsing,
+    WrongType(String),
 
-    // Lexing errors
-    UnterminatedStringLiteral(Position), // S0101
-    NumberOutOfRange(Position, String),  // S0102
-    UnsupportedEscape(Position, String), // S0103
-    InvalidUnicodeEscape(Position),      // S0104
-    UnterminatedQuoteProp(Position),     // S0105
-    UnterminatedComment(Position),       // S0106
+    // Compile time errors
+    UnterminatedStringLiteral(Position),
+    LexedNumberOutOfRange(Position, String),
+    UnsupportedEscape(Position, String),
+    InvalidUnicodeEscape(Position),
+    UnterminatedQuoteProp(Position),
+    UnterminatedComment(Position),
+    SyntaxError(Position, String),
+    UnexpectedToken(Position, String, String),
+    ExpectedTokenBeforeEnd(Position, String),
+    InvalidFunctionParam(Position, String),
+    InvalidPredicate(Position),
+    MultipleGroupBy(Position),
+    InvalidUnary(Position, String),
+    ExpectedVarLeft(Position),
+    InvalidStep(Position, String),
+    ExpectedVarRight(Position, String),
 
-    // Parsing errors
-    SyntaxError(Position, String),             // S0201
-    UnexpectedToken(Position, String, String), // S0202
-    ExpectedTokenBeforeEnd(Position, String),  // S0203
-    InvalidFunctionParam(Position, String),    // S0208
-    InvalidPredicate(Position),                // S0209
-    MultipleGroupBy(Position),                 // S0210
-    InvalidUnary(Position, String),            // S0211
-    ExpectedVarLeft(Position),                 // S0212
-    InvalidStep(Position, String),             // S0213
-    ExpectedVarRight(Position, String),        // S0214
+    // Runtime errors
+    NumberOfOutRange(f64),
+    NegatingNonNumeric(Position, String),
+    MultipleKeys(Position, String),
 
-    // Evaluation errors
-    NegatingNonNumeric(Position, String),               // D1002
-    MultipleKeys(Position, String),                     // D1009
-    NonStringKey(Position, String),                     // T1003
-    LeftSideNotNumber(Position, String),                // T2001
-    RightSideNotNumber(Position, String),               // T2002
-    BinaryOpMismatch(Position, String, String, String), // T2009
-    BinaryOpTypes(Position, String),                    // T2010
+    // Type errors
+    NonStringKey(Position, String),
+    LeftSideNotNumber(Position, String),
+    RightSideNotNumber(Position, String),
+    BinaryOpMismatch(Position, String, String, String),
+    BinaryOpTypes(Position, String),
 }
 
 impl error::Error for Error {}
@@ -180,22 +179,17 @@ impl error::Error for Error {}
 impl Error {
     pub fn code(&self) -> &str {
         match *self {
-            // JSON parsing errors
-            Error::UnexpectedCharacter { .. } => "I01",
-            Error::UnexpectedEndOfJson => "I02",
-            Error::ExceededDepthLimit => "I03",
-            Error::FailedUtf8Parsing => "I04",
-            Error::WrongType(..) => "I05",
-
-            // Lexing errors
+            Error::UnexpectedCharacter { .. } => "I0101",
+            Error::UnexpectedEndOfJson => "I0102",
+            Error::ExceededDepthLimit => "I0103",
+            Error::FailedUtf8Parsing => "I0104",
+            Error::WrongType(..) => "I0105",
             Error::UnterminatedStringLiteral(..) => "S0101",
-            Error::NumberOutOfRange(..) => "S0102",
+            Error::LexedNumberOutOfRange(..) => "S0102",
             Error::UnsupportedEscape(..) => "S0103",
             Error::InvalidUnicodeEscape(..) => "S0104",
             Error::UnterminatedQuoteProp(..) => "S0105",
             Error::UnterminatedComment(..) => "S0106",
-
-            // Parsing errors
             Error::SyntaxError(..) => "S0201",
             Error::UnexpectedToken(..) => "S0202",
             Error::ExpectedTokenBeforeEnd(..) => "S0203",
@@ -206,8 +200,7 @@ impl Error {
             Error::ExpectedVarLeft(..) => "S0212",
             Error::InvalidStep(..) => "S0213",
             Error::ExpectedVarRight(..) => "S0214",
-
-            // Evaluation errors
+            Error::NumberOfOutRange(..) => "D1001",
             Error::NegatingNonNumeric(..) => "D1002",
             Error::MultipleKeys(..) => "D1009",
             Error::NonStringKey(..) => "T1003",
@@ -288,78 +281,67 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use Error::*;
 
-        match *self {
-            // JSON parsing errors
-            UnexpectedCharacter {
-                ref ch,
-                ref line,
-                ref column,
-            } => write!(
-                f,
-                "Unexpected character in input: {} at ({}:{})",
-                ch, line, column
-            ),
-            UnexpectedEndOfJson => write!(f, "Unexpected end of JSON input"),
-            ExceededDepthLimit => write!(f, "Exceeded depth limit while parsing input"),
-            FailedUtf8Parsing => write!(f, "Failed to parse UTF-8 bytes in input"),
-            WrongType(ref s) => write!(f, "Wrong type in input, expected: {}", s),
+        write!(f, "{}: ", self.code())?;
 
-            // Parsing errors
-            SyntaxError(ref p, ref t) => write!(f, "{}: Syntax error `{}`", p, t),
-            UnterminatedStringLiteral(ref p) => write!(f, "{}: Unterminated string literal", p),
-            UnexpectedToken(ref p, ref e, ref a) => {
-                write!(f, "{}: Expected `{}`, got `{}`", p, e, a)
-            }
-            ExpectedTokenBeforeEnd(ref p, ref t) => {
-                write!(f, "{}: Expected `{}` before end of expression", p, t)
-            }
-            InvalidStep(ref p, ref k) => {
-                write!(
-                    f,
-                    "{}: The literal value `{}` cannot be used as a step within a path expression",
-                    p, k
-                )
-            }
-            InvalidPredicate(ref p) => write!(
-                f,
-                "{}: A predicate cannot follow a grouping expression in a step",
-                p
-            ),
-            MultipleGroupBy(ref p) => {
-                write!(f, "{}: Each step can only have one grouping expression", p)
-            }
-            InvalidUnary(ref p, ref k) => 
-                write!(f, "{}: The symbol `{}` cannot be used as a unary operator", p, k),
-            InvalidFunctionParam(ref p, ref k) => 
-                write!(f, "{}: Parameter `{}` of function definition must be a variable name (start with $)", p, k),
-            ExpectedVarLeft(ref p) => 
-                write!(f, "{}: The left side of `:=` must be a variable name (start with $)", p),
-            ExpectedVarRight(ref p, ref k) => 
-                write!(f, "{}: The right side of `{}` must be a variable name (start with $)", p, k),
-            UnterminatedComment(ref p) => 
-                write!(f, "{}: Comment has no closing tag", p),
-            NumberOutOfRange(ref p, ref n) => 
-                write!(f, "{}: Number out of range: {}", p, n),
-            InvalidUnicodeEscape(ref p) => 
-                write!(f, "{}: The escape sequence \\u must be followed by 4 hex digits", p),
-            UnsupportedEscape(ref p, ref c) => 
-                write!(f, "{}: Unsupported escape sequence: \\{}", p, c),
-            UnterminatedQuoteProp(ref p) => 
-                write!(f, "{}: Quoted property name must be terminated with a backquote (`)", p),
-            NegatingNonNumeric(ref p, ref v) => 
-                write!(f, "{}: Cannot negate a non-numeric value `{}`", p, v),
-            NonStringKey(ref p, ref v) => 
-                write!( f, "{}: Key in object structure must evaluate to a string; got: {}", p, v),
-            MultipleKeys(ref p, ref k) => 
-                write!( f, "{}: Multiple key definitions evaluate to same key: {}", p, k),
-            LeftSideNotNumber(ref p, ref o) => 
-                write!( f, "{}: The left side of the `{}` operator must evaluate to a number", p, o),
-            RightSideNotNumber(ref p, ref o) => 
-                write!( f, "{}: The right side of the `{}` operator must evaluate to a number", p, o),
-            BinaryOpMismatch(ref p,ref l ,ref r ,ref o ) => 
-                write!(f, "{}: The values {} and {} either side of operator {} must be of the same data type", p, l, r, o),
-            BinaryOpTypes(ref p, ref o) => 
-                write!(f, "{}: The expressions either side of operator `{}` must evaluate to numeric or string values", p, o),
+        match *self {
+            UnexpectedCharacter { ref ch, ref line, ref column, } =>
+                write!(f, "Unexpected character in input: {} at ({}:{})", ch, line, column),
+            UnexpectedEndOfJson =>
+                write!(f, "Unexpected end of JSON input"),
+            ExceededDepthLimit =>
+                write!(f, "Exceeded depth limit while parsing input"),
+            FailedUtf8Parsing =>
+                write!(f, "Failed to parse UTF-8 bytes in input"),
+            WrongType(ref s) =>
+                write!(f, "Wrong type in input, expected: {}", s),
+            SyntaxError(ref p, ref t) =>
+                write!(f, "{} Syntax error `{}`", p, t),
+            UnterminatedStringLiteral(ref p) =>
+                write!(f, "{} Unterminated string literal", p),
+            UnexpectedToken(ref p, ref e, ref a) =>
+                write!(f, "{} Expected `{}`, got `{}`", p, e, a),
+            ExpectedTokenBeforeEnd(ref p, ref t) =>
+                write!(f, "{} Expected `{}` before end of expression", p, t),
+            InvalidStep(ref p, ref k) =>
+                write!(f, "{} The literal value `{}` cannot be used as a step within a path expression", p, k),
+            InvalidPredicate(ref p) =>
+                write!(f, "{} A predicate cannot follow a grouping expression in a step", p),
+            MultipleGroupBy(ref p) =>
+                write!(f, "{} Each step can only have one grouping expression", p),
+            InvalidUnary(ref p, ref k) =>
+                write!(f, "{} The symbol `{}` cannot be used as a unary operator", p, k),
+            InvalidFunctionParam(ref p, ref k) =>
+                write!(f, "{} Parameter `{}` of function definition must be a variable name (start with $)", p, k),
+            ExpectedVarLeft(ref p) =>
+                write!(f, "{} The left side of `:=` must be a variable name (start with $)", p),
+            ExpectedVarRight(ref p, ref k) =>
+                write!(f, "{} The right side of `{}` must be a variable name (start with $)", p, k),
+            UnterminatedComment(ref p) =>
+                write!(f, "{} Comment has no closing tag", p),
+            LexedNumberOutOfRange(ref p, ref n) =>
+                write!(f, "{} Number out of range: {}", p, n),
+            InvalidUnicodeEscape(ref p) =>
+                write!(f, "{} The escape sequence \\u must be followed by 4 hex digits", p),
+            UnsupportedEscape(ref p, ref c) =>
+                write!(f, "{} Unsupported escape sequence: \\{}", p, c),
+            UnterminatedQuoteProp(ref p) =>
+                write!(f, "{} Quoted property name must be terminated with a backquote (`)", p),
+            NegatingNonNumeric(ref p, ref v) =>
+                write!(f, "{} Cannot negate a non-numeric value `{}`", p, v),
+            NonStringKey(ref p, ref v) =>
+                write!( f, "{} Key in object structure must evaluate to a string; got: {}", p, v),
+            MultipleKeys(ref p, ref k) =>
+                write!( f, "{} Multiple key definitions evaluate to same key: {}", p, k),
+            LeftSideNotNumber(ref p, ref o) =>
+                write!( f, "{} The left side of the `{}` operator must evaluate to a number", p, o),
+            RightSideNotNumber(ref p, ref o) =>
+                write!( f, "{} The right side of the `{}` operator must evaluate to a number", p, o),
+            BinaryOpMismatch(ref p,ref l ,ref r ,ref o ) =>
+                write!(f, "{} The values {} and {} either side of operator {} must be of the same data type", p, l, r, o),
+            BinaryOpTypes(ref p, ref o) =>
+                write!(f, "{} The expressions either side of operator `{}` must evaluate to numeric or string values", p, o),
+            NumberOfOutRange(ref n) =>
+                write!(f, "Number out of range: {}", n),
         }
     }
 }

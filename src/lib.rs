@@ -21,7 +21,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 use ast::Node;
 use evaluator::Evaluator;
 use frame::Frame;
-use value::{Value, ValuePool};
+use value::{ArrayFlags, Value, ValuePool};
 
 pub struct JsonAta {
     ast: Node,
@@ -59,6 +59,9 @@ impl JsonAta {
             Some(input) => json::parse_with_pool(input, self.pool.clone()).unwrap(),
             None => self.pool.undefined(),
         };
+
+        // If the input is an array, wrap it in a sequence so that it gets treated as a single input
+        let input = input.wrap_in_array_if_needed(ArrayFlags::SEQUENCE | ArrayFlags::WRAPPED);
 
         self.evaluate_with_value(input)
     }

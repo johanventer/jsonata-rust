@@ -6,54 +6,58 @@ use std::path;
 use test_generator::test_resources;
 
 use jsonata::json;
-use jsonata::value::ValuePool;
+use jsonata::value::{ArrayFlags, ValuePool};
 use jsonata::JsonAta;
 
 // TODO: timelimit, depth
 #[test_resources("tests/testsuite/groups/*/*.json")]
 fn t(resource: &str) {
     let pool = ValuePool::new();
-    let test = fs::read_to_string(resource).expect("Could not read test case");
-    let mut test = json::parse_with_pool(&test, pool.clone()).unwrap();
 
-    // If it's not an array, make it an array
-    if !test.is_array() {
-        test = test.wrap_in_array();
-    }
+    let test = fs::read_to_string(resource)
+        .unwrap_or_else(|_| panic!("Failed to read test case: {}", resource));
+
+    let test = json::parse_with_pool(&test, pool.clone())
+        .unwrap()
+        .wrap_in_array_if_needed(ArrayFlags::empty());
 
     for case in test.members() {
-        let expr = if case.get_entry("expr").is_string() {
-            case.get_entry("expr").as_string()
-        } else if case.get_entry("expr-file").is_string() {
-            let expr_file = path::Path::new(resource)
-                .parent()
-                .unwrap()
-                .join(case.get_entry("expr-file").as_string());
-            fs::read_to_string(expr_file).expect("Could not read expr-file")
+        let expr = case.get_entry("expr");
+        let expr_file = case.get_entry("expr-file");
+
+        let expr = if expr.is_string() {
+            expr.as_string()
+        } else if expr_file.is_string() {
+            fs::read_to_string(
+                path::Path::new(resource)
+                    .parent()
+                    .unwrap()
+                    .join(expr_file.as_string()),
+            )
+            .unwrap_or_else(|_| panic!("Failed to read expr-file: {}", expr_file.as_string()))
         } else {
             panic!("No expression")
         };
 
-        let data = if !case.get_entry("data").is_undefined() && !case.get_entry("data").is_null() {
-            case.get_entry("data")
-        } else if case.get_entry("dataset").is_string() {
-            let dataset_file = format!(
-                "tests/testsuite/datasets/{}.json",
-                case.get_entry("dataset").as_string()
-            );
-            let json = fs::read_to_string(&dataset_file)
-                .unwrap_or_else(|_e| panic!("Could not read dataset file: {}", dataset_file));
-            json::parse_with_pool(&json, pool.clone()).unwrap()
+        let data = case.get_entry("data");
+        let dataset = case.get_entry("dataset");
+
+        let data = if dataset.is_string() {
+            let dataset = format!("tests/testsuite/datasets/{}.json", dataset.as_string());
+            let dataset = fs::read_to_string(&dataset)
+                .unwrap_or_else(|_e| panic!("Could not read dataset file: {}", dataset));
+            json::parse_with_pool(&dataset, pool.clone()).unwrap()
         } else {
-            case.pool.undefined()
+            data
         };
 
         let jsonata = JsonAta::new_with_pool(&expr, pool.clone());
 
         match jsonata {
             Ok(mut jsonata) => {
-                if case.get_entry("bindings").is_object() {
-                    for (key, value) in case.get_entry("bindings").entries() {
+                let bindings = case.get_entry("bindings");
+                if bindings.is_object() {
+                    for (key, value) in bindings.entries() {
                         jsonata.assign_var(key, value);
                     }
                 }
@@ -62,38 +66,28 @@ fn t(resource: &str) {
 
                 match result {
                     Ok(result) => {
-                        if case.get_entry("undefinedResult").is_bool()
-                            && case.get_entry("undefinedResult") == true
-                        {
+                        let undefined_result = case.get_entry("undefinedResult");
+                        let expected_result = case.get_entry("result");
+                        if undefined_result.is_bool() && undefined_result == true {
                             assert!(result.is_undefined())
-                        } else if !case.get_entry("result").is_undefined() {
-                            // For numeric results, we can't compare directly due to floating point
-                            // error
-                            if case.get_entry("result").is_number() {
-                                assert!(
-                                    (case.get_entry("result").as_f64() - result.as_f64()).abs()
-                                        < f64::EPSILON
-                                );
-                            } else {
-                                assert!(result == case.get_entry("result"));
-                            }
+                        } else if expected_result.is_number() {
+                            assert!(result.is_number());
+                            assert!(
+                                (expected_result.as_f64() - result.as_f64()).abs() < f64::EPSILON
+                            );
+                        } else {
+                            assert_eq!(result, expected_result);
                         }
                     }
                     Err(error) => {
-                        println!("{}", error);
-                        println!("CASE CODE: {:#?}", case.get_entry("code"));
-                        println!("ERROR CODE: {:#?}", error.code());
-                        assert!(!case.get_entry("code").is_null());
-                        assert!(case.get_entry("code") == error.code());
+                        let code = case.get_entry("code");
+                        assert_eq!(code, error.code());
                     }
                 }
             }
             Err(error) => {
-                // The parsing error is expected, let's make sure it matches
-                println!("XXCASE CODE: {:#?}", case.get_entry("code"));
-                println!("ERROR CODE: {:#?}", error.code());
-                assert!(!case.get_entry("code").is_null());
-                assert!(case.get_entry("code") == error.code());
+                let code = case.get_entry("code");
+                assert_eq!(code, error.code());
             }
         }
     }

@@ -42,8 +42,8 @@ impl Evaluator {
     }
 
     #[inline]
-    pub fn array_with_capacity(&self, capacity: usize) -> Value {
-        Value::new_array_with_capacity(self.pool.clone(), capacity)
+    pub fn array_with_capacity(&self, capacity: usize, flags: ArrayFlags) -> Value {
+        Value::new_array_with_capacity(self.pool.clone(), capacity, flags)
     }
 
     #[inline]
@@ -116,7 +116,11 @@ impl Evaluator {
 
     fn evaluate_var(&self, name: &str, input: Value, frame: Frame) -> Result<Value> {
         if name.is_empty() {
-            unimplemented!("TODO: $ context variable not implemented yet");
+            if input.has_flags(ArrayFlags::WRAPPED) {
+                Ok(input.get_member(0))
+            } else {
+                Ok(input)
+            }
         } else if let Some(value) = frame.lookup(name) {
             Ok(value)
         } else {
@@ -134,21 +138,26 @@ impl Evaluator {
         match *op {
             UnaryOp::Minus(ref value) => {
                 let result = self.evaluate(value, input, frame)?;
-                match *result.as_ref() {
+                let result = match *result.as_ref() {
                     ValueKind::Undefined => Ok(self.pool.undefined()),
-                    ValueKind::Number(num) => Ok(self.number(-num)),
-                    _ => Err(Error::negating_non_numeric(node.position, result)),
-                }
+                    ValueKind::Number(num) if !num.is_nan() => Ok(self.number(-num)),
+                    _ => Err(Error::negating_non_numeric(node.position, result.clone())),
+                };
+                result
             }
             UnaryOp::ArrayConstructor(ref array) => {
-                let result = self.array(if node.cons_array {
+                let mut result = self.array(if node.cons_array {
                     ArrayFlags::CONS
                 } else {
                     ArrayFlags::empty()
                 });
                 for item in array.iter() {
                     let value = self.evaluate(item, input.clone(), frame.clone())?;
-                    result.push_index(value.index);
+                    if let NodeKind::Unary(UnaryOp::ArrayConstructor(..)) = item.kind {
+                        result.push_index(value.index);
+                    } else {
+                        result = self.append(result, value);
+                    }
                 }
                 Ok(result)
             }
@@ -250,24 +259,30 @@ impl Evaluator {
             | BinaryOp::Modulus => {
                 let lhs = match *lhs.as_ref() {
                     ValueKind::Undefined => return Ok(self.pool.undefined()),
-                    ValueKind::Number(n) => f64::from(n),
+                    ValueKind::Number(n) if !n.is_nan() => f64::from(n),
                     _ => return Err(Error::left_side_not_number(node.position, op)),
                 };
 
                 let rhs = match *rhs.as_ref() {
                     ValueKind::Undefined => return Ok(self.pool.undefined()),
-                    ValueKind::Number(n) => f64::from(n),
+                    ValueKind::Number(n) if !n.is_nan() => f64::from(n),
                     _ => return Err(Error::right_side_not_number(node.position, op)),
                 };
 
-                Ok(self.number(match op {
+                let result = match op {
                     BinaryOp::Add => lhs + rhs,
                     BinaryOp::Subtract => lhs - rhs,
                     BinaryOp::Multiply => lhs * rhs,
                     BinaryOp::Divide => lhs / rhs,
                     BinaryOp::Modulus => lhs % rhs,
                     _ => unreachable!(),
-                }))
+                };
+
+                if result.is_infinite() {
+                    Err(Error::NumberOfOutRange(result))
+                } else {
+                    Ok(self.number(result))
+                }
             }
 
             BinaryOp::LessThan
@@ -351,7 +366,7 @@ impl Evaluator {
         let mut input = if input.is_array() && !matches!(steps[0].kind, NodeKind::Var(..)) {
             input
         } else {
-            input.wrap_in_array()
+            input.wrap_in_array(ArrayFlags::empty())
         };
 
         let mut result = self.pool.undefined();
@@ -390,25 +405,25 @@ impl Evaluator {
 
     fn evaluate_step(
         &self,
-        node: &Node,
+        step: &Node,
         input: Value,
         frame: Frame,
         last_step: bool,
     ) -> Result<Value> {
         let mut result = self.array(ArrayFlags::SEQUENCE);
 
-        if let NodeKind::Sort(ref sorts) = node.kind {
+        if let NodeKind::Sort(ref sorts) = step.kind {
             result = self.evaluate_sorts(sorts, input, frame.clone())?;
-            if let Some(ref stages) = node.stages {
+            if let Some(ref stages) = step.stages {
                 result = self.evaluate_stages(stages, result, frame)?;
             }
             return Ok(result);
         }
 
         for input in input.members() {
-            let mut input_result = self.evaluate(node, input, frame.clone())?;
+            let mut input_result = self.evaluate(step, input, frame.clone())?;
 
-            if let Some(ref stages) = node.stages {
+            if let Some(ref stages) = step.stages {
                 for stage in stages {
                     input_result = self.evaluate_filter(stage, input_result, frame.clone())?;
                 }
@@ -426,8 +441,11 @@ impl Evaluator {
             {
                 result.get_member(0)
             } else {
-                // Flatten the sequence
+                // This is the crux of sequence flattening. Arrays are flattened as long as they
+                // are not flagged for consing.
+
                 let result_sequence = self.array(ArrayFlags::SEQUENCE);
+
                 for result_item in result.members() {
                     if !result_item.is_array() || result_item.has_flags(ArrayFlags::CONS) {
                         result_sequence.push_index(result_item.index);
@@ -437,7 +455,6 @@ impl Evaluator {
                         }
                     }
                 }
-
                 result_sequence
             },
         )
@@ -476,7 +493,7 @@ impl Evaluator {
                         let item = input.get_member(index as usize);
                         if !item.is_undefined() {
                             if item.is_array() {
-                                result = item.clone();
+                                result = item;
                             } else {
                                 result.push_index(item.index);
                             }

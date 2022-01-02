@@ -34,14 +34,12 @@ impl Evaluator {
             return arg1;
         }
 
-        let arg1 = arg1.wrap_in_array_if_needed();
-        let arg2 = arg2.wrap_in_array_if_needed();
+        let arg1 = arg1.wrap_in_array_if_needed(ArrayFlags::SEQUENCE);
+        let arg2 = arg2.wrap_in_array_if_needed(ArrayFlags::empty());
 
-        let result = self.array_with_capacity(arg1.len() + arg2.len());
-        arg1.members().for_each(|m| result.push_index(m.index));
-        arg2.members().for_each(|m| result.push_index(m.index));
+        arg2.members().for_each(|m| arg1.push_index(m.index));
 
-        result
+        arg1
     }
 
     pub fn boolean(&self, arg: Value) -> bool {
@@ -53,7 +51,7 @@ impl Evaluator {
                 ValueKind::Number(num) => num != 0.0,
                 ValueKind::String(ref str) => !str.is_empty(),
                 ValueKind::Object(ref obj) => !obj.is_empty(),
-                ValueKind::Array { .. } => panic!("unexpected Value::Array"),
+                ValueKind::Array { .. } => unreachable!(),
             }
         }
 

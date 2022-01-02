@@ -1,5 +1,6 @@
 use std::{
     cell::{Ref, RefCell, RefMut},
+    fmt::Debug,
     rc::Rc,
 };
 
@@ -10,7 +11,6 @@ use crate::node_pool::NodePool;
 ///
 /// The tree structure of both JSON input and evaluation results is represented
 /// in the pool as a flat list of `ValueKind` where children are referenced by index.
-#[derive(Debug)]
 pub struct ValuePool(Rc<RefCell<NodePool<ValueKind>>>);
 
 impl ValuePool {
@@ -50,5 +50,24 @@ impl Default for ValuePool {
 impl Clone for ValuePool {
     fn clone(&self) -> Self {
         Self(self.0.clone())
+    }
+}
+
+impl Debug for ValuePool {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, kind) in self.0.borrow().iter().enumerate() {
+            write!(f, "[{}] ", i)?;
+            match kind {
+                ValueKind::Undefined => write!(f, "undefined")?,
+                ValueKind::Null => write!(f, "null")?,
+                ValueKind::Number(value) => write!(f, "{}", value)?,
+                ValueKind::Bool(value) => write!(f, "{}", value)?,
+                ValueKind::String(value) => write!(f, "{}", value)?,
+                ValueKind::Array(array, _) => f.debug_list().entries(array.iter()).finish()?,
+                ValueKind::Object(object) => f.debug_map().entries(object.iter()).finish()?,
+            };
+            writeln!(f)?;
+        }
+        Ok(())
     }
 }

@@ -18,7 +18,7 @@
 // with MIR support the compiler will get smarter about this.
 
 use super::number::Number;
-use crate::value::ValuePool;
+use crate::value::{ArrayFlags, ValuePool};
 use crate::{Error, Result, Value};
 use std::char::decode_utf16;
 use std::convert::TryFrom;
@@ -631,7 +631,11 @@ impl<'a> Parser<'a> {
                         }
 
                         stack.push(StackBlock(
-                            Value::new_array_with_capacity(self.pool.clone(), 2),
+                            Value::new_array_with_capacity(
+                                self.pool.clone(),
+                                2,
+                                ArrayFlags::empty(),
+                            ),
                             None,
                         ));
                         continue 'parsing;
