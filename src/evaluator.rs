@@ -235,7 +235,7 @@ impl Evaluator {
             return Ok(input);
         }
 
-        let lhs = self.evaluate(lhs, input, frame)?;
+        let lhs = self.evaluate(lhs, input.clone(), frame.clone())?;
 
         match op {
             BinaryOp::Add
@@ -356,6 +356,26 @@ impl Evaluator {
                 }
 
                 Ok(result)
+            }
+
+            BinaryOp::Concat => {
+                let lstr = if !lhs.is_undefined() {
+                    fn_string(
+                        self.fn_context(node.position, input.clone(), frame.clone()),
+                        lhs,
+                    )?
+                    .as_string()
+                } else {
+                    "".to_string()
+                };
+
+                let rstr = if !rhs.is_undefined() {
+                    fn_string(self.fn_context(node.position, input, frame), rhs)?.as_string()
+                } else {
+                    "".to_string()
+                };
+
+                Ok(self.pool.string(&(lstr + &rstr)))
             }
 
             _ => unimplemented!("TODO: binary op not supported yet: {:#?}", *op),
