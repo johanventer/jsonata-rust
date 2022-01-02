@@ -10,7 +10,6 @@ pub use pool::ValuePool;
 
 use crate::json::Number;
 use crate::node_pool::{NodePool, NodeRef};
-use crate::{Error, Result};
 
 /// A thin wrapper around the index to a `ValueKind` within a `ValuePool`.
 ///
@@ -107,6 +106,10 @@ impl Value {
 
     pub fn is_number(&self) -> bool {
         matches!(self.pool.borrow().get(self.index), ValueKind::Number(..))
+    }
+
+    pub fn is_nan(&self) -> bool {
+        matches!(self.pool.borrow().get(self.index), ValueKind::Number(n) if n.is_nan())
     }
 
     pub fn is_string(&self) -> bool {

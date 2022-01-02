@@ -473,35 +473,56 @@ impl Evaluator {
         unimplemented!("Stages not yet implemented")
     }
 
-    fn evaluate_filter(&self, node: &Node, input: Value, _frame: Frame) -> Result<Value> {
+    fn evaluate_filter(&self, node: &Node, input: Value, frame: Frame) -> Result<Value> {
         let mut result = self.array(ArrayFlags::SEQUENCE);
 
+        let get_index = |n: f64| {
+            let mut index = n.floor() as isize;
+            let length = if input.is_array() {
+                input.len() as isize
+            } else {
+                1
+            };
+            if index < 0 {
+                // Count from the end of the array
+                index += length;
+            }
+            index as usize
+        };
+
         match node.kind {
-            NodeKind::Filter(ref filter) => {
-                match filter.kind {
-                    NodeKind::Number(n) => {
-                        let mut index = n.floor() as isize;
-                        let length = if input.is_array() {
-                            input.len() as isize
+            NodeKind::Filter(ref filter) => match filter.kind {
+                NodeKind::Number(n) => {
+                    let index = get_index(n);
+                    let item = input.get_member(index as usize);
+                    if !item.is_undefined() {
+                        if item.is_array() {
+                            result = item;
                         } else {
-                            1
-                        };
-                        if index < 0 {
-                            // Count from the end of the array
-                            index += length;
-                        }
-                        let item = input.get_member(index as usize);
-                        if !item.is_undefined() {
-                            if item.is_array() {
-                                result = item;
-                            } else {
-                                result.push_index(item.index);
-                            }
+                            result.push_index(item.index);
                         }
                     }
-                    _ => unimplemented!("Filters other than numbers are not yet supported"),
                 }
-            }
+                _ => {
+                    for (i, item) in input.members().enumerate() {
+                        let mut index = self.evaluate(filter, item.clone(), frame.clone())?;
+                        if index.is_number() && !index.is_nan() {
+                            index = index.wrap_in_array(ArrayFlags::empty());
+                        }
+                        if index.is_array() && index.members().all(|v| v.is_number() && !v.is_nan())
+                        {
+                            index.members().for_each(|v| {
+                                let index = get_index(v.as_f64());
+                                if index == i {
+                                    result.push_index(item.index);
+                                }
+                            });
+                        } else if self.boolean(index) {
+                            result.push_index(item.index);
+                        }
+                    }
+                }
+            },
             _ => unimplemented!("Filters other than numbers are not yet supported"),
         };
 
