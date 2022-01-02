@@ -20,7 +20,9 @@ impl Frame {
     }
 
     pub fn bind(&self, name: &str, value: Value) {
-        self.0.borrow_mut().bindings.insert(name.to_string(), value);
+        // Values in the frame need to be complete clones, otherwise modifying them would change their value
+        let v = value.pool.value((*value.as_ref()).clone());
+        self.0.borrow_mut().bindings.insert(name.to_string(), v);
     }
 
     pub fn lookup(&self, name: &str) -> Option<Value> {

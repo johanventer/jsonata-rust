@@ -92,9 +92,9 @@ impl Evaluator {
             return Ok(self.pool.undefined());
         }
 
-        let mut result = input;
+        let mut result = self.pool.undefined();
         for expr in exprs {
-            result = self.evaluate(expr, result.clone(), frame.clone())?;
+            result = self.evaluate(expr, input.clone(), frame.clone())?;
         }
 
         Ok(result)
@@ -232,8 +232,9 @@ impl Evaluator {
         if *op == BinaryOp::Bind {
             if let NodeKind::Var(ref name) = lhs.kind {
                 frame.bind(name, rhs.clone());
+                return Ok(rhs);
             }
-            return Ok(rhs);
+            unreachable!()
         }
 
         let lhs = self.evaluate(lhs, input.clone(), frame.clone())?;

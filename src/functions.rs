@@ -61,11 +61,9 @@ pub fn fn_append(context: FunctionContext, arg1: Value, arg2: Value) -> Result<V
         return Ok(arg1);
     }
 
-    let arg1 = arg1.wrap_in_array_if_needed(ArrayFlags::empty());
+    let result = context.pool.value((*arg1.as_ref()).clone());
+    let result = result.wrap_in_array_if_needed(ArrayFlags::SEQUENCE);
     let arg2 = arg2.wrap_in_array_if_needed(ArrayFlags::empty());
-
-    let result = context.pool.array(ArrayFlags::SEQUENCE);
-    arg1.members().for_each(|m| result.push_index(m.index));
     arg2.members().for_each(|m| result.push_index(m.index));
 
     Ok(result)

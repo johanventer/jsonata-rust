@@ -16,6 +16,7 @@ bitflags! {
     }
 }
 
+#[derive(Clone)]
 pub enum ValueKind {
     Undefined,
     Null,
