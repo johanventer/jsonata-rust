@@ -54,7 +54,7 @@ fn t(resource: &str) {
         let jsonata = JsonAta::new_with_pool(&expr, pool.clone());
 
         match jsonata {
-            Ok(mut jsonata) => {
+            Ok(jsonata) => {
                 let bindings = case.get_entry("bindings");
                 if bindings.is_object() {
                     for (key, value) in bindings.entries() {
@@ -80,12 +80,14 @@ fn t(resource: &str) {
                         }
                     }
                     Err(error) => {
+                        println!("{}", error);
                         let code = case.get_entry("code");
                         assert_eq!(code, error.code());
                     }
                 }
             }
             Err(error) => {
+                println!("{}", error);
                 let code = case.get_entry("code");
                 assert_eq!(code, error.code());
             }

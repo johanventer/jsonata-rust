@@ -115,17 +115,17 @@ impl Evaluator {
     }
 
     fn evaluate_var(&self, name: &str, input: Value, frame: Frame) -> Result<Value> {
-        if name.is_empty() {
+        Ok(if name.is_empty() {
             if input.has_flags(ArrayFlags::WRAPPED) {
-                Ok(input.get_member(0))
+                input.get_member(0)
             } else {
-                Ok(input)
+                input
             }
         } else if let Some(value) = frame.lookup(name) {
-            Ok(value)
+            value
         } else {
-            Ok(self.pool.undefined())
-        }
+            self.pool.undefined()
+        })
     }
 
     fn evaluate_unary_op(
@@ -180,8 +180,13 @@ impl Evaluator {
         }
 
         let mut groups: HashMap<String, Group> = HashMap::new();
+        let input = input.wrap_in_array_if_needed(ArrayFlags::empty());
 
-        let mut evaluate_group_item = |item: Value| -> Result<Value> {
+        if input.is_empty() {
+            input.push(ValueKind::Undefined);
+        }
+
+        for item in input.members() {
             for (index, pair) in object.iter().enumerate() {
                 let key = self.evaluate(&pair.0, item.clone(), frame.clone())?;
                 if !key.is_string() {
@@ -191,7 +196,7 @@ impl Evaluator {
                 match groups.entry(key.as_string()) {
                     hash_map::Entry::Occupied(mut entry) => {
                         let group = entry.get_mut();
-                        if group.index == index {
+                        if group.index != index {
                             return Err(Error::multiple_keys(position, key));
                         }
                         group.data = self.append(group.data.clone(), item.clone());
@@ -203,18 +208,6 @@ impl Evaluator {
                         });
                     }
                 };
-            }
-
-            Ok(self.pool.undefined())
-        };
-
-        if !input.is_array() {
-            evaluate_group_item(input)?;
-        } else if input.is_empty() {
-            evaluate_group_item(self.pool.undefined())?;
-        } else {
-            for item in input.members() {
-                evaluate_group_item(item)?;
             }
         }
 
@@ -394,7 +387,7 @@ impl Evaluator {
         if node.keep_singleton_array {
             let mut flags = result.get_flags();
             if flags.contains(ArrayFlags::CONS) && !flags.contains(ArrayFlags::SEQUENCE) {
-                flags |= ArrayFlags::SEQUENCE;
+                result = result.wrap_in_array(flags | ArrayFlags::SEQUENCE);
             }
             flags |= ArrayFlags::SINGLETON;
             result.set_flags(flags);
@@ -424,16 +417,17 @@ impl Evaluator {
             return Ok(result);
         }
 
-        for input in input.members() {
-            let mut input_result = self.evaluate(step, input, frame.clone())?;
+        for item in input.members() {
+            let mut item_result = self.evaluate(step, item, frame.clone())?;
 
             if let Some(ref stages) = step.stages {
                 for stage in stages {
-                    input_result = self.evaluate_filter(stage, input_result, frame.clone())?;
+                    item_result = self.evaluate_filter(stage, item_result, frame.clone())?;
                 }
             }
-            if !input_result.is_undefined() {
-                result.push_index(input_result.index);
+
+            if !item_result.is_undefined() {
+                result.push_index(item_result.index);
             }
         }
 
@@ -445,9 +439,6 @@ impl Evaluator {
             {
                 result.get_member(0)
             } else {
-                // This is the crux of sequence flattening. Arrays are flattened as long as they
-                // are not flagged for consing.
-
                 let result_sequence = self.array(ArrayFlags::SEQUENCE);
 
                 for result_item in result.members() {

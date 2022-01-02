@@ -50,7 +50,7 @@ impl JsonAta {
         &self.ast
     }
 
-    pub fn assign_var(&mut self, name: &str, value: Value) {
+    pub fn assign_var(&self, name: &str, value: Value) {
         self.frame.bind(name, value)
     }
 
@@ -59,9 +59,6 @@ impl JsonAta {
             Some(input) => json::parse_with_pool(input, self.pool.clone()).unwrap(),
             None => self.pool.undefined(),
         };
-
-        // If the input is an array, wrap it in a sequence so that it gets treated as a single input
-        let input = input.wrap_in_array_if_needed(ArrayFlags::SEQUENCE | ArrayFlags::WRAPPED);
 
         self.evaluate_with_value(input)
     }
@@ -77,6 +74,15 @@ impl JsonAta {
         // //     .borrow_mut()
         // //     .bind("string", Rc::new(Value::NativeFn(functions::string)))
         // //     .bind("boolean", Rc::new(Value::NativeFn(functions::boolean)));
+
+        // If the input is an array, wrap it in an array so that it gets treated as a single input
+        let input = if input.is_array() {
+            input.wrap_in_array(ArrayFlags::WRAPPED)
+        } else {
+            input
+        };
+
+        self.assign_var("$", input.clone());
 
         let evaluator = Evaluator::new(self.pool.clone());
         evaluator.evaluate(&self.ast, input, self.frame.clone())
