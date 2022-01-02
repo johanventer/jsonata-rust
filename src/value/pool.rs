@@ -66,6 +66,10 @@ impl Debug for ValuePool {
                 ValueKind::Array(array, _) => f.debug_list().entries(array.iter()).finish()?,
                 ValueKind::Object(object) => f.debug_map().entries(object.iter()).finish()?,
                 ValueKind::Lambda(..) => write!(f, "<lambda>")?,
+                ValueKind::NativeFn0(..)
+                | ValueKind::NativeFn1(..)
+                | ValueKind::NativeFn2(..)
+                | ValueKind::NativeFn3(..) => write!(f, "<nativefn>")?,
             };
             writeln!(f)?;
         }

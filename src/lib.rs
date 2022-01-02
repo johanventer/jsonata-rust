@@ -21,6 +21,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 use ast::Node;
 use evaluator::Evaluator;
 use frame::Frame;
+use functions::*;
 use value::{ArrayFlags, Value, ValuePool};
 
 pub struct JsonAta {
@@ -82,7 +83,17 @@ impl JsonAta {
             input
         };
 
-        self.assign_var("$", input.clone());
+        macro_rules! bind {
+            ($name:literal, $new:ident, $fn:ident) => {
+                self.frame.bind($name, Value::$new(self.pool.clone(), $fn));
+            };
+        }
+
+        self.frame.bind("$", input.clone());
+        bind!("test", new_nativefn0, fn_test);
+        bind!("lookup", new_nativefn2, fn_lookup);
+        bind!("append", new_nativefn2, fn_append);
+        bind!("boolean", new_nativefn1, fn_boolean);
 
         let evaluator = Evaluator::new(self.pool.clone());
         evaluator.evaluate(&self.ast, input, self.frame.clone())

@@ -98,6 +98,21 @@ impl Value {
         Value { pool, index }
     }
 
+    pub fn new_nativefn0(pool: ValuePool, func: fn(ValuePool) -> Value) -> Value {
+        let index = pool.borrow_mut().insert(ValueKind::NativeFn0(func));
+        Value { pool, index }
+    }
+
+    pub fn new_nativefn1(pool: ValuePool, func: fn(ValuePool, Value) -> Value) -> Value {
+        let index = pool.borrow_mut().insert(ValueKind::NativeFn1(func));
+        Value { pool, index }
+    }
+
+    pub fn new_nativefn2(pool: ValuePool, func: fn(ValuePool, Value, Value) -> Value) -> Value {
+        let index = pool.borrow_mut().insert(ValueKind::NativeFn2(func));
+        Value { pool, index }
+    }
+
     pub fn is_undefined(&self) -> bool {
         matches!(self.pool.borrow().get(self.index), ValueKind::Undefined)
     }
@@ -445,16 +460,16 @@ impl PartialEq<String> for Value {
     }
 }
 
-pub struct Members<'pool> {
-    pool: &'pool ValuePool,
-    inner: std::slice::Iter<'pool, usize>,
+pub struct Members<'a> {
+    pool: &'a ValuePool,
+    inner: std::slice::Iter<'a, usize>,
 }
 
-impl<'pool> Members<'pool> {
+impl<'a> Members<'a> {
     /// # Safety
     /// The iterator's lifetime is tied to the pool, and as long as the array is not
     /// removed from the pool during the lifetime of this iterator then this is safe.
-    pub unsafe fn new(pool: &'pool ValuePool, array: *const Vec<usize>) -> Self {
+    pub unsafe fn new(pool: &'a ValuePool, array: *const Vec<usize>) -> Self {
         Self {
             pool,
             inner: (*array).iter(),
@@ -462,7 +477,7 @@ impl<'pool> Members<'pool> {
     }
 }
 
-impl<'pool> Iterator for Members<'pool> {
+impl<'a> Iterator for Members<'a> {
     type Item = Value;
 
     #[inline]
@@ -474,16 +489,16 @@ impl<'pool> Iterator for Members<'pool> {
     }
 }
 
-pub struct Entries<'pool> {
-    pool: &'pool ValuePool,
-    inner: std::collections::hash_map::Iter<'pool, String, usize>,
+pub struct Entries<'a> {
+    pool: &'a ValuePool,
+    inner: std::collections::hash_map::Iter<'a, String, usize>,
 }
 
-impl<'pool> Entries<'pool> {
+impl<'a> Entries<'a> {
     /// # Safety
     /// The iterator's lifetime is tied to the pool, and as long as the map is not
     /// removed from the pool during the lifetime of this iterator then this is safe.
-    pub unsafe fn new(pool: &'pool ValuePool, map: *const HashMap<String, usize>) -> Self {
+    pub unsafe fn new(pool: &'a ValuePool, map: *const HashMap<String, usize>) -> Self {
         Self {
             pool,
             inner: (*map).iter(),
@@ -491,8 +506,8 @@ impl<'pool> Entries<'pool> {
     }
 }
 
-impl<'pool> Iterator for Entries<'pool> {
-    type Item = (&'pool String, Value);
+impl<'a> Iterator for Entries<'a> {
+    type Item = (&'a String, Value);
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
@@ -520,8 +535,8 @@ impl fmt::Debug for Value {
 
 // FIXME: This is going to break if the pool grows as it will reallocate and
 // the pointer will no longer be correct
-pub struct ValueRef<'pool> {
-    pool: PhantomData<&'pool ValuePool>,
+pub struct ValueRef<'a> {
+    pool: PhantomData<&'a ValuePool>,
     kind: *const ValueKind,
 }
 

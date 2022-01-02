@@ -1,6 +1,7 @@
 use bitflags::bitflags;
 use std::collections::HashMap;
 
+use super::{Value, ValuePool};
 use crate::ast::Node;
 use crate::json::Number;
 
@@ -22,6 +23,10 @@ pub enum ValueKind {
     Array(Vec<usize>, ArrayFlags),
     Object(HashMap<String, usize>),
     Lambda(Node),
+    NativeFn0(fn(ValuePool) -> Value),
+    NativeFn1(fn(ValuePool, Value) -> Value),
+    NativeFn2(fn(ValuePool, Value, Value) -> Value),
+    NativeFn3(fn(ValuePool, Value, Value, Value) -> Value),
 }
 
 impl PartialEq<ValueKind> for ValueKind {
@@ -155,6 +160,12 @@ impl std::fmt::Debug for ValueKind {
                 o.keys().cloned().collect::<Vec<String>>().join(", ")
             ),
             Self::Lambda(..) => write!(f, "<lambda>"),
+            Self::NativeFn0(..)
+            | Self::NativeFn1(..)
+            | Self::NativeFn2(..)
+            | Self::NativeFn3(..) => {
+                write!(f, "<nativefn>")
+            }
         }
     }
 }

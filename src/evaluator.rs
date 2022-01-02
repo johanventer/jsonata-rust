@@ -2,6 +2,7 @@ use std::collections::{hash_map, HashMap};
 
 use super::ast::*;
 use super::frame::Frame;
+use super::functions::*;
 use super::json::Number;
 use super::position::Position;
 use super::value::{ArrayFlags, Value, ValueKind, ValuePool};
@@ -22,7 +23,7 @@ impl Evaluator {
     }
 
     #[inline]
-    fn bool(&self, b: bool) -> Value {
+    pub fn bool(&self, b: bool) -> Value {
         Value::new_bool(self.pool.clone(), b)
     }
 
@@ -74,7 +75,12 @@ impl Evaluator {
                 ref falsy,
             } => self.evaluate_ternary(cond, truthy, falsy.as_deref(), input, frame.clone())?,
             NodeKind::Path(ref steps) => self.evaluate_path(node, steps, input, frame.clone())?,
-            NodeKind::Name(ref name) => self.lookup(input, name),
+            NodeKind::Name(ref name) => {
+                let name = self.string(name);
+                let result = fn_lookup(self.pool.clone(), input, name.clone());
+                name.drop();
+                result
+            }
             NodeKind::Lambda { .. } => self.lambda(node),
             NodeKind::Function {
                 ref proc,
@@ -167,7 +173,7 @@ impl Evaluator {
                     if let NodeKind::Unary(UnaryOp::ArrayConstructor(..)) = item.kind {
                         result.push_index(value.index);
                     } else {
-                        result = self.append(result, value);
+                        result = fn_append(self.pool.clone(), result, value);
                     }
                 }
                 Ok(result)
@@ -210,7 +216,7 @@ impl Evaluator {
                         if group.index != index {
                             return Err(Error::multiple_keys(position, key));
                         }
-                        group.data = self.append(group.data.clone(), item.clone());
+                        group.data = fn_append(self.pool.clone(), group.data.clone(), item.clone());
                     }
                     hash_map::Entry::Vacant(entry) => {
                         entry.insert(Group {
@@ -355,7 +361,7 @@ impl Evaluator {
         frame: Frame,
     ) -> Result<Value> {
         let cond = self.evaluate(cond, input.clone(), frame.clone())?;
-        if self.boolean(cond) {
+        if fn_boolean_internal(cond) {
             self.evaluate(truthy, input, frame)
         } else if let Some(falsy) = falsy {
             self.evaluate(falsy, input, frame)
@@ -524,7 +530,7 @@ impl Evaluator {
                                     result.push_index(item.index);
                                 }
                             });
-                        } else if self.boolean(index) {
+                        } else if fn_boolean_internal(index) {
                             result.push_index(item.index);
                         }
                     }
@@ -575,6 +581,28 @@ impl Evaluator {
                 } else {
                     unreachable!()
                 }
+            }
+            ValueKind::NativeFn0(ref func) => Ok(func(self.pool.clone())),
+            ValueKind::NativeFn1(ref func) => {
+                // TODO: Error about arguments? JSONata has signatures, we could process them here
+                Ok(func(self.pool.clone(), evaluated_args.get_member(0)))
+            }
+            ValueKind::NativeFn2(ref func) => {
+                // TODO: Error about arguments? JSONata has signatures, we could process them here
+                Ok(func(
+                    self.pool.clone(),
+                    evaluated_args.get_member(0),
+                    evaluated_args.get_member(1),
+                ))
+            }
+            ValueKind::NativeFn3(ref func) => {
+                // TODO: Error about arguments? JSONata has signatures, we could process them here
+                Ok(func(
+                    self.pool.clone(),
+                    evaluated_args.get_member(0),
+                    evaluated_args.get_member(1),
+                    evaluated_args.get_member(2),
+                ))
             }
             _ => {
                 // TODO: T1006
