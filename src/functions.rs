@@ -55,14 +55,16 @@ impl Evaluator {
             }
         }
 
-        match *arg.as_ref() {
+        let result = match *arg.as_ref() {
             ValueKind::Array { .. } => match arg.len() {
                 0 => false,
                 1 => self.boolean(arg.get_member(0)),
                 _ => arg.members().any(|v| self.boolean(v)),
             },
             _ => cast(&arg),
-        }
+        };
+
+        result
     }
 }
 // use json::{stringify, JsonValue};

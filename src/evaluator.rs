@@ -289,6 +289,10 @@ impl Evaluator {
             | BinaryOp::LessThanEqual
             | BinaryOp::GreaterThan
             | BinaryOp::GreaterThanEqual => {
+                if lhs.is_undefined() || rhs.is_undefined() {
+                    return Ok(self.pool.undefined());
+                }
+
                 if !((lhs.is_number() || lhs.is_string()) && (rhs.is_number() || rhs.is_string())) {
                     return Err(Error::binary_op_types(node.position, op));
                 }
@@ -475,6 +479,7 @@ impl Evaluator {
 
     fn evaluate_filter(&self, node: &Node, input: Value, frame: Frame) -> Result<Value> {
         let mut result = self.array(ArrayFlags::SEQUENCE);
+        let input = input.wrap_in_array_if_needed(ArrayFlags::empty());
 
         let get_index = |n: f64| {
             let mut index = n.floor() as isize;
