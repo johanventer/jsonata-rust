@@ -90,7 +90,6 @@ impl JsonAta {
         }
 
         self.frame.bind("$", input.clone());
-        bind!("test", nativefn0, fn_test);
         bind!("lookup", nativefn2, fn_lookup);
         bind!("append", nativefn2, fn_append);
         bind!("boolean", nativefn1, fn_boolean);

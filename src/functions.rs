@@ -25,10 +25,6 @@ impl<'a> FunctionContext<'a> {
     }
 }
 
-pub fn fn_test(context: FunctionContext) -> Result<Value> {
-    Ok(context.pool.string("Hello From Rust!"))
-}
-
 pub fn fn_lookup_internal(context: FunctionContext, input: Value, key: &str) -> Value {
     match *input.as_ref() {
         ValueKind::Array { .. } => {
@@ -56,7 +52,7 @@ pub fn fn_lookup(context: FunctionContext, input: Value, key: Value) -> Result<V
     Ok(fn_lookup_internal(context, input, &key.as_string()))
 }
 
-pub fn fn_append(_context: FunctionContext, arg1: Value, arg2: Value) -> Result<Value> {
+pub fn fn_append(context: FunctionContext, arg1: Value, arg2: Value) -> Result<Value> {
     if arg1.is_undefined() {
         return Ok(arg2);
     }
@@ -65,12 +61,14 @@ pub fn fn_append(_context: FunctionContext, arg1: Value, arg2: Value) -> Result<
         return Ok(arg1);
     }
 
-    let arg1 = arg1.wrap_in_array_if_needed(ArrayFlags::SEQUENCE);
+    let arg1 = arg1.wrap_in_array_if_needed(ArrayFlags::empty());
     let arg2 = arg2.wrap_in_array_if_needed(ArrayFlags::empty());
 
-    arg2.members().for_each(|m| arg1.push_index(m.index));
+    let result = context.pool.array(ArrayFlags::SEQUENCE);
+    arg1.members().for_each(|m| result.push_index(m.index));
+    arg2.members().for_each(|m| result.push_index(m.index));
 
-    Ok(arg1)
+    Ok(result)
 }
 
 pub fn fn_boolean(context: FunctionContext, arg: Value) -> Result<Value> {

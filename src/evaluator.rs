@@ -231,9 +231,9 @@ impl Evaluator {
 
         if *op == BinaryOp::Bind {
             if let NodeKind::Var(ref name) = lhs.kind {
-                frame.bind(name, rhs);
+                frame.bind(name, rhs.clone());
             }
-            return Ok(input);
+            return Ok(rhs);
         }
 
         let lhs = self.evaluate(lhs, input.clone(), frame.clone())?;
