@@ -57,6 +57,15 @@ impl Evaluator {
         Value::new_lambda(self.pool.clone(), node.clone())
     }
 
+    fn fn_context(&self, input: Value, frame: Frame) -> FunctionContext<'_> {
+        FunctionContext {
+            pool: self.pool.clone(),
+            evaluator: self,
+            input,
+            frame,
+        }
+    }
+
     pub fn evaluate(&self, node: &Node, input: Value, frame: Frame) -> Result<Value> {
         let mut result = match node.kind {
             NodeKind::Null => self.null(),
@@ -76,17 +85,14 @@ impl Evaluator {
             } => self.evaluate_ternary(cond, truthy, falsy.as_deref(), input, frame.clone())?,
             NodeKind::Path(ref steps) => self.evaluate_path(node, steps, input, frame.clone())?,
             NodeKind::Name(ref name) => {
-                let name = self.string(name);
-                let result = fn_lookup(self.pool.clone(), input, name.clone());
-                name.drop();
-                result
+                fn_lookup_internal(self.fn_context(input.clone(), frame.clone()), input, name)
             }
             NodeKind::Lambda { .. } => self.lambda(node),
             NodeKind::Function {
                 ref proc,
                 ref args,
                 is_partial,
-            } => self.evaluate_function(node, input, proc, args, is_partial, frame.clone())?,
+            } => self.evaluate_function(input, proc, args, is_partial, frame.clone())?,
 
             _ => unimplemented!("TODO: node kind not yet supported: {:#?}", node.kind),
         };
@@ -173,7 +179,11 @@ impl Evaluator {
                     if let NodeKind::Unary(UnaryOp::ArrayConstructor(..)) = item.kind {
                         result.push_index(value.index);
                     } else {
-                        result = fn_append(self.pool.clone(), result, value);
+                        result = fn_append(
+                            self.fn_context(input.clone(), frame.clone()),
+                            result,
+                            value,
+                        )?;
                     }
                 }
                 Ok(result)
@@ -216,7 +226,11 @@ impl Evaluator {
                         if group.index != index {
                             return Err(Error::multiple_keys(position, key));
                         }
-                        group.data = fn_append(self.pool.clone(), group.data.clone(), item.clone());
+                        group.data = fn_append(
+                            self.fn_context(input.clone(), frame.clone()),
+                            group.data.clone(),
+                            item.clone(),
+                        )?;
                     }
                     hash_map::Entry::Vacant(entry) => {
                         entry.insert(Group {
@@ -542,9 +556,8 @@ impl Evaluator {
         Ok(result)
     }
 
-    fn evaluate_function(
+    pub fn evaluate_function(
         &self,
-        _node: &Node,
         input: Value,
         proc: &Node,
         args: &[Node],
@@ -561,6 +574,16 @@ impl Evaluator {
             evaluated_args.push_index(arg.index);
         }
 
+        self.apply_function(input, evaluated_proc, evaluated_args, frame)
+    }
+
+    pub fn apply_function(
+        &self,
+        input: Value,
+        evaluated_proc: Value,
+        evaluated_args: Value,
+        frame: Frame,
+    ) -> Result<Value> {
         match *evaluated_proc.as_ref() {
             ValueKind::Lambda(ref lambda) => {
                 if let NodeKind::Lambda { ref body, ref args } = lambda.kind {
@@ -577,32 +600,32 @@ impl Evaluator {
                     }
 
                     // Evaluate the lambda!
-                    Ok(self.evaluate(body, input, frame)?)
+                    self.evaluate(body, input, frame)
                 } else {
                     unreachable!()
                 }
             }
-            ValueKind::NativeFn0(ref func) => Ok(func(self.pool.clone())),
+            ValueKind::NativeFn0(ref func) => func(self.fn_context(input, frame)),
             ValueKind::NativeFn1(ref func) => {
                 // TODO: Error about arguments? JSONata has signatures, we could process them here
-                Ok(func(self.pool.clone(), evaluated_args.get_member(0)))
+                func(self.fn_context(input, frame), evaluated_args.get_member(0))
             }
             ValueKind::NativeFn2(ref func) => {
                 // TODO: Error about arguments? JSONata has signatures, we could process them here
-                Ok(func(
-                    self.pool.clone(),
+                func(
+                    self.fn_context(input, frame),
                     evaluated_args.get_member(0),
                     evaluated_args.get_member(1),
-                ))
+                )
             }
             ValueKind::NativeFn3(ref func) => {
                 // TODO: Error about arguments? JSONata has signatures, we could process them here
-                Ok(func(
-                    self.pool.clone(),
+                func(
+                    self.fn_context(input, frame),
                     evaluated_args.get_member(0),
                     evaluated_args.get_member(1),
                     evaluated_args.get_member(2),
-                ))
+                )
             }
             _ => {
                 // TODO: T1006

@@ -8,9 +8,11 @@ mod pool;
 pub use kind::{ArrayFlags, ValueKind};
 pub use pool::ValuePool;
 
-use crate::ast::Node;
+use crate::ast::{Node, NodeKind};
+use crate::functions::FunctionContext;
 use crate::json::Number;
 use crate::node_pool::{NodePool, NodeRef};
+use crate::Result;
 
 /// A thin wrapper around the index to a `ValueKind` within a `ValuePool`.
 ///
@@ -98,17 +100,23 @@ impl Value {
         Value { pool, index }
     }
 
-    pub fn new_nativefn0(pool: ValuePool, func: fn(ValuePool) -> Value) -> Value {
+    pub fn new_nativefn0(pool: ValuePool, func: fn(FunctionContext) -> Result<Value>) -> Value {
         let index = pool.borrow_mut().insert(ValueKind::NativeFn0(func));
         Value { pool, index }
     }
 
-    pub fn new_nativefn1(pool: ValuePool, func: fn(ValuePool, Value) -> Value) -> Value {
+    pub fn new_nativefn1(
+        pool: ValuePool,
+        func: fn(FunctionContext, Value) -> Result<Value>,
+    ) -> Value {
         let index = pool.borrow_mut().insert(ValueKind::NativeFn1(func));
         Value { pool, index }
     }
 
-    pub fn new_nativefn2(pool: ValuePool, func: fn(ValuePool, Value, Value) -> Value) -> Value {
+    pub fn new_nativefn2(
+        pool: ValuePool,
+        func: fn(FunctionContext, Value, Value) -> Result<Value>,
+    ) -> Value {
         let index = pool.borrow_mut().insert(ValueKind::NativeFn2(func));
         Value { pool, index }
     }
@@ -143,6 +151,34 @@ impl Value {
 
     pub fn is_object(&self) -> bool {
         matches!(self.pool.borrow().get(self.index), ValueKind::Object(..))
+    }
+
+    pub fn is_function(&self) -> bool {
+        matches!(
+            self.pool.borrow().get(self.index),
+            ValueKind::Lambda { .. }
+                | ValueKind::NativeFn0(..)
+                | ValueKind::NativeFn1(..)
+                | ValueKind::NativeFn2(..)
+                | ValueKind::NativeFn3(..)
+        )
+    }
+
+    pub fn arity(&self) -> usize {
+        match self.pool.borrow().get(self.index) {
+            ValueKind::Lambda(ref node) => {
+                if let NodeKind::Lambda { ref args, .. } = node.kind {
+                    args.len()
+                } else {
+                    unreachable!()
+                }
+            }
+            ValueKind::NativeFn0(..) => 0,
+            ValueKind::NativeFn1(..) => 1,
+            ValueKind::NativeFn2(..) => 2,
+            ValueKind::NativeFn3(..) => 3,
+            _ => panic!("Not a function"),
+        }
     }
 
     pub fn as_ref(&self) -> NodeRef<ValueKind> {

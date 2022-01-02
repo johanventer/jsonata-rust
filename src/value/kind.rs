@@ -1,9 +1,11 @@
 use bitflags::bitflags;
 use std::collections::HashMap;
 
-use super::{Value, ValuePool};
+use super::Value;
 use crate::ast::Node;
+use crate::functions::FunctionContext;
 use crate::json::Number;
+use crate::Result;
 
 bitflags! {
     pub struct ArrayFlags: u32 {
@@ -23,10 +25,10 @@ pub enum ValueKind {
     Array(Vec<usize>, ArrayFlags),
     Object(HashMap<String, usize>),
     Lambda(Node),
-    NativeFn0(fn(ValuePool) -> Value),
-    NativeFn1(fn(ValuePool, Value) -> Value),
-    NativeFn2(fn(ValuePool, Value, Value) -> Value),
-    NativeFn3(fn(ValuePool, Value, Value, Value) -> Value),
+    NativeFn0(fn(FunctionContext) -> Result<Value>),
+    NativeFn1(fn(FunctionContext, Value) -> Result<Value>),
+    NativeFn2(fn(FunctionContext, Value, Value) -> Result<Value>),
+    NativeFn3(fn(FunctionContext, Value, Value, Value) -> Result<Value>),
 }
 
 impl PartialEq<ValueKind> for ValueKind {

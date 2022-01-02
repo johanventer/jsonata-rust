@@ -94,6 +94,7 @@ impl JsonAta {
         bind!("lookup", new_nativefn2, fn_lookup);
         bind!("append", new_nativefn2, fn_append);
         bind!("boolean", new_nativefn1, fn_boolean);
+        bind!("filter", new_nativefn2, fn_filter);
 
         let evaluator = Evaluator::new(self.pool.clone());
         evaluator.evaluate(&self.ast, input, self.frame.clone())
