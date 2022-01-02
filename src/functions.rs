@@ -1,10 +1,12 @@
 use super::evaluator::Evaluator;
 use super::frame::Frame;
+use super::position::Position;
 use super::value::{ArrayFlags, Value, ValueKind, ValuePool};
 use super::Result;
 
 #[derive(Clone)]
 pub struct FunctionContext<'a> {
+    pub position: Position,
     pub pool: ValuePool,
     pub input: Value,
     pub frame: Frame,
@@ -13,8 +15,13 @@ pub struct FunctionContext<'a> {
 
 impl<'a> FunctionContext<'a> {
     pub fn evaluate_function(&self, proc: Value, args: Value) -> Result<Value> {
-        self.evaluator
-            .apply_function(self.input.clone(), proc, args, self.frame.clone())
+        self.evaluator.apply_function(
+            self.position,
+            self.input.clone(),
+            proc,
+            args,
+            self.frame.clone(),
+        )
     }
 }
 

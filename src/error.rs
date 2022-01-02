@@ -57,8 +57,6 @@
 // "T0411": "Context value is not a compatible type with argument {{index}} of function {{token}}",
 // "T0412": "Argument {{index}} of function {{token}} must be an array of {{type}}",
 // "D1004": "Regular expression matches zero length string",
-// "T1005": "Attempted to invoke a non-function. Did you mean ${{{token}}}?",
-// "T1006": "Attempted to invoke a non-function",
 // "T1007": "Attempted to partially apply a non-function. Did you mean ${{{token}}}?",
 // "T1008": "Attempted to partially apply a non-function",
 // // "T1010": "The matcher function argument passed to function {{token}} does not return the correct object structure",
@@ -168,6 +166,8 @@ pub enum Error {
 
     // Type errors
     NonStringKey(Position, String),
+    InvokedNonFunctionSuggest(Position, String),
+    InvokedNonFunction(Position),
     LeftSideNotNumber(Position, String),
     RightSideNotNumber(Position, String),
     BinaryOpMismatch(Position, String, String, String),
@@ -204,6 +204,8 @@ impl Error {
             Error::NegatingNonNumeric(..) => "D1002",
             Error::MultipleKeys(..) => "D1009",
             Error::NonStringKey(..) => "T1003",
+Error::InvokedNonFunctionSuggest(..) => "T1005",
+            Error::InvokedNonFunction(..) => "T1006",
             Error::LeftSideNotNumber(..) => "T2001",
             Error::RightSideNotNumber(..) => "T2002",
             Error::BinaryOpMismatch(..) => "T2009",
@@ -342,6 +344,10 @@ impl fmt::Display for Error {
                 write!(f, "{} The expressions either side of operator `{}` must evaluate to numeric or string values", p, o),
             NumberOfOutRange(ref n) =>
                 write!(f, "Number out of range: {}", n),
+            InvokedNonFunction(ref p) =>
+                write!(f, "{} Attempted to invoke a non-function", p),
+            InvokedNonFunctionSuggest(ref p, ref t) => 
+                write!(f, "{} Attempted to invoke a non-function. Did you mean ${}?", p, t)
         }
     }
 }

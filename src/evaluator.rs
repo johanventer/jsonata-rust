@@ -57,8 +57,9 @@ impl Evaluator {
         Value::new_lambda(self.pool.clone(), node.clone())
     }
 
-    fn fn_context(&self, input: Value, frame: Frame) -> FunctionContext<'_> {
+    fn fn_context(&self, position: Position, input: Value, frame: Frame) -> FunctionContext<'_> {
         FunctionContext {
+            position,
             pool: self.pool.clone(),
             evaluator: self,
             input,
@@ -84,9 +85,11 @@ impl Evaluator {
                 ref falsy,
             } => self.evaluate_ternary(cond, truthy, falsy.as_deref(), input, frame.clone())?,
             NodeKind::Path(ref steps) => self.evaluate_path(node, steps, input, frame.clone())?,
-            NodeKind::Name(ref name) => {
-                fn_lookup_internal(self.fn_context(input.clone(), frame.clone()), input, name)
-            }
+            NodeKind::Name(ref name) => fn_lookup_internal(
+                self.fn_context(node.position, input.clone(), frame.clone()),
+                input,
+                name,
+            ),
             NodeKind::Lambda { .. } => self.lambda(node),
             NodeKind::Function {
                 ref proc,
@@ -180,7 +183,7 @@ impl Evaluator {
                         result.push_index(value.index);
                     } else {
                         result = fn_append(
-                            self.fn_context(input.clone(), frame.clone()),
+                            self.fn_context(node.position, input.clone(), frame.clone()),
                             result,
                             value,
                         )?;
@@ -227,7 +230,7 @@ impl Evaluator {
                             return Err(Error::multiple_keys(position, key));
                         }
                         group.data = fn_append(
-                            self.fn_context(input.clone(), frame.clone()),
+                            self.fn_context(position, input.clone(), frame.clone()),
                             group.data.clone(),
                             item.clone(),
                         )?;
@@ -566,7 +569,19 @@ impl Evaluator {
     ) -> Result<Value> {
         let evaluated_proc = self.evaluate(proc, input.clone(), frame.clone())?;
 
-        // TODO: Help the user out with a T1005 error
+        // Help the user out if they forgot a '$'
+        if evaluated_proc.is_undefined() {
+            if let NodeKind::Path(ref steps) = proc.kind {
+                if let NodeKind::Name(ref name) = steps[0].kind {
+                    if frame.lookup(name).is_some() {
+                        return Err(Error::InvokedNonFunctionSuggest(
+                            proc.position,
+                            name.clone(),
+                        ));
+                    }
+                }
+            }
+        }
 
         let evaluated_args = self.array(ArrayFlags::empty());
         for arg in args {
@@ -574,11 +589,12 @@ impl Evaluator {
             evaluated_args.push_index(arg.index);
         }
 
-        self.apply_function(input, evaluated_proc, evaluated_args, frame)
+        self.apply_function(proc.position, input, evaluated_proc, evaluated_args, frame)
     }
 
     pub fn apply_function(
         &self,
+        position: Position,
         input: Value,
         evaluated_proc: Value,
         evaluated_args: Value,
@@ -605,15 +621,18 @@ impl Evaluator {
                     unreachable!()
                 }
             }
-            ValueKind::NativeFn0(ref func) => func(self.fn_context(input, frame)),
+            ValueKind::NativeFn0(ref func) => func(self.fn_context(position, input, frame)),
             ValueKind::NativeFn1(ref func) => {
                 // TODO: Error about arguments? JSONata has signatures, we could process them here
-                func(self.fn_context(input, frame), evaluated_args.get_member(0))
+                func(
+                    self.fn_context(position, input, frame),
+                    evaluated_args.get_member(0),
+                )
             }
             ValueKind::NativeFn2(ref func) => {
                 // TODO: Error about arguments? JSONata has signatures, we could process them here
                 func(
-                    self.fn_context(input, frame),
+                    self.fn_context(position, input, frame),
                     evaluated_args.get_member(0),
                     evaluated_args.get_member(1),
                 )
@@ -621,17 +640,13 @@ impl Evaluator {
             ValueKind::NativeFn3(ref func) => {
                 // TODO: Error about arguments? JSONata has signatures, we could process them here
                 func(
-                    self.fn_context(input, frame),
+                    self.fn_context(position, input, frame),
                     evaluated_args.get_member(0),
                     evaluated_args.get_member(1),
                     evaluated_args.get_member(2),
                 )
             }
-            _ => {
-                // TODO: T1006
-                println!("{:#?}", evaluated_proc);
-                unreachable!()
-            }
+            _ => Err(Error::InvokedNonFunction(position)),
         }
     }
 }
