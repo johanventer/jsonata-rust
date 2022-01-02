@@ -137,34 +137,50 @@ impl ValuePool {
     }
 
     #[inline]
-    pub fn lambda(&self, node: Node) -> Value {
+    pub fn lambda(&self, name: &str, node: Node) -> Value {
         Value {
             pool: self.clone(),
-            index: self.borrow_mut().insert(ValueKind::Lambda(node)),
+            index: self
+                .borrow_mut()
+                .insert(ValueKind::Lambda(name.to_string(), node)),
         }
     }
 
     #[inline]
-    pub fn nativefn0(&self, func: fn(FunctionContext) -> Result<Value>) -> Value {
+    pub fn nativefn0(&self, name: &str, func: fn(FunctionContext) -> Result<Value>) -> Value {
         Value {
             pool: self.clone(),
-            index: self.borrow_mut().insert(ValueKind::NativeFn0(func)),
+            index: self
+                .borrow_mut()
+                .insert(ValueKind::NativeFn0(name.to_string(), func)),
         }
     }
 
     #[inline]
-    pub fn nativefn1(&self, func: fn(FunctionContext, Value) -> Result<Value>) -> Value {
+    pub fn nativefn1(
+        &self,
+        name: &str,
+        func: fn(FunctionContext, Value) -> Result<Value>,
+    ) -> Value {
         Value {
             pool: self.clone(),
-            index: self.borrow_mut().insert(ValueKind::NativeFn1(func)),
+            index: self
+                .borrow_mut()
+                .insert(ValueKind::NativeFn1(name.to_string(), func)),
         }
     }
 
     #[inline]
-    pub fn nativefn2(&self, func: fn(FunctionContext, Value, Value) -> Result<Value>) -> Value {
+    pub fn nativefn2(
+        &self,
+        name: &str,
+        func: fn(FunctionContext, Value, Value) -> Result<Value>,
+    ) -> Value {
         Value {
             pool: self.clone(),
-            index: self.borrow_mut().insert(ValueKind::NativeFn2(func)),
+            index: self
+                .borrow_mut()
+                .insert(ValueKind::NativeFn2(name.to_string(), func)),
         }
     }
 }

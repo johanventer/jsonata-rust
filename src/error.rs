@@ -53,7 +53,6 @@
 // "S0402": "Choice groups containing parameterized types are not supported",
 // "S0401": "Type parameters can only be applied to functions and arrays",
 // "S0500": "Attempted to evaluate an expression containing syntax error(s)",
-// "T0410": "Argument {{index}} of function {{token}} does not match function signature",
 // "T0411": "Context value is not a compatible type with argument {{index}} of function {{token}}",
 // "T0412": "Argument {{index}} of function {{token}} must be an array of {{type}}",
 // "D1004": "Regular expression matches zero length string",
@@ -155,6 +154,7 @@ pub enum Error {
     NumberOfOutRange(f64),
     NegatingNonNumeric(Position, String),
     MultipleKeys(Position, String),
+    ArgumentNotValid(Position, usize, String),
 
     // Type errors
     NonStringKey(Position, String),
@@ -197,6 +197,7 @@ impl Error {
             Error::NumberOfOutRange(..) => "D1001",
             Error::NegatingNonNumeric(..) => "D1002",
             Error::MultipleKeys(..) => "D1009",
+            Error::ArgumentNotValid(..) => "T0410",
             Error::NonStringKey(..) => "T1003",
             Error::InvokedNonFunctionSuggest(..) => "T1005",
             Error::InvokedNonFunction(..) => "T1006",
@@ -348,6 +349,8 @@ impl fmt::Display for Error {
                 write!(f, "{} The left side of the range operator (..) must evaluate to an integer", p),
             RightSideNotInteger(ref p) =>
                 write!(f, "{} The right side of the range operator (..) must evaluate to an integer", p),
+            ArgumentNotValid(ref p, ref i, ref t) =>
+                write!(f, "{} Argument {} of function {} does not match function signature", p, i, t)
         }
     }
 }

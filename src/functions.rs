@@ -73,38 +73,42 @@ pub fn fn_append(_context: FunctionContext, arg1: Value, arg2: Value) -> Result<
     Ok(arg1)
 }
 
-pub fn fn_boolean_internal(arg: Value) -> bool {
+pub fn fn_boolean(context: FunctionContext, arg: Value) -> Result<Value> {
     fn cast(value: &Value) -> bool {
         match *value.as_ref() {
-            ValueKind::Undefined => false,
+            ValueKind::Undefined => unreachable!(),
             ValueKind::Null => false,
             ValueKind::Bool(b) => b,
             ValueKind::Number(num) => num != 0.0,
             ValueKind::String(ref str) => !str.is_empty(),
             ValueKind::Object(ref obj) => !obj.is_empty(),
             ValueKind::Array { .. } => unreachable!(),
-            ValueKind::Lambda(..) => true,
+            ValueKind::Lambda(..) => false,
             ValueKind::NativeFn0(..)
             | ValueKind::NativeFn1(..)
             | ValueKind::NativeFn2(..)
-            | ValueKind::NativeFn3(..) => true,
+            | ValueKind::NativeFn3(..) => false,
         }
     }
 
     let result = match *arg.as_ref() {
+        ValueKind::Undefined => context.pool.undefined(),
         ValueKind::Array { .. } => match arg.len() {
-            0 => false,
-            1 => fn_boolean_internal(arg.get_member(0)),
-            _ => arg.members().any(fn_boolean_internal),
+            0 => context.pool.bool(false),
+            1 => fn_boolean(context.clone(), arg.get_member(0))?,
+            _ => {
+                for item in arg.members() {
+                    if fn_boolean(context.clone(), item)?.as_bool() {
+                        return Ok(context.pool.bool(true));
+                    }
+                }
+                context.pool.bool(false)
+            }
         },
-        _ => cast(&arg),
+        _ => context.pool.bool(cast(&arg)),
     };
 
-    result
-}
-
-pub fn fn_boolean(context: FunctionContext, arg: Value) -> Result<Value> {
-    Ok(context.pool.bool(fn_boolean_internal(arg)))
+    Ok(result)
 }
 
 pub fn fn_filter(context: FunctionContext, arr: Value, func: Value) -> Result<Value> {
@@ -131,10 +135,16 @@ pub fn fn_filter(context: FunctionContext, arr: Value, func: Value) -> Result<Va
             args.push_index(arr.index);
         }
 
-        if fn_boolean_internal(context.evaluate_function(func.clone(), args)?) {
+        let include = fn_boolean(
+            context.clone(),
+            context.evaluate_function(func.clone(), args)?,
+        )?;
+
+        if include.as_bool() {
             result.push_index(item.index);
         }
 
+        include.drop();
         index_arg.drop();
     }
 

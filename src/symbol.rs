@@ -201,35 +201,41 @@ impl Symbol for Token {
                 }
                 parser.expect(TokenKind::RightParen, true)?;
 
-                // If the name of the function is 'function' or λ, then this is a function definition (lambda function)
-                if let NodeKind::Name(ref name) = left.kind {
-                    if name == "function" || name == "λ" {
-                        is_lambda = true;
+                let name = match left.kind {
+                    NodeKind::Name(ref name) => {
+                        // If the name of the function is 'function' or λ, then this is a function definition (lambda function)
+                        if name == "function" || name == "λ" {
+                            is_lambda = true;
 
-                        // All of the args must be Variable nodes
-                        for arg in &args {
-                            if !matches!(arg.kind, NodeKind::Var(..)) {
-                                return Err(Error::invalid_function_param(
-                                    arg.position,
-                                    &self.kind,
-                                ));
+                            // All of the args must be Variable nodes
+                            for arg in &args {
+                                if !matches!(arg.kind, NodeKind::Var(..)) {
+                                    return Err(Error::invalid_function_param(
+                                        arg.position,
+                                        &self.kind,
+                                    ));
+                                }
                             }
-                        }
 
-                        // TODO: Parse function signatures
+                            // TODO: Parse function signatures
+                        }
+                        name.clone()
                     }
-                }
+                    NodeKind::Var(ref name) => name.clone(),
+                    _ => unreachable!(),
+                };
 
                 let func: Node;
 
                 if is_lambda {
                     parser.expect(TokenKind::LeftBrace, false)?;
                     let body = Box::new(parser.expression(0)?);
-                    func = Node::new(NodeKind::Lambda { args, body }, self.position);
+                    func = Node::new(NodeKind::Lambda { name, args, body }, self.position);
                     parser.expect(TokenKind::RightBrace, false)?;
                 } else {
                     func = Node::new(
                         NodeKind::Function {
+                            name,
                             proc: Box::new(left),
                             args,
                             is_partial,

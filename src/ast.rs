@@ -87,12 +87,14 @@ pub enum NodeKind {
     Descendent,
     Parent,
     Function {
+        name: String,
         proc: Box<Node>,
         args: Vec<Node>,
         is_partial: bool,
     },
     PartialArg,
     Lambda {
+        name: String,
         args: Vec<Node>,
         body: Box<Node>,
     },

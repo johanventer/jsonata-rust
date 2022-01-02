@@ -85,7 +85,7 @@ impl JsonAta {
 
         macro_rules! bind {
             ($name:literal, $new:ident, $fn:ident) => {
-                self.frame.bind($name, self.pool.$new($fn));
+                self.frame.bind($name, self.pool.$new($name, $fn));
             };
         }
 

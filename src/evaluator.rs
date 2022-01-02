@@ -49,11 +49,12 @@ impl Evaluator {
                 input,
                 name,
             ),
-            NodeKind::Lambda { .. } => self.pool.lambda(node.clone()),
+            NodeKind::Lambda { ref name, .. } => self.pool.lambda(name, node.clone()),
             NodeKind::Function {
                 ref proc,
                 ref args,
                 is_partial,
+                ..
             } => self.evaluate_function(input, proc, args, is_partial, frame.clone())?,
 
             _ => unimplemented!("TODO: node kind not yet supported: {:#?}", node.kind),
@@ -390,14 +391,21 @@ impl Evaluator {
         input: Value,
         frame: Frame,
     ) -> Result<Value> {
+        let position = cond.position;
         let cond = self.evaluate(cond, input.clone(), frame.clone())?;
-        if fn_boolean_internal(cond) {
+        let is_truthy = fn_boolean(
+            self.fn_context(position, input.clone(), frame.clone()),
+            cond,
+        )?;
+        let result = if is_truthy.as_bool() {
             self.evaluate(truthy, input, frame)
         } else if let Some(falsy) = falsy {
             self.evaluate(falsy, input, frame)
         } else {
             Ok(self.pool.undefined())
-        }
+        };
+        is_truthy.drop();
+        result
     }
 
     fn evaluate_path(
@@ -560,8 +568,15 @@ impl Evaluator {
                                     result.push_index(item.index);
                                 }
                             });
-                        } else if fn_boolean_internal(index) {
-                            result.push_index(item.index);
+                        } else {
+                            let include = fn_boolean(
+                                self.fn_context(filter.position, item.clone(), frame.clone()),
+                                index,
+                            )?;
+                            if include.as_bool() {
+                                result.push_index(item.index);
+                            }
+                            include.drop();
                         }
                     }
                 }
@@ -614,8 +629,11 @@ impl Evaluator {
         frame: Frame,
     ) -> Result<Value> {
         match *evaluated_proc.as_ref() {
-            ValueKind::Lambda(ref lambda) => {
-                if let NodeKind::Lambda { ref body, ref args } = lambda.kind {
+            ValueKind::Lambda(_, ref lambda) => {
+                if let NodeKind::Lambda {
+                    ref body, ref args, ..
+                } = lambda.kind
+                {
                     // Create a new frame for use in the lambda, so it can have locals
                     let frame = Frame::new_with_parent(frame);
 
@@ -634,38 +652,43 @@ impl Evaluator {
                     unreachable!()
                 }
             }
-            ValueKind::NativeFn0(ref func) => func(self.fn_context(position, input, frame)),
-            ValueKind::NativeFn1(ref func) => {
-                // TODO: Error about arguments? JSONata has signatures, we could process them here
-
-                // If there's no arguments, we are potentially in a [1..10].$string() situation, so pass the
-                // input as the argument.
-                if evaluated_args.is_empty() {
-                    func(self.fn_context(position, input.clone(), frame), input)
-                } else {
-                    func(
+            ValueKind::NativeFn0(.., ref func) => func(self.fn_context(position, input, frame)),
+            ValueKind::NativeFn1(ref name, ref func) => {
+                match evaluated_args.len() {
+                    0 => {
+                        // If there's no arguments, we are potentially in a [1..10].$string() situation, so pass the
+                        // input as the argument.
+                        func(self.fn_context(position, input.clone(), frame), input)
+                    }
+                    1 => func(
                         self.fn_context(position, input, frame),
                         evaluated_args.get_member(0),
-                    )
+                    ),
+                    _ => Err(Error::ArgumentNotValid(position, 2, name.to_string())),
                 }
             }
-            ValueKind::NativeFn2(ref func) => {
-                // TODO: Error about arguments? JSONata has signatures, we could process them here
-                func(
+            ValueKind::NativeFn2(ref name, ref func) => match evaluated_args.len() {
+                0 => Err(Error::ArgumentNotValid(position, 1, name.to_string())),
+                1 => Err(Error::ArgumentNotValid(position, 2, name.to_string())),
+                2 => func(
                     self.fn_context(position, input, frame),
                     evaluated_args.get_member(0),
                     evaluated_args.get_member(1),
-                )
-            }
-            ValueKind::NativeFn3(ref func) => {
-                // TODO: Error about arguments? JSONata has signatures, we could process them here
-                func(
+                ),
+                _ => Err(Error::ArgumentNotValid(position, 3, name.to_string())),
+            },
+            ValueKind::NativeFn3(ref name, ref func) => match evaluated_args.len() {
+                0 => Err(Error::ArgumentNotValid(position, 1, name.to_string())),
+                1 => Err(Error::ArgumentNotValid(position, 2, name.to_string())),
+                2 => Err(Error::ArgumentNotValid(position, 3, name.to_string())),
+                3 => func(
                     self.fn_context(position, input, frame),
                     evaluated_args.get_member(0),
                     evaluated_args.get_member(1),
                     evaluated_args.get_member(2),
-                )
-            }
+                ),
+                _ => Err(Error::ArgumentNotValid(position, 4, name.to_string())),
+            },
             _ => Err(Error::InvokedNonFunction(position)),
         }
     }

@@ -77,7 +77,7 @@ impl Value {
 
     pub fn arity(&self) -> usize {
         match self.pool.borrow().get(self.index) {
-            ValueKind::Lambda(ref node) => {
+            ValueKind::Lambda(_, ref node) => {
                 if let NodeKind::Lambda { ref args, .. } = node.kind {
                     args.len()
                 } else {

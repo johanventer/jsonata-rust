@@ -24,11 +24,14 @@ pub enum ValueKind {
     String(String),
     Array(Vec<usize>, ArrayFlags),
     Object(HashMap<String, usize>),
-    Lambda(Node),
-    NativeFn0(fn(FunctionContext) -> Result<Value>),
-    NativeFn1(fn(FunctionContext, Value) -> Result<Value>),
-    NativeFn2(fn(FunctionContext, Value, Value) -> Result<Value>),
-    NativeFn3(fn(FunctionContext, Value, Value, Value) -> Result<Value>),
+    Lambda(String, Node),
+    NativeFn0(String, fn(FunctionContext) -> Result<Value>),
+    NativeFn1(String, fn(FunctionContext, Value) -> Result<Value>),
+    NativeFn2(String, fn(FunctionContext, Value, Value) -> Result<Value>),
+    NativeFn3(
+        String,
+        fn(FunctionContext, Value, Value, Value) -> Result<Value>,
+    ),
 }
 
 impl PartialEq<ValueKind> for ValueKind {
