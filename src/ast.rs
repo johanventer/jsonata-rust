@@ -1,3 +1,4 @@
+use super::json::Number;
 use super::position::Position;
 
 // Object constructor, represented by tuples of (key, value)
@@ -74,7 +75,7 @@ pub enum NodeKind {
     Null,
     Bool(bool),
     String(String),
-    Number(f64),
+    Number(Number),
     Name(String),
     Var(String),
     Unary(UnaryOp),

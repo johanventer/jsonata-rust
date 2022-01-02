@@ -365,6 +365,40 @@ impl Evaluator {
                 }))
             }
 
+            BinaryOp::Range => {
+                if !lhs.is_undefined() && !lhs.is_unsigned_integer() {
+                    return Err(Error::LeftSideNotInteger(node.position));
+                };
+
+                if !rhs.is_undefined() && !rhs.is_unsigned_integer() {
+                    return Err(Error::RightSideNotInteger(node.position));
+                }
+
+                if lhs.is_undefined() || rhs.is_undefined() {
+                    return Ok(self.pool.undefined());
+                }
+
+                let lhs = lhs.as_usize();
+                let rhs = rhs.as_usize();
+
+                if lhs > rhs {
+                    return Ok(self.pool.undefined());
+                }
+
+                let size = rhs - lhs + 1;
+                if size > 10_000_000 {
+                    // TODO: D2014
+                    unreachable!()
+                }
+
+                let result = self.array_with_capacity(size, ArrayFlags::SEQUENCE);
+                for index in lhs..rhs + 1 {
+                    result.push(ValueKind::Number(index.into()));
+                }
+
+                Ok(result)
+            }
+
             _ => unimplemented!("TODO: binary op not supported yet: {:#?}", *op),
         }
     }
@@ -523,7 +557,7 @@ impl Evaluator {
         match node.kind {
             NodeKind::Filter(ref filter) => match filter.kind {
                 NodeKind::Number(n) => {
-                    let index = get_index(n);
+                    let index = get_index(n.into());
                     let item = input.get_member(index as usize);
                     if !item.is_undefined() {
                         if item.is_array() {
@@ -624,10 +658,17 @@ impl Evaluator {
             ValueKind::NativeFn0(ref func) => func(self.fn_context(position, input, frame)),
             ValueKind::NativeFn1(ref func) => {
                 // TODO: Error about arguments? JSONata has signatures, we could process them here
-                func(
-                    self.fn_context(position, input, frame),
-                    evaluated_args.get_member(0),
-                )
+
+                // If there's no arguments, we are potentially in a [1..10].$string() situation, so pass the
+                // input as the argument.
+                if evaluated_args.is_empty() {
+                    func(self.fn_context(position, input.clone(), frame), input)
+                } else {
+                    func(
+                        self.fn_context(position, input, frame),
+                        evaluated_args.get_member(0),
+                    )
+                }
             }
             ValueKind::NativeFn2(ref func) => {
                 // TODO: Error about arguments? JSONata has signatures, we could process them here

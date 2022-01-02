@@ -60,14 +60,6 @@
 // "T1007": "Attempted to partially apply a non-function. Did you mean ${{{token}}}?",
 // "T1008": "Attempted to partially apply a non-function",
 // // "T1010": "The matcher function argument passed to function {{token}} does not return the correct object structure",
-// define_error!(
-//     T2003,
-//     "The left side of the range operator (..) must evaluate to an integer"
-// );
-// define_error!(
-//     T2004,
-//     "The right side of the range operator (..) must evaluate to an integer"
-// );
 // "D2005": "The left side of := must be a variable name (start with $)",  // defunct - replaced by S0212 parser error
 // "T2006": "The right side of the function application operator ~> must be a function",
 // "T2007": "Type mismatch when comparing values {{value}} and {{value2}} in order-by clause",
@@ -170,6 +162,8 @@ pub enum Error {
     InvokedNonFunction(Position),
     LeftSideNotNumber(Position, String),
     RightSideNotNumber(Position, String),
+    LeftSideNotInteger(Position),
+    RightSideNotInteger(Position),
     BinaryOpMismatch(Position, String, String, String),
     BinaryOpTypes(Position, String),
 }
@@ -204,10 +198,12 @@ impl Error {
             Error::NegatingNonNumeric(..) => "D1002",
             Error::MultipleKeys(..) => "D1009",
             Error::NonStringKey(..) => "T1003",
-Error::InvokedNonFunctionSuggest(..) => "T1005",
+            Error::InvokedNonFunctionSuggest(..) => "T1005",
             Error::InvokedNonFunction(..) => "T1006",
             Error::LeftSideNotNumber(..) => "T2001",
             Error::RightSideNotNumber(..) => "T2002",
+            Error::LeftSideNotInteger(..) => "T2003",
+            Error::RightSideNotInteger(..) => "T2004",
             Error::BinaryOpMismatch(..) => "T2009",
             Error::BinaryOpTypes(..) => "T2010",
         }
@@ -347,7 +343,11 @@ impl fmt::Display for Error {
             InvokedNonFunction(ref p) =>
                 write!(f, "{} Attempted to invoke a non-function", p),
             InvokedNonFunctionSuggest(ref p, ref t) => 
-                write!(f, "{} Attempted to invoke a non-function. Did you mean ${}?", p, t)
+                write!(f, "{} Attempted to invoke a non-function. Did you mean ${}?", p, t),
+            LeftSideNotInteger(ref p) =>
+                write!(f, "{} The left side of the range operator (..) must evaluate to an integer", p),
+            RightSideNotInteger(ref p) =>
+                write!(f, "{} The right side of the range operator (..) must evaluate to an integer", p),
         }
     }
 }

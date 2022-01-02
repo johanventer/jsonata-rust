@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::{collections::HashMap, fmt};
@@ -137,6 +138,10 @@ impl Value {
         matches!(self.pool.borrow().get(self.index), ValueKind::Number(..))
     }
 
+    pub fn is_unsigned_integer(&self) -> bool {
+        matches!(self.pool.borrow().get(self.index), ValueKind::Number(n) if usize::try_from(*n).is_ok())
+    }
+
     pub fn is_nan(&self) -> bool {
         matches!(self.pool.borrow().get(self.index), ValueKind::Number(n) if n.is_nan())
     }
@@ -212,6 +217,15 @@ impl Value {
     pub fn as_f64(&self) -> f64 {
         match *self.pool.borrow().get(self.index) {
             ValueKind::Number(n) => n.into(),
+            _ => panic!("Not a number"),
+        }
+    }
+
+    pub fn as_usize(&self) -> usize {
+        match *self.pool.borrow().get(self.index) {
+            ValueKind::Number(n) => {
+                usize::try_from(n).unwrap_or_else(|_| panic!("Number is not a valid usize"))
+            }
             _ => panic!("Not a number"),
         }
     }

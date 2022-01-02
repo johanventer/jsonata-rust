@@ -1,5 +1,6 @@
 use std::{char, str};
 
+use super::json::Number;
 use super::position::Position;
 use super::{Error, Result};
 
@@ -49,7 +50,7 @@ pub enum TokenKind {
     Null,
     Bool(bool),
     Str(String),
-    Num(f64),
+    Num(Number),
     // Identifiers
     Name(String),
     Var(String),
@@ -247,7 +248,13 @@ impl Tokenizer {
                     if number_f64.is_nan() || number_f64.is_infinite() {
                         break Err(Error::LexedNumberOutOfRange(self.position, number));
                     } else {
-                        break self.emit(Num(number_f64));
+                        // FIXME: HACK: This number lexing is so bad, but we want integers to be
+                        // integers in the Number instances that are created, so this will do for now.
+                        let mantissa = number_f64.floor() as u64;
+                        if number_f64 - mantissa as f64 == 0.0 {
+                            break self.emit(Num(mantissa.into()));
+                        }
+                        break self.emit(Num(number_f64.into()));
                     }
                 }
                 ['.', ..] => op1!(Period),
@@ -566,39 +573,39 @@ mod tests {
         let mut tokenizer = Tokenizer::new("0 1 0.234 5.678 0e0 1e1 1e-1 1e+1 2.234E-2");
         assert!(matches!(
             tokenizer.next(false).unwrap().kind,
-            TokenKind::Num(n) if (n - 0.0_f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (f64::from(n) - 0.0_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).unwrap().kind,
-            TokenKind::Num(n) if (n - 1.0_f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (f64::from(n) - 1.0_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).unwrap().kind,
-            TokenKind::Num(n) if (n - 0.234_f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (f64::from(n) - 0.234_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).unwrap().kind,
-            TokenKind::Num(n) if (n - 5.678_f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (f64::from(n) - 5.678_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).unwrap().kind,
-            TokenKind::Num(n) if (n - 0e0_f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (f64::from(n) - 0e0_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).unwrap().kind,
-            TokenKind::Num(n) if (n - 1e1_f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (f64::from(n) - 1e1_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).unwrap().kind,
-            TokenKind::Num(n) if (n - 1e-1_f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (f64::from(n) - 1e-1_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).unwrap().kind,
-            TokenKind::Num(n) if (n - 1e+1_f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (f64::from(n) - 1e+1_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             tokenizer.next(false).unwrap().kind,
-            TokenKind::Num(n) if (n - 2.234E-2_f64).abs() < f64::EPSILON
+            TokenKind::Num(n) if (f64::from(n) - 2.234E-2_f64).abs() < f64::EPSILON
         ));
     }
 }

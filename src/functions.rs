@@ -140,3 +140,37 @@ pub fn fn_filter(context: FunctionContext, arr: Value, func: Value) -> Result<Va
 
     Ok(result)
 }
+
+pub fn fn_string(context: FunctionContext, arg: Value) -> Result<Value> {
+    if arg.is_undefined() {
+        return Ok(context.pool.undefined());
+    }
+
+    return if arg.is_string() {
+        Ok(arg)
+    } else if arg.is_function() {
+        Ok(Value::new_string(context.pool, ""))
+
+    // TODO: Check for infinite numbers
+    // } else if arg.is_number() && arg.is_infinite() {
+    //     // TODO: D3001
+    //     unreachable!()
+
+    // TODO: Proper JSON stringify of Value, pretty printing
+    } else {
+        Ok(Value::new_string(context.pool, &format!("{:?}", arg)))
+    };
+}
+
+pub fn fn_count(context: FunctionContext, arg: Value) -> Result<Value> {
+    Ok(Value::new_number(
+        context.pool,
+        if arg.is_undefined() {
+            0
+        } else if arg.is_array() {
+            arg.len()
+        } else {
+            1
+        },
+    ))
+}
