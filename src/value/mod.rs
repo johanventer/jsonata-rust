@@ -10,6 +10,7 @@ pub use kind::{ArrayFlags, ValueKind};
 pub use pool::ValuePool;
 
 use crate::ast::NodeKind;
+use crate::json::codegen::{DumpGenerator, Generator, PrettyGenerator};
 use crate::node_pool::{NodePool, NodeRef};
 
 /// A thin wrapper around the index to a `ValueKind` within a `ValuePool`.
@@ -21,7 +22,7 @@ use crate::node_pool::{NodePool, NodeRef};
 ///
 /// As a `Value` is just an `Rc` and a `usize`, it has a Clone implementation which
 /// makes it very easy to pass around.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Value {
     pub pool: ValuePool,
     pub index: usize,
@@ -319,6 +320,21 @@ impl Value {
             _ => false,
         }
     }
+
+    // Prints out the value as JSON string.
+    pub fn dump(&self) -> String {
+        let mut gen = DumpGenerator::new();
+        gen.write_json(self).expect("Can't fail");
+        gen.consume()
+    }
+
+    /// Pretty prints out the value as JSON string. Takes an argument that's
+    /// number of spaces to indent new blocks with.
+    pub fn pretty(&self, spaces: u16) -> String {
+        let mut gen = PrettyGenerator::new(spaces);
+        gen.write_json(self).expect("Can't fail");
+        gen.consume()
+    }
 }
 
 /// Compares two `Value`s for equality by comparing their underlying `ValueKind`s.
@@ -479,12 +495,18 @@ impl<'a> Iterator for Entries<'a> {
     }
 }
 
-impl fmt::Debug for Value {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.pool.borrow().get(self.index) {
-            ValueKind::Array(..) => f.debug_list().entries(self.members()).finish(),
-            ValueKind::Object(..) => f.debug_map().entries(self.entries()).finish(),
-            _ => ValueKind::fmt(self.pool.borrow().get(self.index), f),
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if f.alternate() {
+            f.write_str(&self.pretty(4))
+        } else {
+            match self.pool.borrow().get(self.index) {
+                ValueKind::String(ref value) => value.fmt(f),
+                ValueKind::Number(ref value) => value.fmt(f),
+                ValueKind::Bool(ref value) => value.fmt(f),
+                ValueKind::Null => f.write_str("null"),
+                _ => f.write_str(&self.dump()),
+            }
         }
     }
 }

@@ -152,7 +152,7 @@ pub fn fn_string(context: FunctionContext, arg: Value) -> Result<Value> {
         return Ok(context.pool.undefined());
     }
 
-    return if arg.is_string() {
+    if arg.is_string() {
         Ok(arg)
     } else if arg.is_function() {
         Ok(context.pool.string(""))
@@ -162,10 +162,10 @@ pub fn fn_string(context: FunctionContext, arg: Value) -> Result<Value> {
     //     // TODO: D3001
     //     unreachable!()
 
-    // TODO: Proper JSON stringify of Value, pretty printing
+    // TODO: pretty printing
     } else {
-        Ok(context.pool.string(&format!("{:?}", arg)))
-    };
+        Ok(context.pool.string(&arg.dump()))
+    }
 }
 
 pub fn fn_count(context: FunctionContext, arg: Value) -> Result<Value> {

@@ -247,15 +247,15 @@ impl Error {
     }
 
     pub fn negating_non_numeric(p: Position, v: Value) -> Self {
-        Error::NegatingNonNumeric(p, format!("{:#?}", v))
+        Error::NegatingNonNumeric(p, format!("{}", v))
     }
 
     pub fn non_string_key(p: Position, v: Value) -> Self {
-        Error::NonStringKey(p, format!("{:#?}", v))
+        Error::NonStringKey(p, format!("{}", v))
     }
 
     pub fn multiple_keys(p: Position, k: Value) -> Self {
-        Error::MultipleKeys(p, format!("{:#?}", k))
+        Error::MultipleKeys(p, format!("{}", k))
     }
 
     pub fn left_side_not_number(p: Position, o: &BinaryOp) -> Self {
@@ -267,7 +267,7 @@ impl Error {
     }
 
     pub fn binary_op_mismatch(p: Position, l: Value, r: Value, o: &BinaryOp) -> Self {
-        Error::BinaryOpMismatch(p, format!("{:#?}", l), format!("{:#?}", r), o.to_string())
+        Error::BinaryOpMismatch(p, format!("{}", l), format!("{}", r), o.to_string())
     }
 
     pub fn binary_op_types(p: Position, o: &BinaryOp) -> Self {

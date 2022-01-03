@@ -1,4 +1,4 @@
-// TODO: Fix visibility of all these modules
+// TODO: Fix visibility of all these modules, they're all pub for now
 pub mod ast;
 pub mod error;
 pub mod evaluator;

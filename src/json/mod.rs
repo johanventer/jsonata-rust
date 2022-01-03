@@ -1,3 +1,4 @@
+pub mod codegen;
 mod number;
 mod parser;
 mod util;
