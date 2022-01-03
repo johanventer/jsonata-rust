@@ -65,25 +65,13 @@ pub fn fn_append(context: &FunctionContext, arg1: &Value, arg2: &Value) -> Resul
 }
 
 pub fn fn_boolean(context: &FunctionContext, arg: &Value) -> Result<Value> {
-    fn cast(value: &Value) -> bool {
-        match *value.as_ref() {
-            ValueKind::Undefined => unreachable!(),
-            ValueKind::Null => false,
-            ValueKind::Bool(b) => b,
-            ValueKind::Number(num) => num != 0.0,
-            ValueKind::String(ref str) => !str.is_empty(),
-            ValueKind::Object(ref obj) => !obj.is_empty(),
-            ValueKind::Array { .. } => unreachable!(),
-            ValueKind::Lambda(..) => false,
-            ValueKind::NativeFn0(..)
-            | ValueKind::NativeFn1(..)
-            | ValueKind::NativeFn2(..)
-            | ValueKind::NativeFn3(..) => false,
-        }
-    }
-
-    let result = match *arg.as_ref() {
+    Ok(match *arg.as_ref() {
         ValueKind::Undefined => context.pool.undefined(),
+        ValueKind::Null => context.pool.bool(false),
+        ValueKind::Bool(b) => context.pool.bool(b),
+        ValueKind::Number(num) => context.pool.bool(num != 0.0),
+        ValueKind::String(ref str) => context.pool.bool(!str.is_empty()),
+        ValueKind::Object(ref obj) => context.pool.bool(!obj.is_empty()),
         ValueKind::Array { .. } => match arg.len() {
             0 => context.pool.bool(false),
             1 => fn_boolean(context, &arg.get_member(0))?,
@@ -96,10 +84,12 @@ pub fn fn_boolean(context: &FunctionContext, arg: &Value) -> Result<Value> {
                 context.pool.bool(false)
             }
         },
-        _ => context.pool.bool(cast(arg)),
-    };
-
-    Ok(result)
+        ValueKind::Lambda(..)
+        | ValueKind::NativeFn0(..)
+        | ValueKind::NativeFn1(..)
+        | ValueKind::NativeFn2(..)
+        | ValueKind::NativeFn3(..) => context.pool.bool(false),
+    })
 }
 
 pub fn fn_filter(context: &FunctionContext, arr: &Value, func: &Value) -> Result<Value> {
@@ -115,25 +105,21 @@ pub fn fn_filter(context: &FunctionContext, arr: &Value, func: &Value) -> Result
 
     for (index, item) in arr.members().enumerate() {
         let args = context.pool.array(ArrayFlags::empty());
-        let index_arg = context.pool.number(index);
         let arity = func.arity();
 
         args.push_index(item.index);
         if arity >= 2 {
-            args.push_index(index_arg.index);
+            args.push(ValueKind::Number(index.into()));
         }
         if arity >= 3 {
             args.push_index(arr.index);
         }
 
-        let include = fn_boolean(context, &context.evaluate_function(func, &args)?)?;
+        let include = context.evaluate_function(func, &args)?;
 
-        if include.as_bool() {
+        if include.is_truthy() {
             result.push_index(item.index);
         }
-
-        include.drop();
-        index_arg.drop();
     }
 
     Ok(result)

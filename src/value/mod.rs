@@ -86,6 +86,34 @@ impl Value {
         )
     }
 
+    pub fn is_truthy(&self) -> bool {
+        match self.pool.borrow().get(self.index) {
+            ValueKind::Undefined => false,
+            ValueKind::Null => false,
+            ValueKind::Number(n) => *n != 0.0,
+            ValueKind::Bool(b) => *b,
+            ValueKind::String(s) => !s.is_empty(),
+            ValueKind::Array(a, _) => match a.len() {
+                0 => false,
+                1 => self.get_member(0).is_truthy(),
+                _ => {
+                    for item in self.members() {
+                        if item.is_truthy() {
+                            return true;
+                        }
+                    }
+                    false
+                }
+            },
+            ValueKind::Object(o) => !o.is_empty(),
+            ValueKind::Lambda(_, _)
+            | ValueKind::NativeFn0(_, _)
+            | ValueKind::NativeFn1(_, _)
+            | ValueKind::NativeFn2(_, _)
+            | ValueKind::NativeFn3(_, _) => false,
+        }
+    }
+
     pub fn arity(&self) -> usize {
         match self.pool.borrow().get(self.index) {
             ValueKind::Lambda(
@@ -147,7 +175,6 @@ impl Value {
         }
     }
 
-    // TODO: as_str
     pub fn as_string(&self) -> String {
         match self.pool.borrow().get(self.index) {
             ValueKind::String(s) => s.clone(),
@@ -250,18 +277,6 @@ impl Value {
             }
             _ => panic!("Not an array"),
         }
-    }
-
-    /// Removes the actual `ValueKind` wrapped by the `Value` from the pool and consumes the `Value`.
-    ///
-    /// As `Value`s are thin wrappers around an index in the pool, and there could be other
-    /// `Value`s referencing the indexed `ValueKind`, this is not in a real `Drop` implementation.
-    ///
-    /// "Dropping" in this case actually means removing the ValueKind from the pool and putting
-    /// its index on the free list.
-    pub fn drop(self) {
-        self.pool.borrow_mut().remove(self.index);
-        drop(self);
     }
 
     /// Wraps an existing value in an array.

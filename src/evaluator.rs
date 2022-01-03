@@ -386,18 +386,14 @@ impl Evaluator {
         input: &Value,
         frame: &Frame,
     ) -> Result<Value> {
-        let position = cond.position;
         let cond = self.evaluate(cond, input, frame)?;
-        let is_truthy = fn_boolean(&self.fn_context(&position, input, frame), &cond)?;
-        let result = if is_truthy.as_bool() {
+        if cond.is_truthy() {
             self.evaluate(truthy, input, frame)
         } else if let Some(falsy) = falsy {
             self.evaluate(falsy, input, frame)
         } else {
             Ok(self.pool.undefined())
-        };
-        is_truthy.drop();
-        result
+        }
     }
 
     fn evaluate_path(
@@ -560,15 +556,8 @@ impl Evaluator {
                                     result.push_index(item.index);
                                 }
                             });
-                        } else {
-                            let include = fn_boolean(
-                                &self.fn_context(&filter.position, &item, frame),
-                                &index,
-                            )?;
-                            if include.as_bool() {
-                                result.push_index(item.index);
-                            }
-                            include.drop();
+                        } else if index.is_truthy() {
+                            result.push_index(item.index);
                         }
                     }
                 }

@@ -22,7 +22,7 @@ impl ValuePool {
     pub fn new() -> ValuePool {
         let pool = ValuePool(Rc::new(RefCell::new(NodePool::new())));
 
-        // The first index in any ValuePool is undefined
+        // The first index in any ValuePool is undefined, it's very commonly used
         pool.borrow_mut().insert(ValueKind::Undefined);
 
         pool
