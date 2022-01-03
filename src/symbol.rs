@@ -3,7 +3,7 @@ use super::parser::Parser;
 use super::tokenizer::{Token, TokenKind};
 use super::{Error, Result};
 
-pub(super) trait Symbol {
+pub trait Symbol {
     fn lbp(&self) -> u32;
     fn nud(&self, parser: &mut Parser) -> Result<Ast>;
     fn led(&self, parser: &mut Parser, left: Ast) -> Result<Ast>;

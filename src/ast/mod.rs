@@ -144,7 +144,7 @@ impl Default for Ast {
 }
 
 impl Ast {
-    pub(crate) fn new(kind: AstKind, position: Position) -> Self {
+    pub fn new(kind: AstKind, position: Position) -> Self {
         Self {
             kind,
             position,

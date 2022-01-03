@@ -6,16 +6,16 @@ pub struct Position {
 }
 
 impl Position {
-    pub(crate) fn advance(&mut self, x: usize) {
+    pub fn advance(&mut self, x: usize) {
         self.column += x;
         self.source_pos += x;
     }
 
-    pub(crate) fn advance1(&mut self) {
+    pub fn advance1(&mut self) {
         self.advance(1);
     }
 
-    pub(crate) fn advance2(&mut self) {
+    pub fn advance2(&mut self) {
         self.advance(2);
     }
 }

@@ -17,16 +17,16 @@ impl Parser {
         })
     }
 
-    pub(super) fn token(&self) -> &Token {
+    pub fn token(&self) -> &Token {
         &self.token
     }
 
-    pub(super) fn next(&mut self, infix: bool) -> Result<()> {
+    pub fn next(&mut self, infix: bool) -> Result<()> {
         self.token = self.tokenizer.next(infix)?;
         Ok(())
     }
 
-    pub(super) fn expect(&mut self, expected: TokenKind, infix: bool) -> Result<()> {
+    pub fn expect(&mut self, expected: TokenKind, infix: bool) -> Result<()> {
         if self.token.kind == TokenKind::End {
             return Err(Error::expected_token_before_end(
                 self.token.position,
@@ -47,7 +47,7 @@ impl Parser {
         Ok(())
     }
 
-    pub(super) fn expression(&mut self, bp: u32) -> Result<Ast> {
+    pub fn expression(&mut self, bp: u32) -> Result<Ast> {
         let mut last = self.token.clone();
         self.next(true)?;
         let mut left = last.nud(self)?;
@@ -62,7 +62,7 @@ impl Parser {
     }
 }
 
-pub(crate) fn parse(source: &str) -> Result<Ast> {
+pub fn parse(source: &str) -> Result<Ast> {
     let mut parser = Parser::new(source)?;
     let ast = parser.expression(0)?;
     if !matches!(parser.token().kind, TokenKind::End) {
