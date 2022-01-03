@@ -16,12 +16,12 @@ impl Evaluator {
         Evaluator { pool }
     }
 
-    fn fn_context(&self, position: Position, input: Value, frame: &Frame) -> FunctionContext<'_> {
+    fn fn_context(&self, position: &Position, input: &Value, frame: &Frame) -> FunctionContext<'_> {
         FunctionContext {
-            position,
+            position: position.clone(),
             pool: self.pool.clone(),
             evaluator: self,
-            input,
+            input: input.clone(),
             frame: frame.clone(),
         }
     }
@@ -44,11 +44,9 @@ impl Evaluator {
                 ref falsy,
             } => self.evaluate_ternary(cond, truthy, falsy.as_deref(), input, frame)?,
             NodeKind::Path(ref steps) => self.evaluate_path(node, steps, input, frame)?,
-            NodeKind::Name(ref name) => fn_lookup_internal(
-                self.fn_context(node.position, input.clone(), frame),
-                input,
-                name,
-            ),
+            NodeKind::Name(ref name) => {
+                fn_lookup_internal(self.fn_context(&node.position, &input, frame), input, name)
+            }
             NodeKind::Lambda { ref name, .. } => self.pool.lambda(name, node.clone()),
             NodeKind::Function {
                 ref proc,
@@ -143,7 +141,7 @@ impl Evaluator {
                         result.push_index(value.index);
                     } else {
                         result = fn_append(
-                            self.fn_context(node.position, input.clone(), frame),
+                            self.fn_context(&node.position, &input, frame),
                             result,
                             value,
                         )?;
@@ -190,7 +188,7 @@ impl Evaluator {
                             return Err(Error::multiple_keys(position, key));
                         }
                         group.data = fn_append(
-                            self.fn_context(position, input.clone(), frame),
+                            self.fn_context(&position, &input, frame),
                             group.data.clone(),
                             item.clone(),
                         )?;
@@ -362,14 +360,13 @@ impl Evaluator {
 
             BinaryOp::Concat => {
                 let lstr = if !lhs.is_undefined() {
-                    fn_string(self.fn_context(node.position, input.clone(), frame), lhs)?
-                        .as_string()
+                    fn_string(self.fn_context(&node.position, &input, frame), lhs)?.as_string()
                 } else {
                     "".to_string()
                 };
 
                 let rstr = if !rhs.is_undefined() {
-                    fn_string(self.fn_context(node.position, input, frame), rhs)?.as_string()
+                    fn_string(self.fn_context(&node.position, &input, frame), rhs)?.as_string()
                 } else {
                     "".to_string()
                 };
@@ -391,7 +388,7 @@ impl Evaluator {
     ) -> Result<Value> {
         let position = cond.position;
         let cond = self.evaluate(cond, input.clone(), frame)?;
-        let is_truthy = fn_boolean(self.fn_context(position, input.clone(), frame), cond)?;
+        let is_truthy = fn_boolean(self.fn_context(&position, &input, frame), cond)?;
         let result = if is_truthy.as_bool() {
             self.evaluate(truthy, input, frame)
         } else if let Some(falsy) = falsy {
@@ -564,10 +561,8 @@ impl Evaluator {
                                 }
                             });
                         } else {
-                            let include = fn_boolean(
-                                self.fn_context(filter.position, item.clone(), frame),
-                                index,
-                            )?;
+                            let include =
+                                fn_boolean(self.fn_context(&filter.position, &item, frame), index)?;
                             if include.as_bool() {
                                 result.push_index(item.index);
                             }
@@ -647,16 +642,16 @@ impl Evaluator {
                     unreachable!()
                 }
             }
-            ValueKind::NativeFn0(.., ref func) => func(self.fn_context(position, input, frame)),
+            ValueKind::NativeFn0(.., ref func) => func(self.fn_context(&position, &input, frame)),
             ValueKind::NativeFn1(ref name, ref func) => {
                 match evaluated_args.len() {
                     0 => {
                         // If there's no arguments, we are potentially in a [1..10].$string() situation, so pass the
                         // input as the argument.
-                        func(self.fn_context(position, input.clone(), frame), input)
+                        func(self.fn_context(&position, &input, frame), input)
                     }
                     1 => func(
-                        self.fn_context(position, input, frame),
+                        self.fn_context(&position, &input, frame),
                         evaluated_args.get_member(0),
                     ),
                     _ => Err(Error::ArgumentNotValid(position, 2, name.to_string())),
@@ -666,7 +661,7 @@ impl Evaluator {
                 0 => Err(Error::ArgumentNotValid(position, 1, name.to_string())),
                 1 => Err(Error::ArgumentNotValid(position, 2, name.to_string())),
                 2 => func(
-                    self.fn_context(position, input, frame),
+                    self.fn_context(&position, &input, frame),
                     evaluated_args.get_member(0),
                     evaluated_args.get_member(1),
                 ),
@@ -677,7 +672,7 @@ impl Evaluator {
                 1 => Err(Error::ArgumentNotValid(position, 2, name.to_string())),
                 2 => Err(Error::ArgumentNotValid(position, 3, name.to_string())),
                 3 => func(
-                    self.fn_context(position, input, frame),
+                    self.fn_context(&position, &input, frame),
                     evaluated_args.get_member(0),
                     evaluated_args.get_member(1),
                     evaluated_args.get_member(2),
