@@ -26,12 +26,15 @@ pub enum ValueKind {
     Array(Vec<usize>, ArrayFlags),
     Object(HashMap<String, usize>),
     Lambda(String, Node),
-    NativeFn0(String, fn(FunctionContext) -> Result<Value>),
-    NativeFn1(String, fn(FunctionContext, Value) -> Result<Value>),
-    NativeFn2(String, fn(FunctionContext, Value, Value) -> Result<Value>),
+    NativeFn0(String, fn(&FunctionContext) -> Result<Value>),
+    NativeFn1(String, fn(&FunctionContext, &Value) -> Result<Value>),
+    NativeFn2(
+        String,
+        fn(&FunctionContext, &Value, &Value) -> Result<Value>,
+    ),
     NativeFn3(
         String,
-        fn(FunctionContext, Value, Value, Value) -> Result<Value>,
+        fn(&FunctionContext, &Value, &Value, &Value) -> Result<Value>,
     ),
 }
 

@@ -147,7 +147,7 @@ impl ValuePool {
     }
 
     #[inline]
-    pub fn nativefn0(&self, name: &str, func: fn(FunctionContext) -> Result<Value>) -> Value {
+    pub fn nativefn0(&self, name: &str, func: fn(&FunctionContext) -> Result<Value>) -> Value {
         Value {
             pool: self.clone(),
             index: self
@@ -160,7 +160,7 @@ impl ValuePool {
     pub fn nativefn1(
         &self,
         name: &str,
-        func: fn(FunctionContext, Value) -> Result<Value>,
+        func: fn(&FunctionContext, &Value) -> Result<Value>,
     ) -> Value {
         Value {
             pool: self.clone(),
@@ -174,7 +174,7 @@ impl ValuePool {
     pub fn nativefn2(
         &self,
         name: &str,
-        func: fn(FunctionContext, Value, Value) -> Result<Value>,
+        func: fn(&FunctionContext, &Value, &Value) -> Result<Value>,
     ) -> Value {
         Value {
             pool: self.clone(),

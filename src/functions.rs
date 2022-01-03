@@ -14,19 +14,19 @@ pub struct FunctionContext<'a> {
 }
 
 impl<'a> FunctionContext<'a> {
-    pub fn evaluate_function(&self, proc: Value, args: Value) -> Result<Value> {
+    pub fn evaluate_function(&self, proc: &Value, args: &Value) -> Result<Value> {
         self.evaluator
-            .apply_function(self.position, &self.input, &proc, &args, &self.frame)
+            .apply_function(self.position, &self.input, proc, args, &self.frame)
     }
 }
 
-pub fn fn_lookup_internal(context: FunctionContext, input: Value, key: &str) -> Value {
+pub fn fn_lookup_internal(context: &FunctionContext, input: &Value, key: &str) -> Value {
     match *input.as_ref() {
         ValueKind::Array { .. } => {
             let result = context.pool.array_with_flags(ArrayFlags::SEQUENCE);
 
             for input in input.members() {
-                let res = fn_lookup_internal(context.clone(), input, key);
+                let res = fn_lookup_internal(context, &input, key);
                 match *res.as_ref() {
                     ValueKind::Undefined => {}
                     ValueKind::Array { .. } => {
@@ -43,17 +43,17 @@ pub fn fn_lookup_internal(context: FunctionContext, input: Value, key: &str) -> 
     }
 }
 
-pub fn fn_lookup(context: FunctionContext, input: Value, key: Value) -> Result<Value> {
+pub fn fn_lookup(context: &FunctionContext, input: &Value, key: &Value) -> Result<Value> {
     Ok(fn_lookup_internal(context, input, &key.as_string()))
 }
 
-pub fn fn_append(context: FunctionContext, arg1: Value, arg2: Value) -> Result<Value> {
+pub fn fn_append(context: &FunctionContext, arg1: &Value, arg2: &Value) -> Result<Value> {
     if arg1.is_undefined() {
-        return Ok(arg2);
+        return Ok(arg2.clone());
     }
 
     if arg2.is_undefined() {
-        return Ok(arg1);
+        return Ok(arg1.clone());
     }
 
     let result = context.pool.value((*arg1.as_ref()).clone());
@@ -64,7 +64,7 @@ pub fn fn_append(context: FunctionContext, arg1: Value, arg2: Value) -> Result<V
     Ok(result)
 }
 
-pub fn fn_boolean(context: FunctionContext, arg: Value) -> Result<Value> {
+pub fn fn_boolean(context: &FunctionContext, arg: &Value) -> Result<Value> {
     fn cast(value: &Value) -> bool {
         match *value.as_ref() {
             ValueKind::Undefined => unreachable!(),
@@ -86,23 +86,23 @@ pub fn fn_boolean(context: FunctionContext, arg: Value) -> Result<Value> {
         ValueKind::Undefined => context.pool.undefined(),
         ValueKind::Array { .. } => match arg.len() {
             0 => context.pool.bool(false),
-            1 => fn_boolean(context.clone(), arg.get_member(0))?,
+            1 => fn_boolean(context, &arg.get_member(0))?,
             _ => {
                 for item in arg.members() {
-                    if fn_boolean(context.clone(), item)?.as_bool() {
+                    if fn_boolean(context, &item)?.as_bool() {
                         return Ok(context.pool.bool(true));
                     }
                 }
                 context.pool.bool(false)
             }
         },
-        _ => context.pool.bool(cast(&arg)),
+        _ => context.pool.bool(cast(arg)),
     };
 
     Ok(result)
 }
 
-pub fn fn_filter(context: FunctionContext, arr: Value, func: Value) -> Result<Value> {
+pub fn fn_filter(context: &FunctionContext, arr: &Value, func: &Value) -> Result<Value> {
     if arr.is_undefined() {
         return Ok(context.pool.undefined());
     }
@@ -126,10 +126,7 @@ pub fn fn_filter(context: FunctionContext, arr: Value, func: Value) -> Result<Va
             args.push_index(arr.index);
         }
 
-        let include = fn_boolean(
-            context.clone(),
-            context.evaluate_function(func.clone(), args)?,
-        )?;
+        let include = fn_boolean(context, &context.evaluate_function(func, &args)?)?;
 
         if include.as_bool() {
             result.push_index(item.index);
@@ -142,13 +139,13 @@ pub fn fn_filter(context: FunctionContext, arr: Value, func: Value) -> Result<Va
     Ok(result)
 }
 
-pub fn fn_string(context: FunctionContext, arg: Value) -> Result<Value> {
+pub fn fn_string(context: &FunctionContext, arg: &Value) -> Result<Value> {
     if arg.is_undefined() {
         return Ok(context.pool.undefined());
     }
 
     if arg.is_string() {
-        Ok(arg)
+        Ok(arg.clone())
     } else if arg.is_function() {
         Ok(context.pool.string(""))
 
@@ -163,7 +160,7 @@ pub fn fn_string(context: FunctionContext, arg: Value) -> Result<Value> {
     }
 }
 
-pub fn fn_count(context: FunctionContext, arg: Value) -> Result<Value> {
+pub fn fn_count(context: &FunctionContext, arg: &Value) -> Result<Value> {
     Ok(context.pool.number(if arg.is_undefined() {
         0
     } else if arg.is_array() {
