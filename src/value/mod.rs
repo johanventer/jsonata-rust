@@ -21,10 +21,16 @@ use crate::json::codegen::{DumpGenerator, Generator, PrettyGenerator};
 ///
 /// As a `Value` is just an `Rc` and a `usize`, it has a Clone implementation which
 /// makes it very cheap to copy.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Value {
     pub pool: ValuePool,
     pub index: usize,
+}
+
+impl std::fmt::Debug for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
+    }
 }
 
 impl Value {
@@ -155,6 +161,15 @@ impl Value {
         match self.pool.get(self.index) {
             ValueKind::Number(n) => {
                 usize::try_from(*n).unwrap_or_else(|_| panic!("Number is not a valid usize"))
+            }
+            _ => panic!("Not a number"),
+        }
+    }
+
+    pub fn as_isize(&self) -> isize {
+        match self.pool.get(self.index) {
+            ValueKind::Number(n) => {
+                isize::try_from(*n).unwrap_or_else(|_| panic!("Number is not a valid isize"))
             }
             _ => panic!("Not a number"),
         }

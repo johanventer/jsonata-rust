@@ -72,11 +72,6 @@ fn t(resource: &str) {
                             assert!(result.is_undefined())
                         } else if expected_result.is_number() {
                             assert!(result.is_number());
-                            println!(
-                                "expected: {}, actual: {}",
-                                expected_result.as_f64(),
-                                result.as_f64()
-                            );
                             assert!(
                                 (expected_result.as_f64() - result.as_f64()).abs() < f64::EPSILON
                             );

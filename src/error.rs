@@ -115,6 +115,7 @@
 
 use crate::{ast::BinaryOp, value::Value};
 
+use super::functions::FunctionContext;
 use super::position::Position;
 use super::tokenizer::TokenKind;
 use std::{char, error, fmt};
@@ -272,6 +273,10 @@ impl Error {
 
     pub fn binary_op_types(p: Position, o: &BinaryOp) -> Self {
         Error::BinaryOpTypes(p, o.to_string())
+    }
+
+    pub fn argument_not_valid(context: &FunctionContext, arg_index: usize) -> Self {
+        Error::ArgumentNotValid(context.position, arg_index, context.name.to_string())
     }
 }
 

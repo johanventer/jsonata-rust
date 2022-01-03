@@ -97,6 +97,8 @@ impl JsonAta {
         bind!("not", nativefn1, fn_not);
         bind!("uppercase", nativefn1, fn_uppercase);
         bind!("lowercase", nativefn1, fn_lowercase);
+        bind!("substring", nativefn3, fn_substring);
+        bind!("abs", nativefn1, fn_abs);
 
         let evaluator = Evaluator::new(self.pool.clone());
         evaluator.evaluate(&self.ast, &input, &self.frame)

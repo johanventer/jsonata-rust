@@ -203,6 +203,17 @@ impl ValuePool {
             index: self.insert(ValueKind::NativeFn2(name.to_string(), func)),
         }
     }
+
+    pub fn nativefn3(
+        &self,
+        name: &str,
+        func: fn(&FunctionContext, &Value, &Value, &Value) -> Result<Value>,
+    ) -> Value {
+        Value {
+            pool: self.clone(),
+            index: self.insert(ValueKind::NativeFn3(name.to_string(), func)),
+        }
+    }
 }
 
 impl Default for ValuePool {

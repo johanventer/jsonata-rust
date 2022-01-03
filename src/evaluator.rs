@@ -16,8 +16,15 @@ impl Evaluator {
         Evaluator { pool }
     }
 
-    fn fn_context(&self, position: &Position, input: &Value, frame: &Frame) -> FunctionContext<'_> {
+    fn fn_context<'a>(
+        &'a self,
+        name: &'a str,
+        position: &Position,
+        input: &'a Value,
+        frame: &'a Frame,
+    ) -> FunctionContext<'a> {
         FunctionContext {
+            name,
             position: *position,
             pool: self.pool.clone(),
             evaluator: self,
@@ -44,9 +51,11 @@ impl Evaluator {
                 ref falsy,
             } => self.evaluate_ternary(cond, truthy, falsy.as_deref(), input, frame)?,
             AstKind::Path(ref steps) => self.evaluate_path(node, steps, input, frame)?,
-            AstKind::Name(ref name) => {
-                fn_lookup_internal(&self.fn_context(&node.position, input, frame), input, name)
-            }
+            AstKind::Name(ref name) => fn_lookup_internal(
+                &self.fn_context("lookup", &node.position, input, frame),
+                input,
+                name,
+            ),
             AstKind::Lambda { ref name, .. } => self.pool.lambda(name, node.clone()),
             AstKind::Function {
                 ref proc,
@@ -140,7 +149,7 @@ impl Evaluator {
                         result.push_index(value.index);
                     } else {
                         result = fn_append(
-                            &self.fn_context(&node.position, input, frame),
+                            &self.fn_context("append", &node.position, input, frame),
                             &result,
                             &value,
                         )?;
@@ -189,7 +198,7 @@ impl Evaluator {
                             return Err(Error::multiple_keys(position, &key));
                         }
                         group.data = fn_append(
-                            &self.fn_context(&position, &input, frame),
+                            &self.fn_context("append", &position, &input, frame),
                             &group.data,
                             &item,
                         )?;
@@ -369,12 +378,20 @@ impl Evaluator {
                 let mut result = String::new();
                 if !lhs.is_undefined() {
                     result.push_str(
-                        &fn_string(&self.fn_context(&node.position, input, frame), &lhs)?.as_str(),
+                        &fn_string(
+                            &self.fn_context("string", &node.position, input, frame),
+                            &lhs,
+                        )?
+                        .as_str(),
                     );
                 }
                 if !rhs.is_undefined() {
                     result.push_str(
-                        &fn_string(&self.fn_context(&node.position, input, frame), &rhs)?.as_str(),
+                        &fn_string(
+                            &self.fn_context("string", &node.position, input, frame),
+                            &rhs,
+                        )?
+                        .as_str(),
                     );
                 }
                 Ok(self.pool.string(result))
@@ -653,41 +670,44 @@ impl Evaluator {
                     unreachable!()
                 }
             }
-            ValueKind::NativeFn0(.., ref func) => func(&self.fn_context(&position, input, frame)),
+            ValueKind::NativeFn0(ref name, ref func) => {
+                func(&self.fn_context(name, &position, input, frame))
+            }
             ValueKind::NativeFn1(ref name, ref func) => {
-                let context = self.fn_context(&position, input, frame);
-                match evaluated_args.len() {
-                    0 => {
-                        // If there's no arguments, we are potentially in a [1..10].$string() situation, so pass the
-                        // input as the argument.
-                        func(&context, input)
-                    }
-                    1 => func(&context, &evaluated_args.get_member(0)),
-                    _ => Err(Error::ArgumentNotValid(position, 2, name.to_string())),
+                let context = self.fn_context(name, &position, input, frame);
+                if evaluated_args.len() > 1 {
+                    Err(Error::argument_not_valid(&context, 2))
+                } else if evaluated_args.is_empty() {
+                    func(&context, input)
+                } else {
+                    func(&context, &evaluated_args.get_member(0))
                 }
             }
-            ValueKind::NativeFn2(ref name, ref func) => match evaluated_args.len() {
-                0 => Err(Error::ArgumentNotValid(position, 1, name.to_string())),
-                1 => Err(Error::ArgumentNotValid(position, 2, name.to_string())),
-                2 => func(
-                    &self.fn_context(&position, input, frame),
-                    &evaluated_args.get_member(0),
-                    &evaluated_args.get_member(1),
-                ),
-                _ => Err(Error::ArgumentNotValid(position, 3, name.to_string())),
-            },
-            ValueKind::NativeFn3(ref name, ref func) => match evaluated_args.len() {
-                0 => Err(Error::ArgumentNotValid(position, 1, name.to_string())),
-                1 => Err(Error::ArgumentNotValid(position, 2, name.to_string())),
-                2 => Err(Error::ArgumentNotValid(position, 3, name.to_string())),
-                3 => func(
-                    &self.fn_context(&position, input, frame),
-                    &evaluated_args.get_member(0),
-                    &evaluated_args.get_member(1),
-                    &evaluated_args.get_member(2),
-                ),
-                _ => Err(Error::ArgumentNotValid(position, 4, name.to_string())),
-            },
+            ValueKind::NativeFn2(ref name, ref func) => {
+                let context = self.fn_context(name, &position, input, frame);
+                if evaluated_args.len() > 2 {
+                    Err(Error::argument_not_valid(&context, 3))
+                } else {
+                    func(
+                        &context,
+                        &evaluated_args.get_member(0),
+                        &evaluated_args.get_member(1),
+                    )
+                }
+            }
+            ValueKind::NativeFn3(ref name, ref func) => {
+                let context = self.fn_context(name, &position, input, frame);
+                if evaluated_args.len() > 3 {
+                    Err(Error::argument_not_valid(&context, 4))
+                } else {
+                    func(
+                        &context,
+                        &evaluated_args.get_member(0),
+                        &evaluated_args.get_member(1),
+                        &evaluated_args.get_member(2),
+                    )
+                }
+            }
             _ => Err(Error::InvokedNonFunction(position)),
         }
     }

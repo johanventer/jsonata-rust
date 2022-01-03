@@ -2,10 +2,11 @@ use super::evaluator::Evaluator;
 use super::frame::Frame;
 use super::position::Position;
 use super::value::{ArrayFlags, Value, ValueKind, ValuePool};
-use super::Result;
+use super::{Error, Result};
 
 #[derive(Clone)]
 pub struct FunctionContext<'a> {
+    pub name: &'a str,
     pub position: Position,
     pub pool: ValuePool,
     pub input: Value,
@@ -44,7 +45,11 @@ pub fn fn_lookup_internal(context: &FunctionContext, input: &Value, key: &str) -
 }
 
 pub fn fn_lookup(context: &FunctionContext, input: &Value, key: &Value) -> Result<Value> {
-    Ok(fn_lookup_internal(context, input, &key.as_str()))
+    if !key.is_string() {
+        Err(Error::argument_not_valid(context, 1))
+    } else {
+        Ok(fn_lookup_internal(context, input, &key.as_str()))
+    }
 }
 
 pub fn fn_append(context: &FunctionContext, arg1: &Value, arg2: &Value) -> Result<Value> {
@@ -85,10 +90,10 @@ pub fn fn_boolean(context: &FunctionContext, arg: &Value) -> Result<Value> {
             }
         },
         ValueKind::Lambda(..)
-        | ValueKind::NativeFn0(..)
-        | ValueKind::NativeFn1(..)
-        | ValueKind::NativeFn2(..)
-        | ValueKind::NativeFn3(..) => context.pool.bool(false),
+        | ValueKind::NativeFn0 { .. }
+        | ValueKind::NativeFn1 { .. }
+        | ValueKind::NativeFn2 { .. }
+        | ValueKind::NativeFn3 { .. } => context.pool.bool(false),
     })
 }
 
@@ -97,9 +102,13 @@ pub fn fn_filter(context: &FunctionContext, arr: &Value, func: &Value) -> Result
         return Ok(context.pool.undefined());
     }
 
-    // TODO: These asserts are here because we don't have function signature validation
-    debug_assert!(arr.is_array());
-    debug_assert!(func.is_function());
+    if !arr.is_array() {
+        return Err(Error::argument_not_valid(context, 1));
+    }
+
+    if !func.is_function() {
+        return Err(Error::argument_not_valid(context, 2));
+    }
 
     let mut result = context.pool.array(ArrayFlags::SEQUENCE);
 
@@ -173,9 +182,60 @@ pub fn fn_lowercase(context: &FunctionContext, arg: &Value) -> Result<Value> {
 }
 
 pub fn fn_uppercase(context: &FunctionContext, arg: &Value) -> Result<Value> {
-    Ok(if !arg.is_string() {
-        context.pool.undefined()
+    if !arg.is_string() {
+        Ok(context.pool.undefined())
     } else {
-        context.pool.string(arg.as_str().to_uppercase())
-    })
+        Ok(context.pool.string(arg.as_str().to_uppercase()))
+    }
+}
+
+pub fn fn_substring(
+    context: &FunctionContext,
+    string: &Value,
+    start: &Value,
+    length: &Value,
+) -> Result<Value> {
+    if !string.is_string() {
+        return Err(Error::argument_not_valid(context, 1));
+    }
+
+    if !start.is_number() {
+        return Err(Error::argument_not_valid(context, 2));
+    }
+
+    let string = string.as_str();
+    let start = start.as_isize();
+
+    let start = if string.len() as isize + start < 0 {
+        0
+    } else {
+        start as usize
+    };
+
+    if length.is_undefined() {
+        Ok(context.pool.string(string[start..].to_string()))
+    } else {
+        if !length.is_number() {
+            return Err(Error::argument_not_valid(context, 3));
+        }
+
+        let length = length.as_isize();
+        if length < 0 {
+            Ok(context.pool.string(String::from("")))
+        } else {
+            Ok(context
+                .pool
+                .string(string[start..start + length as usize].to_string()))
+        }
+    }
+}
+
+pub fn fn_abs(context: &FunctionContext, arg: &Value) -> Result<Value> {
+    if arg.is_undefined() {
+        Ok(context.pool.undefined())
+    } else if !arg.is_number() {
+        Err(Error::argument_not_valid(context, 1))
+    } else {
+        Ok(context.pool.number(arg.as_f64().abs()))
+    }
 }
