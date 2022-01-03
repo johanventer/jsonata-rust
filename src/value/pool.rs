@@ -1,9 +1,4 @@
-use std::{
-    cell::{RefCell, UnsafeCell},
-    collections::HashMap,
-    fmt::Debug,
-    rc::Rc,
-};
+use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
 
 use super::{ArrayFlags, Value, ValueKind};
 use crate::ast::Node;
@@ -23,7 +18,7 @@ use crate::Result;
 /// # Safety
 ///
 /// Items in the pool can never be removed, so deferencing pointers to them is always safe.
-pub struct ValuePool(Rc<RefCell<Vec<UnsafeCell<ValueKind>>>>);
+pub struct ValuePool(Rc<RefCell<Vec<ValueKind>>>);
 
 impl ValuePool {
     pub fn new() -> ValuePool {
@@ -39,22 +34,68 @@ impl ValuePool {
     pub fn insert(&self, kind: ValueKind) -> usize {
         let mut pool = self.0.borrow_mut();
         let index = pool.len();
-        pool.push(UnsafeCell::new(kind));
+        pool.push(kind);
         index
     }
 
+    #[inline]
     pub fn get(&self, index: usize) -> &ValueKind {
-        debug_assert!(index < self.0.borrow().len());
+        let pool = self.0.borrow();
 
-        // TODO: SAFETY
-        unsafe { &*(self.0.borrow())[index].get() }
+        debug_assert!(index < pool.len());
+
+        let item_ptr = &pool[index] as *const ValueKind;
+
+        // SAFETY: Items in the pool are never removed, so pointers to them will always be valid.
+        unsafe { &*item_ptr }
     }
 
-    pub fn get_mut(&mut self, index: usize) -> &mut ValueKind {
-        debug_assert!(index < self.0.borrow_mut().len());
+    pub fn object_insert(&mut self, index: usize, key: &str, kind: ValueKind) {
+        let index_to_insert = self.insert(kind);
+        match (self.0.borrow_mut())[index] {
+            ValueKind::Object(ref mut object) => {
+                object.insert(key.to_owned(), index_to_insert);
+            }
+            _ => panic!("Not an object"),
+        }
+    }
 
-        // TODO: SAFETY
-        unsafe { &mut *(self.0.borrow_mut())[index].get() }
+    pub fn object_insert_index(&mut self, index: usize, key: &str, index_to_insert: usize) {
+        match (self.0.borrow_mut())[index] {
+            ValueKind::Object(ref mut object) => {
+                object.insert(key.to_owned(), index_to_insert);
+            }
+            _ => panic!("Not an object"),
+        }
+    }
+
+    pub fn array_push(&mut self, index: usize, kind: ValueKind) {
+        let index_to_push = self.insert(kind);
+        match (self.0.borrow_mut())[index] {
+            ValueKind::Array(ref mut array, _) => array.push(index_to_push),
+            _ => panic!("Not an array"),
+        }
+    }
+
+    pub fn array_push_index(&mut self, index: usize, index_to_push: usize) {
+        match (self.0.borrow_mut())[index] {
+            ValueKind::Array(ref mut array, _) => array.push(index_to_push),
+            _ => panic!("Not an array"),
+        }
+    }
+
+    pub fn array_set_flags(&mut self, index: usize, new_flags: ArrayFlags) {
+        match (self.0.borrow_mut())[index] {
+            ValueKind::Array(_, ref mut flags) => *flags = new_flags,
+            _ => panic!("Not an array"),
+        }
+    }
+
+    pub fn array_add_flags(&mut self, index: usize, flags_to_add: ArrayFlags) {
+        match (self.0.borrow_mut())[index] {
+            ValueKind::Array(_, ref mut flags) => flags.insert(flags_to_add),
+            _ => panic!("Not an array"),
+        }
     }
 
     pub fn undefined(&self) -> Value {

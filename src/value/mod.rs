@@ -19,7 +19,7 @@ use crate::json::codegen::{DumpGenerator, Generator, PrettyGenerator};
 /// index of a node in the pool.
 ///
 /// As a `Value` is just an `Rc` and a `usize`, it has a Clone implementation which
-/// makes it very easy to pass around.
+/// makes it very cheap to copy.
 #[derive(Clone, Debug)]
 pub struct Value {
     pub pool: ValuePool,
@@ -206,23 +206,14 @@ impl Value {
         }
     }
 
+    #[inline]
     pub fn insert(&mut self, key: &str, kind: ValueKind) {
-        let index = self.pool.insert(kind);
-        match self.pool.get_mut(self.index) {
-            ValueKind::Object(ref mut map) => {
-                map.insert(key.to_owned(), index);
-            }
-            _ => panic!("Not an object"),
-        }
+        self.pool.object_insert(self.index, key, kind);
     }
 
+    #[inline]
     pub fn insert_index(&mut self, key: &str, index: usize) {
-        match self.pool.get_mut(self.index) {
-            ValueKind::Object(ref mut map) => {
-                map.insert(key.to_owned(), index);
-            }
-            _ => panic!("Not an object"),
-        }
+        self.pool.object_insert_index(self.index, key, index);
     }
 
     /// Pushes a new `ValueKind` into the `ValueKind::Array` wrapped by this `Value`.
@@ -230,14 +221,9 @@ impl Value {
     /// # Panics
     ///
     /// If the `ValueKind` wrapped by this `Value` is anot a `ValueKind::Array`.
+    #[inline]
     pub fn push(&mut self, kind: ValueKind) {
-        let index = self.pool.insert(kind);
-        match self.pool.get_mut(self.index) {
-            ValueKind::Array(ref mut array, _) => {
-                array.push(index);
-            }
-            _ => panic!("Not an array"),
-        }
+        self.pool.array_push(self.index, kind);
     }
 
     /// Pushes a pool index into the `ValueKind::Array` wrapped by this `Value`.
@@ -252,13 +238,9 @@ impl Value {
     /// # Panics
     ///
     /// If the `ValueKind` wrapped by this `Value` is not a `ValueKind::Array`.
+    #[inline]
     pub fn push_index(&mut self, index: usize) {
-        match self.pool.get_mut(self.index) {
-            ValueKind::Array(ref mut array, _) => {
-                array.push(index);
-            }
-            _ => panic!("Not an array"),
-        }
+        self.pool.array_push_index(self.index, index);
     }
 
     /// Wraps an existing value in an array.
@@ -284,7 +266,7 @@ impl Value {
     /// If the `ValueKind` wrapped by this `Value` is not a `ValueKind::Array`.
     pub fn members(&self) -> Members {
         match self.pool.get(self.index) {
-            ValueKind::Array(ref array, _) => unsafe { Members::new(&self.pool, array) },
+            ValueKind::Array(ref array, _) => Members::new(&self.pool, array),
             _ => panic!("Not an array"),
         }
     }
@@ -296,7 +278,7 @@ impl Value {
     /// If the `ValueKind` wrapped by this `Value` is not a `ValueKind::Object`.
     pub fn entries(&self) -> Entries {
         match self.pool.get(self.index) {
-            ValueKind::Object(ref map) => unsafe { Entries::new(&self.pool, map) },
+            ValueKind::Object(ref map) => Entries::new(&self.pool, map),
             _ => panic!("Not an object"),
         }
     }
@@ -308,18 +290,14 @@ impl Value {
         }
     }
 
+    #[inline]
     pub fn set_flags(&mut self, new_flags: ArrayFlags) {
-        match self.pool.get_mut(self.index) {
-            ValueKind::Array(_, ref mut flags) => *flags = new_flags,
-            _ => panic!("Not an array"),
-        }
+        self.pool.array_set_flags(self.index, new_flags);
     }
 
+    #[inline]
     pub fn add_flags(&mut self, flags_to_add: ArrayFlags) {
-        match self.pool.get_mut(self.index) {
-            ValueKind::Array(_, ref mut flags) => flags.insert(flags_to_add),
-            _ => panic!("Not an array"),
-        }
+        self.pool.array_add_flags(self.index, flags_to_add);
     }
 
     pub fn has_flags(&self, check_flags: ArrayFlags) -> bool {
@@ -454,13 +432,10 @@ pub struct Members<'a> {
 }
 
 impl<'a> Members<'a> {
-    /// # Safety
-    /// The iterator's lifetime is tied to the pool, and as long as the array is not
-    /// removed from the pool during the lifetime of this iterator then this is safe.
-    pub unsafe fn new(pool: &'a ValuePool, array: *const Vec<usize>) -> Self {
+    pub fn new(pool: &'a ValuePool, array: &'a [usize]) -> Self {
         Self {
             pool,
-            inner: (*array).iter(),
+            inner: array.iter(),
         }
     }
 }
@@ -483,13 +458,10 @@ pub struct Entries<'a> {
 }
 
 impl<'a> Entries<'a> {
-    /// # Safety
-    /// The iterator's lifetime is tied to the pool, and as long as the map is not
-    /// removed from the pool during the lifetime of this iterator then this is safe.
-    pub unsafe fn new(pool: &'a ValuePool, map: *const HashMap<String, usize>) -> Self {
+    pub fn new(pool: &'a ValuePool, map: &'a HashMap<String, usize>) -> Self {
         Self {
             pool,
-            inner: (*map).iter(),
+            inner: map.iter(),
         }
     }
 }
