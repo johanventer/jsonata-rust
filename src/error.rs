@@ -246,15 +246,15 @@ impl Error {
         Error::UnsupportedEscape(p, c.to_string())
     }
 
-    pub fn negating_non_numeric(p: Position, v: Value) -> Self {
+    pub fn negating_non_numeric(p: Position, v: &Value) -> Self {
         Error::NegatingNonNumeric(p, format!("{}", v))
     }
 
-    pub fn non_string_key(p: Position, v: Value) -> Self {
+    pub fn non_string_key(p: Position, v: &Value) -> Self {
         Error::NonStringKey(p, format!("{}", v))
     }
 
-    pub fn multiple_keys(p: Position, k: Value) -> Self {
+    pub fn multiple_keys(p: Position, k: &Value) -> Self {
         Error::MultipleKeys(p, format!("{}", k))
     }
 
@@ -266,7 +266,7 @@ impl Error {
         Error::RightSideNotNumber(p, o.to_string())
     }
 
-    pub fn binary_op_mismatch(p: Position, l: Value, r: Value, o: &BinaryOp) -> Self {
+    pub fn binary_op_mismatch(p: Position, l: &Value, r: &Value, o: &BinaryOp) -> Self {
         Error::BinaryOpMismatch(p, format!("{}", l), format!("{}", r), o.to_string())
     }
 

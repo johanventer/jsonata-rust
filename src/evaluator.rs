@@ -125,7 +125,7 @@ impl Evaluator {
                 let result = match *result.as_ref() {
                     ValueKind::Undefined => Ok(self.pool.undefined()),
                     ValueKind::Number(num) if !num.is_nan() => Ok(self.pool.number(-num)),
-                    _ => Err(Error::negating_non_numeric(node.position, result.clone())),
+                    _ => Err(Error::negating_non_numeric(node.position, &result)),
                 };
                 result
             }
@@ -178,14 +178,14 @@ impl Evaluator {
             for (index, pair) in object.iter().enumerate() {
                 let key = self.evaluate(&pair.0, &item, frame)?;
                 if !key.is_string() {
-                    return Err(Error::non_string_key(position, key));
+                    return Err(Error::non_string_key(position, &key));
                 }
 
                 match groups.entry(key.as_string()) {
                     hash_map::Entry::Occupied(mut entry) => {
                         let group = entry.get_mut();
                         if group.index != index {
-                            return Err(Error::multiple_keys(position, key));
+                            return Err(Error::multiple_keys(position, &key));
                         }
                         group.data = fn_append(
                             &self.fn_context(&position, &input, frame),
@@ -309,7 +309,7 @@ impl Evaluator {
                     }));
                 }
 
-                Err(Error::binary_op_mismatch(node.position, lhs, rhs, op))
+                Err(Error::binary_op_mismatch(node.position, &lhs, &rhs, op))
             }
 
             BinaryOp::Equal | BinaryOp::NotEqual => {
@@ -325,11 +325,11 @@ impl Evaluator {
             }
 
             BinaryOp::Range => {
-                if !lhs.is_undefined() && !lhs.is_unsigned_integer() {
+                if !lhs.is_undefined() && !lhs.is_usize() {
                     return Err(Error::LeftSideNotInteger(node.position));
                 };
 
-                if !rhs.is_undefined() && !rhs.is_unsigned_integer() {
+                if !rhs.is_undefined() && !rhs.is_usize() {
                     return Err(Error::RightSideNotInteger(node.position));
                 }
 

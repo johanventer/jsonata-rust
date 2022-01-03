@@ -9,7 +9,7 @@ mod pool;
 pub use kind::{ArrayFlags, ValueKind};
 pub use pool::ValuePool;
 
-use crate::ast::NodeKind;
+use crate::ast::{Node, NodeKind};
 use crate::json::codegen::{DumpGenerator, Generator, PrettyGenerator};
 use crate::node_pool::{NodePool, NodeRef};
 
@@ -29,42 +29,52 @@ pub struct Value {
 }
 
 impl Value {
+    #[inline]
     pub fn is_undefined(&self) -> bool {
         matches!(self.pool.borrow().get(self.index), ValueKind::Undefined)
     }
 
+    #[inline]
     pub fn is_null(&self) -> bool {
         matches!(self.pool.borrow().get(self.index), ValueKind::Null)
     }
 
+    #[inline]
     pub fn is_bool(&self) -> bool {
         matches!(self.pool.borrow().get(self.index), ValueKind::Bool(..))
     }
 
+    #[inline]
     pub fn is_number(&self) -> bool {
         matches!(self.pool.borrow().get(self.index), ValueKind::Number(..))
     }
 
-    pub fn is_unsigned_integer(&self) -> bool {
+    #[inline]
+    pub fn is_usize(&self) -> bool {
         matches!(self.pool.borrow().get(self.index), ValueKind::Number(n) if usize::try_from(*n).is_ok())
     }
 
+    #[inline]
     pub fn is_nan(&self) -> bool {
         matches!(self.pool.borrow().get(self.index), ValueKind::Number(n) if n.is_nan())
     }
 
+    #[inline]
     pub fn is_string(&self) -> bool {
         matches!(self.pool.borrow().get(self.index), ValueKind::String(..))
     }
 
+    #[inline]
     pub fn is_array(&self) -> bool {
         matches!(self.pool.borrow().get(self.index), ValueKind::Array(..))
     }
 
+    #[inline]
     pub fn is_object(&self) -> bool {
         matches!(self.pool.borrow().get(self.index), ValueKind::Object(..))
     }
 
+    #[inline]
     pub fn is_function(&self) -> bool {
         matches!(
             self.pool.borrow().get(self.index),
@@ -78,13 +88,13 @@ impl Value {
 
     pub fn arity(&self) -> usize {
         match self.pool.borrow().get(self.index) {
-            ValueKind::Lambda(_, ref node) => {
-                if let NodeKind::Lambda { ref args, .. } = node.kind {
-                    args.len()
-                } else {
-                    unreachable!()
-                }
-            }
+            ValueKind::Lambda(
+                _,
+                Node {
+                    kind: NodeKind::Lambda { ref args, .. },
+                    ..
+                },
+            ) => args.len(),
             ValueKind::NativeFn0(..) => 0,
             ValueKind::NativeFn1(..) => 1,
             ValueKind::NativeFn2(..) => 2,
