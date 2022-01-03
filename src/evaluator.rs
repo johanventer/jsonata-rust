@@ -18,7 +18,7 @@ impl Evaluator {
 
     fn fn_context(&self, position: &Position, input: &Value, frame: &Frame) -> FunctionContext<'_> {
         FunctionContext {
-            position: position.clone(),
+            position: *position,
             pool: self.pool.clone(),
             evaluator: self,
             input: input.clone(),
@@ -26,7 +26,7 @@ impl Evaluator {
         }
     }
 
-    pub fn evaluate(&self, node: &Node, input: Value, frame: &Frame) -> Result<Value> {
+    pub fn evaluate(&self, node: &Node, input: &Value, frame: &Frame) -> Result<Value> {
         let mut result = match node.kind {
             NodeKind::Null => self.pool.null(),
             NodeKind::Bool(b) => self.pool.bool(b),
@@ -44,9 +44,11 @@ impl Evaluator {
                 ref falsy,
             } => self.evaluate_ternary(cond, truthy, falsy.as_deref(), input, frame)?,
             NodeKind::Path(ref steps) => self.evaluate_path(node, steps, input, frame)?,
-            NodeKind::Name(ref name) => {
-                fn_lookup_internal(self.fn_context(&node.position, &input, frame), input, name)
-            }
+            NodeKind::Name(ref name) => fn_lookup_internal(
+                self.fn_context(&node.position, input, frame),
+                input.clone(),
+                name,
+            ),
             NodeKind::Lambda { ref name, .. } => self.pool.lambda(name, node.clone()),
             NodeKind::Function {
                 ref proc,
@@ -84,7 +86,7 @@ impl Evaluator {
         })
     }
 
-    fn evaluate_block(&self, exprs: &[Node], input: Value, frame: &Frame) -> Result<Value> {
+    fn evaluate_block(&self, exprs: &[Node], input: &Value, frame: &Frame) -> Result<Value> {
         let frame = Frame::new_with_parent(frame);
         if exprs.is_empty() {
             return Ok(self.pool.undefined());
@@ -92,18 +94,18 @@ impl Evaluator {
 
         let mut result = self.pool.undefined();
         for expr in exprs {
-            result = self.evaluate(expr, input.clone(), &frame)?;
+            result = self.evaluate(expr, input, &frame)?;
         }
 
         Ok(result)
     }
 
-    fn evaluate_var(&self, name: &str, input: Value, frame: &Frame) -> Result<Value> {
+    fn evaluate_var(&self, name: &str, input: &Value, frame: &Frame) -> Result<Value> {
         Ok(if name.is_empty() {
             if input.has_flags(ArrayFlags::WRAPPED) {
                 input.get_member(0)
             } else {
-                input
+                input.clone()
             }
         } else if let Some(value) = frame.lookup(name) {
             value
@@ -116,7 +118,7 @@ impl Evaluator {
         &self,
         node: &Node,
         op: &UnaryOp,
-        input: Value,
+        input: &Value,
         frame: &Frame,
     ) -> Result<Value> {
         match *op {
@@ -136,12 +138,12 @@ impl Evaluator {
                     ArrayFlags::empty()
                 });
                 for item in array.iter() {
-                    let value = self.evaluate(item, input.clone(), frame)?;
+                    let value = self.evaluate(item, input, frame)?;
                     if let NodeKind::Unary(UnaryOp::ArrayConstructor(..)) = item.kind {
                         result.push_index(value.index);
                     } else {
                         result = fn_append(
-                            self.fn_context(&node.position, &input, frame),
+                            self.fn_context(&node.position, input, frame),
                             result,
                             value,
                         )?;
@@ -159,7 +161,7 @@ impl Evaluator {
         &self,
         position: Position,
         object: &[(Node, Node)],
-        input: Value,
+        input: &Value,
         frame: &Frame,
     ) -> Result<Value> {
         struct Group {
@@ -176,7 +178,7 @@ impl Evaluator {
 
         for item in input.members() {
             for (index, pair) in object.iter().enumerate() {
-                let key = self.evaluate(&pair.0, item.clone(), frame)?;
+                let key = self.evaluate(&pair.0, &item, frame)?;
                 if !key.is_string() {
                     return Err(Error::non_string_key(position, key));
                 }
@@ -207,7 +209,7 @@ impl Evaluator {
 
         for key in groups.keys() {
             let group = groups.get(key).unwrap();
-            let value = self.evaluate(&object[group.index].1, group.data.clone(), frame)?;
+            let value = self.evaluate(&object[group.index].1, &group.data, frame)?;
             if !value.is_undefined() {
                 result.insert_index(key, value.index);
             }
@@ -222,10 +224,10 @@ impl Evaluator {
         op: &BinaryOp,
         lhs: &Node,
         rhs: &Node,
-        input: Value,
+        input: &Value,
         frame: &Frame,
     ) -> Result<Value> {
-        let rhs = self.evaluate(rhs, input.clone(), frame)?;
+        let rhs = self.evaluate(rhs, input, frame)?;
 
         if *op == BinaryOp::Bind {
             if let NodeKind::Var(ref name) = lhs.kind {
@@ -235,7 +237,7 @@ impl Evaluator {
             unreachable!()
         }
 
-        let lhs = self.evaluate(lhs, input.clone(), frame)?;
+        let lhs = self.evaluate(lhs, input, frame)?;
 
         match op {
             BinaryOp::Add
@@ -360,13 +362,13 @@ impl Evaluator {
 
             BinaryOp::Concat => {
                 let lstr = if !lhs.is_undefined() {
-                    fn_string(self.fn_context(&node.position, &input, frame), lhs)?.as_string()
+                    fn_string(self.fn_context(&node.position, input, frame), lhs)?.as_string()
                 } else {
                     "".to_string()
                 };
 
                 let rstr = if !rhs.is_undefined() {
-                    fn_string(self.fn_context(&node.position, &input, frame), rhs)?.as_string()
+                    fn_string(self.fn_context(&node.position, input, frame), rhs)?.as_string()
                 } else {
                     "".to_string()
                 };
@@ -383,12 +385,12 @@ impl Evaluator {
         cond: &Node,
         truthy: &Node,
         falsy: Option<&Node>,
-        input: Value,
+        input: &Value,
         frame: &Frame,
     ) -> Result<Value> {
         let position = cond.position;
-        let cond = self.evaluate(cond, input.clone(), frame)?;
-        let is_truthy = fn_boolean(self.fn_context(&position, &input, frame), cond)?;
+        let cond = self.evaluate(cond, input, frame)?;
+        let is_truthy = fn_boolean(self.fn_context(&position, input, frame), cond)?;
         let result = if is_truthy.as_bool() {
             self.evaluate(truthy, input, frame)
         } else if let Some(falsy) = falsy {
@@ -404,11 +406,11 @@ impl Evaluator {
         &self,
         node: &Node,
         steps: &[Node],
-        input: Value,
+        input: &Value,
         frame: &Frame,
     ) -> Result<Value> {
         let mut input = if input.is_array() && !matches!(steps[0].kind, NodeKind::Var(..)) {
-            input
+            input.clone()
         } else {
             input.wrap_in_array(ArrayFlags::empty())
         };
@@ -417,9 +419,9 @@ impl Evaluator {
 
         for (index, step) in steps.iter().enumerate() {
             result = if index == 0 && step.cons_array {
-                self.evaluate(step, input.clone(), frame)?
+                self.evaluate(step, &input, frame)?
             } else {
-                self.evaluate_step(step, input.clone(), frame, index == steps.len() - 1)?
+                self.evaluate_step(step, &input, frame, index == steps.len() - 1)?
             };
 
             if result.is_undefined() || (result.is_array() && result.is_empty()) {
@@ -441,7 +443,7 @@ impl Evaluator {
         }
 
         if let Some((position, ref object)) = node.group_by {
-            result = self.evaluate_group_expression(position, object, result, frame)?;
+            result = self.evaluate_group_expression(position, object, &result, frame)?;
         }
 
         Ok(result)
@@ -450,7 +452,7 @@ impl Evaluator {
     fn evaluate_step(
         &self,
         step: &Node,
-        input: Value,
+        input: &Value,
         frame: &Frame,
         last_step: bool,
     ) -> Result<Value> {
@@ -465,7 +467,7 @@ impl Evaluator {
         }
 
         for item in input.members() {
-            let mut item_result = self.evaluate(step, item, frame)?;
+            let mut item_result = self.evaluate(step, &item, frame)?;
 
             if let Some(ref stages) = step.stages {
                 for stage in stages {
@@ -505,7 +507,7 @@ impl Evaluator {
     fn evaluate_sorts(
         &self,
         _sorts: &[(Node, bool)],
-        _inputt: Value,
+        _inputt: &Value,
         _frame: &Frame,
     ) -> Result<Value> {
         unimplemented!("Sorts not yet implemented")
@@ -548,7 +550,7 @@ impl Evaluator {
                 }
                 _ => {
                     for (i, item) in input.members().enumerate() {
-                        let mut index = self.evaluate(filter, item.clone(), frame)?;
+                        let mut index = self.evaluate(filter, &item, frame)?;
                         if index.is_number() && !index.is_nan() {
                             index = index.wrap_in_array(ArrayFlags::empty());
                         }
@@ -579,13 +581,13 @@ impl Evaluator {
 
     pub fn evaluate_function(
         &self,
-        input: Value,
+        input: &Value,
         proc: &Node,
         args: &[Node],
         _is_partial: bool,
         frame: &Frame,
     ) -> Result<Value> {
-        let evaluated_proc = self.evaluate(proc, input.clone(), frame)?;
+        let evaluated_proc = self.evaluate(proc, input, frame)?;
 
         // Help the user out if they forgot a '$'
         if evaluated_proc.is_undefined() {
@@ -603,19 +605,25 @@ impl Evaluator {
 
         let evaluated_args = self.pool.array(ArrayFlags::empty());
         for arg in args {
-            let arg = self.evaluate(arg, input.clone(), frame)?;
+            let arg = self.evaluate(arg, input, frame)?;
             evaluated_args.push_index(arg.index);
         }
 
-        self.apply_function(proc.position, input, evaluated_proc, evaluated_args, frame)
+        self.apply_function(
+            proc.position,
+            input,
+            &evaluated_proc,
+            &evaluated_args,
+            frame,
+        )
     }
 
     pub fn apply_function(
         &self,
         position: Position,
-        input: Value,
-        evaluated_proc: Value,
-        evaluated_args: Value,
+        input: &Value,
+        evaluated_proc: &Value,
+        evaluated_args: &Value,
         frame: &Frame,
     ) -> Result<Value> {
         match *evaluated_proc.as_ref() {
@@ -642,16 +650,16 @@ impl Evaluator {
                     unreachable!()
                 }
             }
-            ValueKind::NativeFn0(.., ref func) => func(self.fn_context(&position, &input, frame)),
+            ValueKind::NativeFn0(.., ref func) => func(self.fn_context(&position, input, frame)),
             ValueKind::NativeFn1(ref name, ref func) => {
                 match evaluated_args.len() {
                     0 => {
                         // If there's no arguments, we are potentially in a [1..10].$string() situation, so pass the
                         // input as the argument.
-                        func(self.fn_context(&position, &input, frame), input)
+                        func(self.fn_context(&position, input, frame), input.clone())
                     }
                     1 => func(
-                        self.fn_context(&position, &input, frame),
+                        self.fn_context(&position, input, frame),
                         evaluated_args.get_member(0),
                     ),
                     _ => Err(Error::ArgumentNotValid(position, 2, name.to_string())),
@@ -661,7 +669,7 @@ impl Evaluator {
                 0 => Err(Error::ArgumentNotValid(position, 1, name.to_string())),
                 1 => Err(Error::ArgumentNotValid(position, 2, name.to_string())),
                 2 => func(
-                    self.fn_context(&position, &input, frame),
+                    self.fn_context(&position, input, frame),
                     evaluated_args.get_member(0),
                     evaluated_args.get_member(1),
                 ),
@@ -672,7 +680,7 @@ impl Evaluator {
                 1 => Err(Error::ArgumentNotValid(position, 2, name.to_string())),
                 2 => Err(Error::ArgumentNotValid(position, 3, name.to_string())),
                 3 => func(
-                    self.fn_context(&position, &input, frame),
+                    self.fn_context(&position, input, frame),
                     evaluated_args.get_member(0),
                     evaluated_args.get_member(1),
                     evaluated_args.get_member(2),

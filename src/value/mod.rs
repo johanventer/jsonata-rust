@@ -255,16 +255,16 @@ impl Value {
     }
 
     /// Wraps an existing value in an array.
-    pub fn wrap_in_array(self, flags: ArrayFlags) -> Value {
+    pub fn wrap_in_array(&self, flags: ArrayFlags) -> Value {
         let array = self.pool.array_with_capacity(1, flags);
         array.push_index(self.index);
         array
     }
 
     /// Wraps an existing value in an array if it's not already an array.
-    pub fn wrap_in_array_if_needed(self, flags: ArrayFlags) -> Value {
+    pub fn wrap_in_array_if_needed(&self, flags: ArrayFlags) -> Value {
         if self.is_array() {
-            self
+            self.clone()
         } else {
             self.wrap_in_array(flags)
         }
