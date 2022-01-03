@@ -15,13 +15,8 @@ pub struct FunctionContext<'a> {
 
 impl<'a> FunctionContext<'a> {
     pub fn evaluate_function(&self, proc: Value, args: Value) -> Result<Value> {
-        self.evaluator.apply_function(
-            self.position,
-            self.input.clone(),
-            proc,
-            args,
-            self.frame.clone(),
-        )
+        self.evaluator
+            .apply_function(self.position, self.input.clone(), proc, args, &self.frame)
     }
 }
 

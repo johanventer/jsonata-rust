@@ -98,6 +98,6 @@ impl JsonAta {
         bind!("count", nativefn1, fn_count);
 
         let evaluator = Evaluator::new(self.pool.clone());
-        evaluator.evaluate(&self.ast, input, self.frame.clone())
+        evaluator.evaluate(&self.ast, input, &self.frame)
     }
 }
