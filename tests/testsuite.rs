@@ -58,7 +58,7 @@ fn t(resource: &str) {
                 let bindings = case.get_entry("bindings");
                 if bindings.is_object() {
                     for (key, value) in bindings.entries() {
-                        jsonata.assign_var(key, value);
+                        jsonata.assign_var(key, &value);
                     }
                 }
 

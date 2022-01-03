@@ -231,7 +231,7 @@ impl Evaluator {
 
         if *op == BinaryOp::Bind {
             if let NodeKind::Var(ref name) = lhs.kind {
-                frame.bind(name, rhs.clone());
+                frame.bind(name, &rhs);
                 return Ok(rhs);
             }
             unreachable!()
@@ -635,7 +635,7 @@ impl Evaluator {
                     // Bind the arguments to their respective names
                     for (index, arg) in args.iter().enumerate() {
                         if let NodeKind::Var(ref name) = arg.kind {
-                            frame.bind(name, evaluated_args.get_member(index));
+                            frame.bind(name, &evaluated_args.get_member(index));
                         } else {
                             unreachable!()
                         }

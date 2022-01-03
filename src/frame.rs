@@ -19,7 +19,7 @@ impl Frame {
         })))
     }
 
-    pub fn bind(&self, name: &str, value: Value) {
+    pub fn bind(&self, name: &str, value: &Value) {
         // Values in the frame need to be complete clones, otherwise modifying them would change their value.
         // Arrays and object will still point at the same members, and this replicates the reference semantics
         // in Javascript.
@@ -64,7 +64,7 @@ mod tests {
     fn bind() {
         let frame = Frame::new();
         let pool = ValuePool::new();
-        frame.bind("a", pool.number(1));
+        frame.bind("a", &pool.number(1));
         let a = frame.lookup("a");
         assert!(a.is_some());
         assert_eq!(a.unwrap(), 1);
@@ -74,7 +74,7 @@ mod tests {
     fn lookup_through_parent() {
         let parent = Frame::new();
         let pool = ValuePool::new();
-        parent.bind("a", pool.number(1));
+        parent.bind("a", &pool.number(1));
         let frame = Frame::new_with_parent(&parent);
         let a = frame.lookup("a");
         assert!(a.is_some());
@@ -85,9 +85,9 @@ mod tests {
     fn lookup_overriding_parent() {
         let parent = Frame::new();
         let pool = ValuePool::new();
-        parent.bind("a", pool.number(1));
+        parent.bind("a", &pool.number(1));
         let frame = Frame::new_with_parent(&parent);
-        frame.bind("a", pool.number(2));
+        frame.bind("a", &pool.number(2));
         let a = frame.lookup("a");
         assert!(a.is_some());
         assert_eq!(a.unwrap(), 2);

@@ -137,6 +137,7 @@ impl Value {
         }
     }
 
+    // TODO: as_str
     pub fn as_string(&self) -> String {
         match self.pool.borrow().get(self.index) {
             ValueKind::String(s) => s.clone(),
