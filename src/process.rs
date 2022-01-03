@@ -27,7 +27,7 @@ pub fn process_ast(node: Node) -> Result<Node> {
             node
         }
         NodeKind::Ternary { .. } => process_ternary(node)?,
-        NodeKind::Transform { .. } => unimplemented!("Transform not yet implemented"),
+        NodeKind::Transform { .. } => process_transform(node)?,
         NodeKind::Parent => unimplemented!("Parent not yet implemented"),
         _ => node,
     };
@@ -74,6 +74,24 @@ fn process_ternary(node: Node) -> Result<Node> {
         }
     } else {
         unreachable!()
+    }
+
+    Ok(node)
+}
+
+fn process_transform(node: Node) -> Result<Node> {
+    let mut node = node;
+    if let NodeKind::Transform {
+        ref mut pattern,
+        ref mut update,
+        ref mut delete,
+    } = node.kind
+    {
+        *pattern = Box::new(process_ast(std::mem::take(pattern))?);
+        *update = Box::new(process_ast(std::mem::take(update))?);
+        if let Some(ref mut delete) = delete {
+            *delete = Box::new(process_ast(std::mem::take(delete))?);
+        }
     }
 
     Ok(node)
@@ -134,9 +152,6 @@ fn process_binary(node: Node) -> Result<Node> {
         }
         NodeKind::Binary(BinaryOp::PositionalBind, ref mut _lhs, ref mut _rhs) => {
             unimplemented!("PositionBind not yet implemented")
-        }
-        NodeKind::Binary(BinaryOp::Apply, ref mut _lhs, ref mut _rhs) => {
-            unimplemented!("Apply not yet implemented")
         }
         NodeKind::Binary(_, ref mut lhs, ref mut rhs) => {
             *lhs = Box::new(process_ast(std::mem::take(lhs))?);
