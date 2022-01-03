@@ -8,7 +8,7 @@ mod pool;
 pub use kind::{ArrayFlags, ValueKind};
 pub use pool::ValuePool;
 
-use crate::ast::{Node, NodeKind};
+use crate::ast::{Ast, AstKind};
 use crate::json::codegen::{DumpGenerator, Generator, PrettyGenerator};
 
 /// A thin wrapper around the index to a `ValueKind` within a `ValuePool`.
@@ -116,8 +116,8 @@ impl Value {
         match self.pool.get(self.index) {
             ValueKind::Lambda(
                 _,
-                Node {
-                    kind: NodeKind::Lambda { ref args, .. },
+                Ast {
+                    kind: AstKind::Lambda { ref args, .. },
                     ..
                 },
             ) => args.len(),

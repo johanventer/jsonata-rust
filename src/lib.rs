@@ -7,7 +7,6 @@ pub mod functions;
 pub mod json;
 pub mod parser;
 pub mod position;
-pub mod process;
 pub mod symbol;
 pub mod tokenizer;
 pub mod value;
@@ -17,14 +16,14 @@ pub use error::Error;
 /// The Result type used by this crate
 pub type Result<T> = std::result::Result<T, Error>;
 
-use ast::Node;
+use ast::Ast;
 use evaluator::Evaluator;
 use frame::Frame;
 use functions::*;
 use value::{ArrayFlags, Value, ValuePool};
 
 pub struct JsonAta {
-    ast: Node,
+    ast: Ast,
     pool: ValuePool,
     frame: Frame,
 }
@@ -46,7 +45,7 @@ impl JsonAta {
         })
     }
 
-    pub fn ast(&self) -> &Node {
+    pub fn ast(&self) -> &Ast {
         &self.ast
     }
 

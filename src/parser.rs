@@ -1,5 +1,4 @@
 use super::ast::*;
-use super::process::process_ast;
 use super::symbol::Symbol;
 use super::tokenizer::*;
 use super::{Error, Result};
@@ -48,7 +47,7 @@ impl Parser {
         Ok(())
     }
 
-    pub(super) fn expression(&mut self, bp: u32) -> Result<Node> {
+    pub(super) fn expression(&mut self, bp: u32) -> Result<Ast> {
         let mut last = self.token.clone();
         self.next(true)?;
         let mut left = last.nud(self)?;
@@ -63,7 +62,7 @@ impl Parser {
     }
 }
 
-pub(crate) fn parse(source: &str) -> Result<Node> {
+pub(crate) fn parse(source: &str) -> Result<Ast> {
     let mut parser = Parser::new(source)?;
     let ast = parser.expression(0)?;
     if !matches!(parser.token().kind, TokenKind::End) {
@@ -72,7 +71,7 @@ pub(crate) fn parse(source: &str) -> Result<Node> {
             &parser.token().kind,
         ));
     }
-    process_ast(ast)
+    ast.process()
 }
 
 #[cfg(test)]
@@ -262,7 +261,7 @@ mod tests {
         )
     "# ; "complex expression"
     )]
-    fn parser_tests(source: &str) -> Result<Node> {
+    fn parser_tests(source: &str) -> Result<Ast> {
         parse(source)
     }
 }

@@ -1,20 +1,26 @@
-use super::position::Position;
-use super::{Error, Result};
+use crate::position::Position;
+use crate::{Error, Result};
 
-use super::ast::*;
+use super::*;
 
-pub fn process_ast(node: Node) -> Result<Node> {
+impl Ast {
+    pub fn process(self) -> Result<Ast> {
+        process_ast(self)
+    }
+}
+
+pub fn process_ast(node: Ast) -> Result<Ast> {
     let mut node = node;
     let keep_array = node.keep_array;
 
     let mut result = match node.kind {
-        NodeKind::Name(..) => process_name(node)?,
-        NodeKind::Block(..) => process_block(node)?,
-        NodeKind::Unary(..) => process_unary(node)?,
-        NodeKind::Binary(..) => process_binary(node)?,
-        NodeKind::GroupBy(ref mut lhs, ref mut rhs) => process_group_by(node.position, lhs, rhs)?,
-        NodeKind::OrderBy(ref mut lhs, ref mut rhs) => process_order_by(node.position, lhs, rhs)?,
-        NodeKind::Function {
+        AstKind::Name(..) => process_name(node)?,
+        AstKind::Block(..) => process_block(node)?,
+        AstKind::Unary(..) => process_unary(node)?,
+        AstKind::Binary(..) => process_binary(node)?,
+        AstKind::GroupBy(ref mut lhs, ref mut rhs) => process_group_by(node.position, lhs, rhs)?,
+        AstKind::OrderBy(ref mut lhs, ref mut rhs) => process_order_by(node.position, lhs, rhs)?,
+        AstKind::Function {
             ref mut proc,
             ref mut args,
             ..
@@ -22,13 +28,13 @@ pub fn process_ast(node: Node) -> Result<Node> {
             process_function(proc, args)?;
             node
         }
-        NodeKind::Lambda { ref mut body, .. } => {
+        AstKind::Lambda { ref mut body, .. } => {
             process_lambda(body)?;
             node
         }
-        NodeKind::Ternary { .. } => process_ternary(node)?,
-        NodeKind::Transform { .. } => process_transform(node)?,
-        NodeKind::Parent => unimplemented!("Parent not yet implemented"),
+        AstKind::Ternary { .. } => process_ternary(node)?,
+        AstKind::Transform { .. } => process_transform(node)?,
+        AstKind::Parent => unimplemented!("Parent not yet implemented"),
         _ => node,
     };
 
@@ -40,18 +46,18 @@ pub fn process_ast(node: Node) -> Result<Node> {
 }
 
 // Turn a Name into a Path with a single step
-fn process_name(node: Node) -> Result<Node> {
+fn process_name(node: Ast) -> Result<Ast> {
     let position = node.position;
     let keep_singleton_array = node.keep_array;
-    let mut result = Node::new(NodeKind::Path(vec![node]), position);
+    let mut result = Ast::new(AstKind::Path(vec![node]), position);
     result.keep_singleton_array = keep_singleton_array;
     Ok(result)
 }
 
 // Process each expression in a block
-fn process_block(node: Node) -> Result<Node> {
+fn process_block(node: Ast) -> Result<Ast> {
     let mut node = node;
-    if let NodeKind::Block(ref mut exprs) = node.kind {
+    if let AstKind::Block(ref mut exprs) = node.kind {
         for expr in exprs {
             *expr = process_ast(std::mem::take(expr))?;
         }
@@ -59,9 +65,9 @@ fn process_block(node: Node) -> Result<Node> {
     Ok(node)
 }
 
-fn process_ternary(node: Node) -> Result<Node> {
+fn process_ternary(node: Ast) -> Result<Ast> {
     let mut node = node;
-    if let NodeKind::Ternary {
+    if let AstKind::Ternary {
         ref mut cond,
         ref mut truthy,
         ref mut falsy,
@@ -79,9 +85,9 @@ fn process_ternary(node: Node) -> Result<Node> {
     Ok(node)
 }
 
-fn process_transform(node: Node) -> Result<Node> {
+fn process_transform(node: Ast) -> Result<Ast> {
     let mut node = node;
-    if let NodeKind::Transform {
+    if let AstKind::Transform {
         ref mut pattern,
         ref mut update,
         ref mut delete,
@@ -97,26 +103,26 @@ fn process_transform(node: Node) -> Result<Node> {
     Ok(node)
 }
 
-fn process_unary(node: Node) -> Result<Node> {
+fn process_unary(node: Ast) -> Result<Ast> {
     let mut node = node;
 
     match node.kind {
         // Pre-process negative numbers
-        NodeKind::Unary(UnaryOp::Minus(value)) => {
+        AstKind::Unary(UnaryOp::Minus(value)) => {
             let mut result = process_ast(*value)?;
-            if let NodeKind::Number(ref mut num) = result.kind {
+            if let AstKind::Number(ref mut num) = result.kind {
                 *num = -*num;
                 Ok(result)
             } else {
-                Ok(Node::new(
-                    NodeKind::Unary(UnaryOp::Minus(Box::new(result))),
+                Ok(Ast::new(
+                    AstKind::Unary(UnaryOp::Minus(Box::new(result))),
                     node.position,
                 ))
             }
         }
 
         // Process all of the expressions in an array constructor
-        NodeKind::Unary(UnaryOp::ArrayConstructor(ref mut exprs)) => {
+        AstKind::Unary(UnaryOp::ArrayConstructor(ref mut exprs)) => {
             for expr in exprs {
                 *expr = process_ast(std::mem::take(expr))?;
             }
@@ -124,7 +130,7 @@ fn process_unary(node: Node) -> Result<Node> {
         }
 
         // Process all the keys and values in an object constructor
-        NodeKind::Unary(UnaryOp::ObjectConstructor(ref mut object)) => {
+        AstKind::Unary(UnaryOp::ObjectConstructor(ref mut object)) => {
             for pair in object {
                 let key = std::mem::take(&mut pair.0);
                 let value = std::mem::take(&mut pair.1);
@@ -137,23 +143,23 @@ fn process_unary(node: Node) -> Result<Node> {
     }
 }
 
-fn process_binary(node: Node) -> Result<Node> {
+fn process_binary(node: Ast) -> Result<Ast> {
     let mut node = node;
 
     match node.kind {
-        NodeKind::Binary(BinaryOp::Map, ref mut lhs, ref mut rhs) => {
+        AstKind::Binary(BinaryOp::Map, ref mut lhs, ref mut rhs) => {
             process_path(node.position, lhs, rhs)
         }
-        NodeKind::Binary(BinaryOp::Predicate, ref mut lhs, ref mut rhs) => {
+        AstKind::Binary(BinaryOp::Predicate, ref mut lhs, ref mut rhs) => {
             process_predicate(node.position, lhs, rhs)
         }
-        NodeKind::Binary(BinaryOp::ContextBind, ref mut _lhs, ref mut _rhs) => {
+        AstKind::Binary(BinaryOp::ContextBind, ref mut _lhs, ref mut _rhs) => {
             unimplemented!("ContextBind not yet implemented")
         }
-        NodeKind::Binary(BinaryOp::PositionalBind, ref mut _lhs, ref mut _rhs) => {
+        AstKind::Binary(BinaryOp::PositionalBind, ref mut _lhs, ref mut _rhs) => {
             unimplemented!("PositionBind not yet implemented")
         }
-        NodeKind::Binary(_, ref mut lhs, ref mut rhs) => {
+        AstKind::Binary(_, ref mut lhs, ref mut rhs) => {
             *lhs = Box::new(process_ast(std::mem::take(lhs))?);
             *rhs = Box::new(process_ast(std::mem::take(rhs))?);
             Ok(node)
@@ -162,22 +168,22 @@ fn process_binary(node: Node) -> Result<Node> {
     }
 }
 
-fn process_path(position: Position, lhs: &mut Box<Node>, rhs: &mut Box<Node>) -> Result<Node> {
+fn process_path(position: Position, lhs: &mut Box<Ast>, rhs: &mut Box<Ast>) -> Result<Ast> {
     let left_step = process_ast(std::mem::take(lhs))?;
     let mut rest = process_ast(std::mem::take(rhs))?;
 
     // If the left_step is a path itself, start with that. Otherwise, start a new path
-    let mut result = if matches!(left_step.kind, NodeKind::Path(_)) {
+    let mut result = if matches!(left_step.kind, AstKind::Path(_)) {
         left_step
     } else {
-        Node::new(NodeKind::Path(vec![left_step]), position)
+        Ast::new(AstKind::Path(vec![left_step]), position)
     };
 
     // TODO: If the lhs is a Parent (parser.js:997)
     // TODO: If the rhs is a Function (parser.js:1001)
 
-    if let NodeKind::Path(ref mut steps) = result.kind {
-        if let NodeKind::Path(ref mut rest_steps) = rest.kind {
+    if let AstKind::Path(ref mut steps) = result.kind {
+        if let AstKind::Path(ref mut rest_steps) = rest.kind {
             // If the rest is a path, merge in the steps
             steps.append(rest_steps);
         } else {
@@ -192,17 +198,17 @@ fn process_path(position: Position, lhs: &mut Box<Node>, rhs: &mut Box<Node>) ->
         for (step_index, step) in steps.iter_mut().enumerate() {
             match step.kind {
                 // Steps can't be literal values other than strings
-                NodeKind::Number(..) | NodeKind::Bool(..) | NodeKind::Null => {
+                AstKind::Number(..) | AstKind::Bool(..) | AstKind::Null => {
                     return Err(Error::invalid_step(step.position, "TODO"));
                 }
 
                 // Steps that are string literals should become Names
-                NodeKind::String(ref s) => {
-                    step.kind = NodeKind::Name(s.clone());
+                AstKind::String(ref s) => {
+                    step.kind = AstKind::Name(s.clone());
                 }
 
                 // If the first or last step is an array constructor, it shouldn't be flattened
-                NodeKind::Unary(UnaryOp::ArrayConstructor(..)) => {
+                AstKind::Unary(UnaryOp::ArrayConstructor(..)) => {
                     if step_index == 0 || step_index == last_index {
                         step.cons_array = true;
                     }
@@ -221,11 +227,11 @@ fn process_path(position: Position, lhs: &mut Box<Node>, rhs: &mut Box<Node>) ->
     Ok(result)
 }
 
-fn process_predicate(position: Position, lhs: &mut Box<Node>, rhs: &mut Box<Node>) -> Result<Node> {
+fn process_predicate(position: Position, lhs: &mut Box<Ast>, rhs: &mut Box<Ast>) -> Result<Ast> {
     let mut result = process_ast(std::mem::take(lhs))?;
     let mut in_path = false;
 
-    let node = if let NodeKind::Path(ref mut steps) = result.kind {
+    let node = if let AstKind::Path(ref mut steps) = result.kind {
         in_path = true;
         let last_index = steps.len() - 1;
         &mut steps[last_index]
@@ -238,8 +244,8 @@ fn process_predicate(position: Position, lhs: &mut Box<Node>, rhs: &mut Box<Node
         return Err(Error::InvalidPredicate(position));
     }
 
-    let filter = Node::new(
-        NodeKind::Filter(Box::new(process_ast(std::mem::take(rhs))?)),
+    let filter = Ast::new(
+        AstKind::Filter(Box::new(process_ast(std::mem::take(rhs))?)),
         position,
     );
 
@@ -265,7 +271,7 @@ fn process_predicate(position: Position, lhs: &mut Box<Node>, rhs: &mut Box<Node
     Ok(result)
 }
 
-fn process_group_by(position: Position, lhs: &mut Box<Node>, rhs: &mut Object) -> Result<Node> {
+fn process_group_by(position: Position, lhs: &mut Box<Ast>, rhs: &mut Object) -> Result<Ast> {
     let mut result = process_ast(std::mem::take(lhs))?;
 
     // Can only have a single grouping expression
@@ -285,14 +291,14 @@ fn process_group_by(position: Position, lhs: &mut Box<Node>, rhs: &mut Object) -
     Ok(result)
 }
 
-fn process_order_by(position: Position, lhs: &mut Box<Node>, rhs: &mut SortTerms) -> Result<Node> {
+fn process_order_by(position: Position, lhs: &mut Box<Ast>, rhs: &mut SortTerms) -> Result<Ast> {
     let lhs = process_ast(std::mem::take(lhs))?;
 
     // If the left hand side is not a path, make it one
-    let mut result = if matches!(lhs.kind, NodeKind::Path(_)) {
+    let mut result = if matches!(lhs.kind, AstKind::Path(_)) {
         lhs
     } else {
-        Node::new(NodeKind::Path(vec![lhs]), position)
+        Ast::new(AstKind::Path(vec![lhs]), position)
     };
 
     // Process all the sort terms
@@ -300,14 +306,14 @@ fn process_order_by(position: Position, lhs: &mut Box<Node>, rhs: &mut SortTerms
         *pair = (process_ast(std::mem::take(&mut pair.0))?, pair.1);
     }
 
-    if let NodeKind::Path(ref mut steps) = result.kind {
-        steps.push(Node::new(NodeKind::Sort(std::mem::take(rhs)), position));
+    if let AstKind::Path(ref mut steps) = result.kind {
+        steps.push(Ast::new(AstKind::Sort(std::mem::take(rhs)), position));
     }
 
     Ok(result)
 }
 
-fn process_function(proc: &mut Box<Node>, args: &mut Vec<Node>) -> Result<()> {
+fn process_function(proc: &mut Box<Ast>, args: &mut Vec<Ast>) -> Result<()> {
     *proc = Box::new(process_ast(std::mem::take(&mut *proc))?);
     for arg in args.iter_mut() {
         *arg = process_ast(std::mem::take(arg))?;
@@ -315,7 +321,7 @@ fn process_function(proc: &mut Box<Node>, args: &mut Vec<Node>) -> Result<()> {
     Ok(())
 }
 
-fn process_lambda(body: &mut Box<Node>) -> Result<()> {
+fn process_lambda(body: &mut Box<Ast>) -> Result<()> {
     *body = Box::new(process_ast(std::mem::take(&mut *body))?);
     // TODO: Tail call optimize
     Ok(())

@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
 
 use super::{ArrayFlags, Value, ValueKind};
-use crate::ast::Node;
+use crate::ast::Ast;
 use crate::functions::FunctionContext;
 use crate::json::Number;
 use crate::Result;
@@ -168,7 +168,7 @@ impl ValuePool {
         }
     }
 
-    pub fn lambda(&self, name: &str, node: Node) -> Value {
+    pub fn lambda(&self, name: &str, node: Ast) -> Value {
         Value {
             pool: self.clone(),
             index: self.insert(ValueKind::Lambda(name.to_string(), node)),

@@ -26,29 +26,29 @@ impl Evaluator {
         }
     }
 
-    pub fn evaluate(&self, node: &Node, input: &Value, frame: &Frame) -> Result<Value> {
+    pub fn evaluate(&self, node: &Ast, input: &Value, frame: &Frame) -> Result<Value> {
         let mut result = match node.kind {
-            NodeKind::Null => self.pool.null(),
-            NodeKind::Bool(b) => self.pool.bool(b),
-            NodeKind::String(ref s) => self.pool.string(s),
-            NodeKind::Number(n) => self.pool.number(n),
-            NodeKind::Block(ref exprs) => self.evaluate_block(exprs, input, frame)?,
-            NodeKind::Unary(ref op) => self.evaluate_unary_op(node, op, input, frame)?,
-            NodeKind::Binary(ref op, ref lhs, ref rhs) => {
+            AstKind::Null => self.pool.null(),
+            AstKind::Bool(b) => self.pool.bool(b),
+            AstKind::String(ref s) => self.pool.string(s),
+            AstKind::Number(n) => self.pool.number(n),
+            AstKind::Block(ref exprs) => self.evaluate_block(exprs, input, frame)?,
+            AstKind::Unary(ref op) => self.evaluate_unary_op(node, op, input, frame)?,
+            AstKind::Binary(ref op, ref lhs, ref rhs) => {
                 self.evaluate_binary_op(node, op, lhs, rhs, input, frame)?
             }
-            NodeKind::Var(ref name) => self.evaluate_var(name, input, frame)?,
-            NodeKind::Ternary {
+            AstKind::Var(ref name) => self.evaluate_var(name, input, frame)?,
+            AstKind::Ternary {
                 ref cond,
                 ref truthy,
                 ref falsy,
             } => self.evaluate_ternary(cond, truthy, falsy.as_deref(), input, frame)?,
-            NodeKind::Path(ref steps) => self.evaluate_path(node, steps, input, frame)?,
-            NodeKind::Name(ref name) => {
+            AstKind::Path(ref steps) => self.evaluate_path(node, steps, input, frame)?,
+            AstKind::Name(ref name) => {
                 fn_lookup_internal(&self.fn_context(&node.position, input, frame), input, name)
             }
-            NodeKind::Lambda { ref name, .. } => self.pool.lambda(name, node.clone()),
-            NodeKind::Function {
+            AstKind::Lambda { ref name, .. } => self.pool.lambda(name, node.clone()),
+            AstKind::Function {
                 ref proc,
                 ref args,
                 is_partial,
@@ -84,7 +84,7 @@ impl Evaluator {
         })
     }
 
-    fn evaluate_block(&self, exprs: &[Node], input: &Value, frame: &Frame) -> Result<Value> {
+    fn evaluate_block(&self, exprs: &[Ast], input: &Value, frame: &Frame) -> Result<Value> {
         let frame = Frame::new_with_parent(frame);
         if exprs.is_empty() {
             return Ok(self.pool.undefined());
@@ -114,7 +114,7 @@ impl Evaluator {
 
     fn evaluate_unary_op(
         &self,
-        node: &Node,
+        node: &Ast,
         op: &UnaryOp,
         input: &Value,
         frame: &Frame,
@@ -136,7 +136,7 @@ impl Evaluator {
                 });
                 for item in array.iter() {
                     let value = self.evaluate(item, input, frame)?;
-                    if let NodeKind::Unary(UnaryOp::ArrayConstructor(..)) = item.kind {
+                    if let AstKind::Unary(UnaryOp::ArrayConstructor(..)) = item.kind {
                         result.push_index(value.index);
                     } else {
                         result = fn_append(
@@ -157,7 +157,7 @@ impl Evaluator {
     fn evaluate_group_expression(
         &self,
         position: Position,
-        object: &[(Node, Node)],
+        object: &[(Ast, Ast)],
         input: &Value,
         frame: &Frame,
     ) -> Result<Value> {
@@ -217,17 +217,17 @@ impl Evaluator {
 
     fn evaluate_binary_op(
         &self,
-        node: &Node,
+        node: &Ast,
         op: &BinaryOp,
-        lhs: &Node,
-        rhs: &Node,
+        lhs: &Ast,
+        rhs: &Ast,
         input: &Value,
         frame: &Frame,
     ) -> Result<Value> {
         let rhs = self.evaluate(rhs, input, frame)?;
 
         if *op == BinaryOp::Bind {
-            if let NodeKind::Var(ref name) = lhs.kind {
+            if let AstKind::Var(ref name) = lhs.kind {
                 frame.bind(name, &rhs);
                 return Ok(rhs);
             }
@@ -375,9 +375,9 @@ impl Evaluator {
 
     fn evaluate_ternary(
         &self,
-        cond: &Node,
-        truthy: &Node,
-        falsy: Option<&Node>,
+        cond: &Ast,
+        truthy: &Ast,
+        falsy: Option<&Ast>,
         input: &Value,
         frame: &Frame,
     ) -> Result<Value> {
@@ -393,12 +393,12 @@ impl Evaluator {
 
     fn evaluate_path(
         &self,
-        node: &Node,
-        steps: &[Node],
+        node: &Ast,
+        steps: &[Ast],
         input: &Value,
         frame: &Frame,
     ) -> Result<Value> {
-        let mut input = if input.is_array() && !matches!(steps[0].kind, NodeKind::Var(..)) {
+        let mut input = if input.is_array() && !matches!(steps[0].kind, AstKind::Var(..)) {
             input.clone()
         } else {
             input.wrap_in_array(ArrayFlags::empty())
@@ -440,14 +440,14 @@ impl Evaluator {
 
     fn evaluate_step(
         &self,
-        step: &Node,
+        step: &Ast,
         input: &Value,
         frame: &Frame,
         last_step: bool,
     ) -> Result<Value> {
         let mut result = self.pool.array(ArrayFlags::SEQUENCE);
 
-        if let NodeKind::Sort(ref sorts) = step.kind {
+        if let AstKind::Sort(ref sorts) = step.kind {
             result = self.evaluate_sorts(sorts, input, frame)?;
             if let Some(ref stages) = step.stages {
                 result = self.evaluate_stages(stages, result, frame)?;
@@ -495,18 +495,18 @@ impl Evaluator {
 
     fn evaluate_sorts(
         &self,
-        _sorts: &[(Node, bool)],
+        _sorts: &[(Ast, bool)],
         _inputt: &Value,
         _frame: &Frame,
     ) -> Result<Value> {
         unimplemented!("Sorts not yet implemented")
     }
 
-    fn evaluate_stages(&self, _stages: &[Node], _input: Value, _frame: &Frame) -> Result<Value> {
+    fn evaluate_stages(&self, _stages: &[Ast], _input: Value, _frame: &Frame) -> Result<Value> {
         unimplemented!("Stages not yet implemented")
     }
 
-    fn evaluate_filter(&self, node: &Node, input: Value, frame: &Frame) -> Result<Value> {
+    fn evaluate_filter(&self, node: &Ast, input: Value, frame: &Frame) -> Result<Value> {
         let mut result = self.pool.array(ArrayFlags::SEQUENCE);
         let input = input.wrap_in_array_if_needed(ArrayFlags::empty());
 
@@ -525,8 +525,8 @@ impl Evaluator {
         };
 
         match node.kind {
-            NodeKind::Filter(ref filter) => match filter.kind {
-                NodeKind::Number(n) => {
+            AstKind::Filter(ref filter) => match filter.kind {
+                AstKind::Number(n) => {
                     let index = get_index(n.into());
                     let item = input.get_member(index as usize);
                     if !item.is_undefined() {
@@ -566,8 +566,8 @@ impl Evaluator {
     pub fn evaluate_function(
         &self,
         input: &Value,
-        proc: &Node,
-        args: &[Node],
+        proc: &Ast,
+        args: &[Ast],
         _is_partial: bool,
         frame: &Frame,
     ) -> Result<Value> {
@@ -575,8 +575,8 @@ impl Evaluator {
 
         // Help the user out if they forgot a '$'
         if evaluated_proc.is_undefined() {
-            if let NodeKind::Path(ref steps) = proc.kind {
-                if let NodeKind::Name(ref name) = steps[0].kind {
+            if let AstKind::Path(ref steps) = proc.kind {
+                if let AstKind::Name(ref name) = steps[0].kind {
                     if frame.lookup(name).is_some() {
                         return Err(Error::InvokedNonFunctionSuggest(
                             proc.position,
@@ -612,7 +612,7 @@ impl Evaluator {
     ) -> Result<Value> {
         match **evaluated_proc {
             ValueKind::Lambda(_, ref lambda) => {
-                if let NodeKind::Lambda {
+                if let AstKind::Lambda {
                     ref body, ref args, ..
                 } = lambda.kind
                 {
@@ -621,7 +621,7 @@ impl Evaluator {
 
                     // Bind the arguments to their respective names
                     for (index, arg) in args.iter().enumerate() {
-                        if let NodeKind::Var(ref name) = arg.kind {
+                        if let AstKind::Var(ref name) = arg.kind {
                             frame.bind(name, &evaluated_args.get_member(index));
                         } else {
                             unreachable!()

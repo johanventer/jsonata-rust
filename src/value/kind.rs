@@ -2,7 +2,7 @@ use bitflags::bitflags;
 use std::collections::HashMap;
 
 use super::Value;
-use crate::ast::Node;
+use crate::ast::Ast;
 use crate::functions::FunctionContext;
 use crate::json::Number;
 use crate::Result;
@@ -25,7 +25,7 @@ pub enum ValueKind {
     String(String),
     Array(Vec<usize>, ArrayFlags),
     Object(HashMap<String, usize>),
-    Lambda(String, Node),
+    Lambda(String, Ast),
     NativeFn0(String, fn(&FunctionContext) -> Result<Value>),
     NativeFn1(String, fn(&FunctionContext, &Value) -> Result<Value>),
     NativeFn2(

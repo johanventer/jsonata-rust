@@ -5,8 +5,8 @@ use super::{Error, Result};
 
 pub(super) trait Symbol {
     fn lbp(&self) -> u32;
-    fn nud(&self, parser: &mut Parser) -> Result<Node>;
-    fn led(&self, parser: &mut Parser, left: Node) -> Result<Node>;
+    fn nud(&self, parser: &mut Parser) -> Result<Ast>;
+    fn led(&self, parser: &mut Parser, left: Ast) -> Result<Ast>;
 }
 
 impl Symbol for Token {
@@ -30,27 +30,24 @@ impl Symbol for Token {
         }
     }
 
-    fn nud(&self, parser: &mut Parser) -> Result<Node> {
+    fn nud(&self, parser: &mut Parser) -> Result<Ast> {
         match self.kind {
-            TokenKind::Null => Ok(Node::new(NodeKind::Null, self.position)),
-            TokenKind::Bool(ref v) => Ok(Node::new(NodeKind::Bool(*v), self.position)),
-            TokenKind::Str(ref v) => Ok(Node::new(NodeKind::String(v.clone()), self.position)),
-            TokenKind::Num(ref v) => Ok(Node::new(NodeKind::Number(*v), self.position)),
-            TokenKind::Name(ref v) => Ok(Node::new(NodeKind::Name(v.clone()), self.position)),
-            TokenKind::Var(ref v) => Ok(Node::new(NodeKind::Var(v.clone()), self.position)),
-            TokenKind::And => Ok(Node::new(
-                NodeKind::Name(String::from("and")),
+            TokenKind::Null => Ok(Ast::new(AstKind::Null, self.position)),
+            TokenKind::Bool(ref v) => Ok(Ast::new(AstKind::Bool(*v), self.position)),
+            TokenKind::Str(ref v) => Ok(Ast::new(AstKind::String(v.clone()), self.position)),
+            TokenKind::Num(ref v) => Ok(Ast::new(AstKind::Number(*v), self.position)),
+            TokenKind::Name(ref v) => Ok(Ast::new(AstKind::Name(v.clone()), self.position)),
+            TokenKind::Var(ref v) => Ok(Ast::new(AstKind::Var(v.clone()), self.position)),
+            TokenKind::And => Ok(Ast::new(AstKind::Name(String::from("and")), self.position)),
+            TokenKind::Or => Ok(Ast::new(AstKind::Name(String::from("or")), self.position)),
+            TokenKind::In => Ok(Ast::new(AstKind::Name(String::from("in")), self.position)),
+            TokenKind::Minus => Ok(Ast::new(
+                AstKind::Unary(UnaryOp::Minus(Box::new(parser.expression(70)?))),
                 self.position,
             )),
-            TokenKind::Or => Ok(Node::new(NodeKind::Name(String::from("or")), self.position)),
-            TokenKind::In => Ok(Node::new(NodeKind::Name(String::from("in")), self.position)),
-            TokenKind::Minus => Ok(Node::new(
-                NodeKind::Unary(UnaryOp::Minus(Box::new(parser.expression(70)?))),
-                self.position,
-            )),
-            TokenKind::Wildcard => Ok(Node::new(NodeKind::Wildcard, self.position)),
-            TokenKind::Descendent => Ok(Node::new(NodeKind::Descendent, self.position)),
-            TokenKind::Percent => Ok(Node::new(NodeKind::Parent, self.position)),
+            TokenKind::Wildcard => Ok(Ast::new(AstKind::Wildcard, self.position)),
+            TokenKind::Descendent => Ok(Ast::new(AstKind::Descendent, self.position)),
+            TokenKind::Percent => Ok(Ast::new(AstKind::Parent, self.position)),
 
             // Block of expressions
             TokenKind::LeftParen => {
@@ -65,7 +62,7 @@ impl Symbol for Token {
                 }
                 parser.expect(TokenKind::RightParen, true)?;
 
-                Ok(Node::new(NodeKind::Block(expressions), self.position))
+                Ok(Ast::new(AstKind::Block(expressions), self.position))
             }
 
             // Array constructor
@@ -78,8 +75,8 @@ impl Symbol for Token {
 
                         if parser.token().kind == TokenKind::Range {
                             parser.expect(TokenKind::Range, false)?;
-                            item = Node::new(
-                                NodeKind::Binary(
+                            item = Ast::new(
+                                AstKind::Binary(
                                     BinaryOp::Range,
                                     Box::new(item),
                                     Box::new(parser.expression(0)?),
@@ -99,15 +96,15 @@ impl Symbol for Token {
                 }
                 parser.expect(TokenKind::RightBracket, true)?;
 
-                Ok(Node::new(
-                    NodeKind::Unary(UnaryOp::ArrayConstructor(expressions)),
+                Ok(Ast::new(
+                    AstKind::Unary(UnaryOp::ArrayConstructor(expressions)),
                     self.position,
                 ))
             }
 
             // Object constructor
-            TokenKind::LeftBrace => Ok(Node::new(
-                NodeKind::Unary(UnaryOp::ObjectConstructor(parse_object(parser)?)),
+            TokenKind::LeftBrace => Ok(Ast::new(
+                AstKind::Unary(UnaryOp::ObjectConstructor(parse_object(parser)?)),
                 self.position,
             )),
 
@@ -128,8 +125,8 @@ impl Symbol for Token {
 
                 parser.expect(TokenKind::Pipe, false)?;
 
-                Ok(Node::new(
-                    NodeKind::Transform {
+                Ok(Ast::new(
+                    AstKind::Transform {
                         pattern,
                         update,
                         delete,
@@ -142,11 +139,11 @@ impl Symbol for Token {
         }
     }
 
-    fn led(&self, parser: &mut Parser, mut left: Node) -> Result<Node> {
+    fn led(&self, parser: &mut Parser, mut left: Ast) -> Result<Ast> {
         macro_rules! binary {
             ($n:tt) => {
-                Ok(Node::new(
-                    NodeKind::Binary(
+                Ok(Ast::new(
+                    AstKind::Binary(
                         BinaryOp::$n,
                         Box::new(left),
                         Box::new(parser.expression(self.lbp())?),
@@ -186,7 +183,7 @@ impl Symbol for Token {
                         match parser.token().kind {
                             TokenKind::Question => {
                                 is_partial = true;
-                                args.push(Node::new(NodeKind::PartialArg, parser.token().position));
+                                args.push(Ast::new(AstKind::PartialArg, parser.token().position));
                                 parser.expect(TokenKind::Question, false)?;
                             }
                             _ => {
@@ -202,14 +199,14 @@ impl Symbol for Token {
                 parser.expect(TokenKind::RightParen, true)?;
 
                 let name = match left.kind {
-                    NodeKind::Name(ref name) => {
+                    AstKind::Name(ref name) => {
                         // If the name of the function is 'function' or λ, then this is a function definition (lambda function)
                         if name == "function" || name == "λ" {
                             is_lambda = true;
 
                             // All of the args must be Variable nodes
                             for arg in &args {
-                                if !matches!(arg.kind, NodeKind::Var(..)) {
+                                if !matches!(arg.kind, AstKind::Var(..)) {
                                     return Err(Error::invalid_function_param(
                                         arg.position,
                                         &self.kind,
@@ -221,20 +218,20 @@ impl Symbol for Token {
                         }
                         name.clone()
                     }
-                    NodeKind::Var(ref name) => name.clone(),
+                    AstKind::Var(ref name) => name.clone(),
                     _ => unreachable!(),
                 };
 
-                let func: Node;
+                let func: Ast;
 
                 if is_lambda {
                     parser.expect(TokenKind::LeftBrace, false)?;
                     let body = Box::new(parser.expression(0)?);
-                    func = Node::new(NodeKind::Lambda { name, args, body }, self.position);
+                    func = Ast::new(AstKind::Lambda { name, args, body }, self.position);
                     parser.expect(TokenKind::RightBrace, false)?;
                 } else {
-                    func = Node::new(
-                        NodeKind::Function {
+                    func = Ast::new(
+                        AstKind::Function {
                             name,
                             proc: Box::new(left),
                             args,
@@ -249,12 +246,12 @@ impl Symbol for Token {
 
             // Variable assignment
             TokenKind::Bind => {
-                if !matches!(left.kind, NodeKind::Var(..)) {
+                if !matches!(left.kind, AstKind::Var(..)) {
                     return Err(Error::ExpectedVarLeft(left.position));
                 }
 
-                Ok(Node::new(
-                    NodeKind::Binary(
+                Ok(Ast::new(
+                    AstKind::Binary(
                         BinaryOp::Bind,
                         Box::new(left),
                         Box::new(parser.expression(self.lbp() - 1)?),
@@ -286,8 +283,8 @@ impl Symbol for Token {
                 }
                 parser.expect(TokenKind::RightParen, false)?;
 
-                Ok(Node::new(
-                    NodeKind::OrderBy(Box::new(left), terms),
+                Ok(Ast::new(
+                    AstKind::OrderBy(Box::new(left), terms),
                     self.position,
                 ))
             }
@@ -296,12 +293,12 @@ impl Symbol for Token {
             TokenKind::At => {
                 let rhs = parser.expression(self.lbp())?;
 
-                if !matches!(rhs.kind, NodeKind::Var(..)) {
+                if !matches!(rhs.kind, AstKind::Var(..)) {
                     return Err(Error::expected_var_right(rhs.position, "@"));
                 }
 
-                Ok(Node::new(
-                    NodeKind::Binary(BinaryOp::ContextBind, Box::new(left), Box::new(rhs)),
+                Ok(Ast::new(
+                    AstKind::Binary(BinaryOp::ContextBind, Box::new(left), Box::new(rhs)),
                     self.position,
                 ))
             }
@@ -310,12 +307,12 @@ impl Symbol for Token {
             TokenKind::Hash => {
                 let rhs = parser.expression(self.lbp())?;
 
-                if !matches!(rhs.kind, NodeKind::Var(..)) {
+                if !matches!(rhs.kind, AstKind::Var(..)) {
                     return Err(Error::expected_var_right(rhs.position, "#"));
                 }
 
-                Ok(Node::new(
-                    NodeKind::Binary(BinaryOp::PositionalBind, Box::new(left), Box::new(rhs)),
+                Ok(Ast::new(
+                    AstKind::Binary(BinaryOp::PositionalBind, Box::new(left), Box::new(rhs)),
                     self.position,
                 ))
             }
@@ -331,8 +328,8 @@ impl Symbol for Token {
                     None
                 };
 
-                Ok(Node::new(
-                    NodeKind::Ternary {
+                Ok(Ast::new(
+                    AstKind::Ternary {
                         cond: Box::new(left),
                         truthy,
                         falsy,
@@ -342,8 +339,8 @@ impl Symbol for Token {
             }
 
             // Object group by
-            TokenKind::LeftBrace => Ok(Node::new(
-                NodeKind::GroupBy(Box::new(left), parse_object(parser)?),
+            TokenKind::LeftBrace => Ok(Ast::new(
+                AstKind::GroupBy(Box::new(left), parse_object(parser)?),
                 self.position,
             )),
 
@@ -356,7 +353,7 @@ impl Symbol for Token {
 
                     // Walk back through left hand sides to find something that's not an array
                     // predicate
-                    while let NodeKind::Binary(BinaryOp::Predicate, ref mut left, ..) = step.kind {
+                    while let AstKind::Binary(BinaryOp::Predicate, ref mut left, ..) = step.kind {
                         step = left
                     }
 
@@ -368,8 +365,8 @@ impl Symbol for Token {
                 } else {
                     let rhs = parser.expression(0)?;
                     parser.expect(TokenKind::RightBracket, true)?;
-                    Ok(Node::new(
-                        NodeKind::Binary(BinaryOp::Predicate, Box::new(left), Box::new(rhs)),
+                    Ok(Ast::new(
+                        AstKind::Binary(BinaryOp::Predicate, Box::new(left), Box::new(rhs)),
                         self.position,
                     ))
                 }
