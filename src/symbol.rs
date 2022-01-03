@@ -4,13 +4,13 @@ use super::tokenizer::{Token, TokenKind};
 use super::{Error, Result};
 
 pub trait Symbol {
-    fn lbp(&self) -> u32;
-    fn nud(&self, parser: &mut Parser) -> Result<Ast>;
-    fn led(&self, parser: &mut Parser, left: Ast) -> Result<Ast>;
+    fn left_binding_power(&self) -> u32;
+    fn null_denotation(&self, parser: &mut Parser) -> Result<Ast>;
+    fn left_denotation(&self, parser: &mut Parser, left: Ast) -> Result<Ast>;
 }
 
 impl Symbol for Token {
-    fn lbp(&self) -> u32 {
+    fn left_binding_power(&self) -> u32 {
         use TokenKind::*;
         match &self.kind {
             End | Range | Colon | Comma | SemiColon | RightParen | RightBracket | RightBrace
@@ -30,7 +30,7 @@ impl Symbol for Token {
         }
     }
 
-    fn nud(&self, parser: &mut Parser) -> Result<Ast> {
+    fn null_denotation(&self, parser: &mut Parser) -> Result<Ast> {
         match self.kind {
             TokenKind::Null => Ok(Ast::new(AstKind::Null, self.position)),
             TokenKind::Bool(ref v) => Ok(Ast::new(AstKind::Bool(*v), self.position)),
@@ -139,14 +139,14 @@ impl Symbol for Token {
         }
     }
 
-    fn led(&self, parser: &mut Parser, mut left: Ast) -> Result<Ast> {
+    fn left_denotation(&self, parser: &mut Parser, mut left: Ast) -> Result<Ast> {
         macro_rules! binary {
             ($n:tt) => {
                 Ok(Ast::new(
                     AstKind::Binary(
                         BinaryOp::$n,
                         Box::new(left),
-                        Box::new(parser.expression(self.lbp())?),
+                        Box::new(parser.expression(self.left_binding_power())?),
                     ),
                     self.position,
                 ))
@@ -254,7 +254,7 @@ impl Symbol for Token {
                     AstKind::Binary(
                         BinaryOp::Bind,
                         Box::new(left),
-                        Box::new(parser.expression(self.lbp() - 1)?),
+                        Box::new(parser.expression(self.left_binding_power() - 1)?),
                     ),
                     self.position,
                 ))
@@ -291,7 +291,7 @@ impl Symbol for Token {
 
             // Context variable bind
             TokenKind::At => {
-                let rhs = parser.expression(self.lbp())?;
+                let rhs = parser.expression(self.left_binding_power())?;
 
                 if !matches!(rhs.kind, AstKind::Var(..)) {
                     return Err(Error::expected_var_right(rhs.position, "@"));
@@ -305,7 +305,7 @@ impl Symbol for Token {
 
             // Positional variable bind
             TokenKind::Hash => {
-                let rhs = parser.expression(self.lbp())?;
+                let rhs = parser.expression(self.left_binding_power())?;
 
                 if !matches!(rhs.kind, AstKind::Var(..)) {
                     return Err(Error::expected_var_right(rhs.position, "#"));

@@ -50,12 +50,12 @@ impl Parser {
     pub fn expression(&mut self, bp: u32) -> Result<Ast> {
         let mut last = self.token.clone();
         self.next(true)?;
-        let mut left = last.nud(self)?;
+        let mut left = last.null_denotation(self)?;
 
-        while bp < self.token.lbp() {
+        while bp < self.token.left_binding_power() {
             last = self.token.clone();
             self.next(false)?;
-            left = last.led(self, left)?;
+            left = last.left_denotation(self, left)?;
         }
 
         Ok(left)
