@@ -254,8 +254,8 @@ impl Error {
         Error::NonStringKey(p, format!("{}", v))
     }
 
-    pub fn multiple_keys(p: Position, k: &Value) -> Self {
-        Error::MultipleKeys(p, format!("{}", k))
+    pub fn multiple_keys(p: Position, k: &str) -> Self {
+        Error::MultipleKeys(p, k.to_string())
     }
 
     pub fn left_side_not_number(p: Position, o: &BinaryOp) -> Self {

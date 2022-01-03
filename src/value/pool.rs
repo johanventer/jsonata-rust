@@ -133,10 +133,10 @@ impl ValuePool {
         }
     }
 
-    pub fn string(&self, value: &str) -> Value {
+    pub fn string(&self, value: String) -> Value {
         Value {
             pool: self.clone(),
-            index: self.insert(ValueKind::String(value.to_owned())),
+            index: self.insert(ValueKind::String(value)),
         }
     }
 

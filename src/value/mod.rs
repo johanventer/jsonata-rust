@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::ops::Deref;
 use std::{collections::HashMap, fmt};
@@ -159,9 +160,9 @@ impl Value {
         }
     }
 
-    pub fn as_string(&self) -> String {
+    pub fn as_str(&self) -> Cow<'_, str> {
         match self.pool.get(self.index) {
-            ValueKind::String(s) => s.clone(),
+            ValueKind::String(ref s) => Cow::from(s),
             _ => panic!("Not a string"),
         }
     }
@@ -529,7 +530,7 @@ mod tests {
         map.iter().for_each(|(k, v)| o.insert(*k, (*v).into()));
         let entries: Vec<(String, String)> = o
             .entries()
-            .map(|(k, v)| (k.clone(), v.as_string()))
+            .map(|(k, v)| (k.clone(), v.as_str().to_string()))
             .collect();
         let mut result: HashMap<&str, &str> = HashMap::new();
         entries.iter().for_each(|(k, v)| {
@@ -541,9 +542,9 @@ mod tests {
     #[test]
     fn wrap_in_array() {
         let pool = ValuePool::new();
-        let v = pool.string("hello world");
+        let v = pool.string(String::from("hello world"));
         let v = v.wrap_in_array(ArrayFlags::empty());
         assert!(v.is_array());
-        assert_eq!(v.get_member(0).as_string(), "hello world");
+        assert_eq!(v.get_member(0).as_str(), "hello world");
     }
 }

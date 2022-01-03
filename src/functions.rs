@@ -44,7 +44,7 @@ pub fn fn_lookup_internal(context: &FunctionContext, input: &Value, key: &str) -
 }
 
 pub fn fn_lookup(context: &FunctionContext, input: &Value, key: &Value) -> Result<Value> {
-    Ok(fn_lookup_internal(context, input, &key.as_string()))
+    Ok(fn_lookup_internal(context, input, &key.as_str()))
 }
 
 pub fn fn_append(context: &FunctionContext, arg1: &Value, arg2: &Value) -> Result<Value> {
@@ -133,7 +133,7 @@ pub fn fn_string(context: &FunctionContext, arg: &Value) -> Result<Value> {
     if arg.is_string() {
         Ok(arg.clone())
     } else if arg.is_function() {
-        Ok(context.pool.string(""))
+        Ok(context.pool.string(String::from("")))
 
     // TODO: Check for infinite numbers
     // } else if arg.is_number() && arg.is_infinite() {
@@ -142,7 +142,7 @@ pub fn fn_string(context: &FunctionContext, arg: &Value) -> Result<Value> {
 
     // TODO: pretty printing
     } else {
-        Ok(context.pool.string(&arg.dump()))
+        Ok(context.pool.string(arg.dump()))
     }
 }
 
@@ -154,4 +154,28 @@ pub fn fn_count(context: &FunctionContext, arg: &Value) -> Result<Value> {
     } else {
         1
     }))
+}
+
+pub fn fn_not(context: &FunctionContext, arg: &Value) -> Result<Value> {
+    Ok(if arg.is_undefined() {
+        context.pool.undefined()
+    } else {
+        context.pool.bool(!arg.is_truthy())
+    })
+}
+
+pub fn fn_lowercase(context: &FunctionContext, arg: &Value) -> Result<Value> {
+    Ok(if !arg.is_string() {
+        context.pool.undefined()
+    } else {
+        context.pool.string(arg.as_str().to_lowercase())
+    })
+}
+
+pub fn fn_uppercase(context: &FunctionContext, arg: &Value) -> Result<Value> {
+    Ok(if !arg.is_string() {
+        context.pool.undefined()
+    } else {
+        context.pool.string(arg.as_str().to_uppercase())
+    })
 }

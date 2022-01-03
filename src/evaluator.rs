@@ -30,7 +30,7 @@ impl Evaluator {
         let mut result = match node.kind {
             AstKind::Null => self.pool.null(),
             AstKind::Bool(b) => self.pool.bool(b),
-            AstKind::String(ref s) => self.pool.string(s),
+            AstKind::String(ref s) => self.pool.string(String::from(s)),
             AstKind::Number(n) => self.pool.number(n),
             AstKind::Block(ref exprs) => self.evaluate_block(exprs, input, frame)?,
             AstKind::Unary(ref op) => self.evaluate_unary_op(node, op, input, frame)?,
@@ -180,7 +180,9 @@ impl Evaluator {
                     return Err(Error::non_string_key(position, &key));
                 }
 
-                match groups.entry(key.as_string()) {
+                let key = key.as_str();
+
+                match groups.entry(key.to_string()) {
                     hash_map::Entry::Occupied(mut entry) => {
                         let group = entry.get_mut();
                         if group.index != index {
@@ -224,16 +226,17 @@ impl Evaluator {
         input: &Value,
         frame: &Frame,
     ) -> Result<Value> {
-        let rhs = self.evaluate(rhs, input, frame)?;
-
         if *op == BinaryOp::Bind {
             if let AstKind::Var(ref name) = lhs.kind {
+                let rhs = self.evaluate(rhs, input, frame)?;
                 frame.bind(name, &rhs);
                 return Ok(rhs);
             }
             unreachable!()
         }
 
+        // NOTE: rhs is not evaluated until absolutely necessary to support short circuiting
+        // of boolean expressions.
         let lhs = self.evaluate(lhs, input, frame)?;
 
         match op {
@@ -242,6 +245,8 @@ impl Evaluator {
             | BinaryOp::Multiply
             | BinaryOp::Divide
             | BinaryOp::Modulus => {
+                let rhs = self.evaluate(rhs, input, frame)?;
+
                 let lhs = match *lhs {
                     ValueKind::Undefined => return Ok(self.pool.undefined()),
                     ValueKind::Number(n) if !n.is_nan() => f64::from(n),
@@ -274,6 +279,8 @@ impl Evaluator {
             | BinaryOp::LessThanEqual
             | BinaryOp::GreaterThan
             | BinaryOp::GreaterThanEqual => {
+                let rhs = self.evaluate(rhs, input, frame)?;
+
                 if lhs.is_undefined() || rhs.is_undefined() {
                     return Ok(self.pool.undefined());
                 }
@@ -308,6 +315,8 @@ impl Evaluator {
             }
 
             BinaryOp::Equal | BinaryOp::NotEqual => {
+                let rhs = self.evaluate(rhs, input, frame)?;
+
                 if lhs.is_undefined() || rhs.is_undefined() {
                     return Ok(self.pool.bool(false));
                 }
@@ -320,6 +329,8 @@ impl Evaluator {
             }
 
             BinaryOp::Range => {
+                let rhs = self.evaluate(rhs, input, frame)?;
+
                 if !lhs.is_undefined() && !lhs.is_usize() {
                     return Err(Error::LeftSideNotInteger(node.position));
                 };
@@ -354,20 +365,28 @@ impl Evaluator {
             }
 
             BinaryOp::Concat => {
-                let lstr = if !lhs.is_undefined() {
-                    fn_string(&self.fn_context(&node.position, input, frame), &lhs)?.as_string()
-                } else {
-                    "".to_string()
-                };
-
-                let rstr = if !rhs.is_undefined() {
-                    fn_string(&self.fn_context(&node.position, input, frame), &rhs)?.as_string()
-                } else {
-                    "".to_string()
-                };
-
-                Ok(self.pool.string(&(lstr + &rstr)))
+                let rhs = self.evaluate(rhs, input, frame)?;
+                let mut result = String::new();
+                if !lhs.is_undefined() {
+                    result.push_str(
+                        &fn_string(&self.fn_context(&node.position, input, frame), &lhs)?.as_str(),
+                    );
+                }
+                if !rhs.is_undefined() {
+                    result.push_str(
+                        &fn_string(&self.fn_context(&node.position, input, frame), &rhs)?.as_str(),
+                    );
+                }
+                Ok(self.pool.string(result))
             }
+
+            BinaryOp::And => Ok(self
+                .pool
+                .bool(lhs.is_truthy() && self.evaluate(rhs, input, frame)?.is_truthy())),
+
+            BinaryOp::Or => Ok(self
+                .pool
+                .bool(lhs.is_truthy() || self.evaluate(rhs, input, frame)?.is_truthy())),
 
             _ => unimplemented!("TODO: binary op not supported yet: {:#?}", *op),
         }

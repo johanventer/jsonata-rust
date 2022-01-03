@@ -26,15 +26,15 @@ fn t(resource: &str) {
         let expr_file = case.get_entry("expr-file");
 
         let expr = if expr.is_string() {
-            expr.as_string()
+            expr.as_str().to_string()
         } else if expr_file.is_string() {
             fs::read_to_string(
                 path::Path::new(resource)
                     .parent()
                     .unwrap()
-                    .join(expr_file.as_string()),
+                    .join(expr_file.as_str().to_string()),
             )
-            .unwrap_or_else(|_| panic!("Failed to read expr-file: {}", expr_file.as_string()))
+            .unwrap_or_else(|_| panic!("Failed to read expr-file: {}", expr_file.as_str()))
         } else {
             panic!("No expression")
         };
@@ -43,7 +43,7 @@ fn t(resource: &str) {
         let dataset = case.get_entry("dataset");
 
         let data = if dataset.is_string() {
-            let dataset = format!("tests/testsuite/datasets/{}.json", dataset.as_string());
+            let dataset = format!("tests/testsuite/datasets/{}.json", dataset.as_str());
             let dataset = fs::read_to_string(&dataset)
                 .unwrap_or_else(|_e| panic!("Could not read dataset file: {}", dataset));
             json::parse_with_pool(&dataset, pool.clone()).unwrap()

@@ -665,7 +665,7 @@ impl<'a> Parser<'a> {
 
                     self.pool.object()
                 }
-                b'"' => self.pool.clone().string(expect_string!(self)),
+                b'"' => self.pool.clone().string(String::from(expect_string!(self))),
                 b'0' => self.pool.clone().number(allow_number_extensions!(self)),
                 b'1'..=b'9' => self.pool.clone().number(expect_number!(self, ch)),
                 b'-' => {
