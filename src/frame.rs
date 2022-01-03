@@ -23,7 +23,7 @@ impl Frame {
         // Values in the frame need to be complete clones, otherwise modifying them would change their value.
         // Arrays and object will still point at the same members, and this replicates the reference semantics
         // in Javascript.
-        let v = value.pool.value((*value.as_ref()).clone());
+        let v = value.pool.value((**value).clone());
         self.0.borrow_mut().bindings.insert(name.to_string(), v);
     }
 

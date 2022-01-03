@@ -139,7 +139,7 @@ pub trait Generator {
     }
 
     fn write_json(&mut self, json: &Value) -> io::Result<()> {
-        match *json.as_ref() {
+        match **json {
             ValueKind::Null => self.write(b"null"),
             ValueKind::String(ref string) => self.write_string(string),
             ValueKind::Number(ref number) => self.write_number(number),

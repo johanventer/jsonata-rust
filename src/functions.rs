@@ -21,13 +21,13 @@ impl<'a> FunctionContext<'a> {
 }
 
 pub fn fn_lookup_internal(context: &FunctionContext, input: &Value, key: &str) -> Value {
-    match *input.as_ref() {
+    match **input {
         ValueKind::Array { .. } => {
             let mut result = context.pool.array(ArrayFlags::SEQUENCE);
 
             for input in input.members() {
                 let res = fn_lookup_internal(context, &input, key);
-                match *res.as_ref() {
+                match *res {
                     ValueKind::Undefined => {}
                     ValueKind::Array { .. } => {
                         res.members().for_each(|item| result.push_index(item.index));
@@ -56,7 +56,7 @@ pub fn fn_append(context: &FunctionContext, arg1: &Value, arg2: &Value) -> Resul
         return Ok(arg1.clone());
     }
 
-    let result = context.pool.value((*arg1.as_ref()).clone());
+    let result = context.pool.value((**arg1).clone());
     let mut result = result.wrap_in_array_if_needed(ArrayFlags::SEQUENCE);
     let arg2 = arg2.wrap_in_array_if_needed(ArrayFlags::empty());
     arg2.members().for_each(|m| result.push_index(m.index));
@@ -65,7 +65,7 @@ pub fn fn_append(context: &FunctionContext, arg1: &Value, arg2: &Value) -> Resul
 }
 
 pub fn fn_boolean(context: &FunctionContext, arg: &Value) -> Result<Value> {
-    Ok(match *arg.as_ref() {
+    Ok(match **arg {
         ValueKind::Undefined => context.pool.undefined(),
         ValueKind::Null => context.pool.bool(false),
         ValueKind::Bool(b) => context.pool.bool(b),

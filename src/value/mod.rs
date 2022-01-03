@@ -130,21 +130,6 @@ impl Value {
         }
     }
 
-    pub fn as_ref(&self) -> &ValueKind {
-        self.pool.get(self.index)
-        // // This looks weird, but I need a way around the borrow checker (both compile-time and the
-        // // runtime borrow checking on the pool) to get a NodeRef that doesn't borrow the pool for the
-        // // entirety of its lifetime.
-
-        // let pool_ref = self.pool.borrow();
-        // let pool_ptr = &*pool_ref as *const NodePool<ValueKind>;
-
-        // // Safety: The pointer was just created, and will still be valid as long as the pool lives.
-        // let node_ref = unsafe { pool_ptr.as_ref().unwrap().get_ref(self.index) };
-
-        // node_ref
-    }
-
     pub fn as_bool(&self) -> bool {
         match self.pool.get(self.index) {
             ValueKind::Bool(b) => *b,
@@ -358,6 +343,14 @@ impl Value {
         let mut gen = PrettyGenerator::new(spaces);
         gen.write_json(self).expect("Can't fail");
         gen.consume()
+    }
+}
+
+impl Deref for Value {
+    type Target = ValueKind;
+
+    fn deref(&self) -> &Self::Target {
+        self.pool.get(self.index)
     }
 }
 

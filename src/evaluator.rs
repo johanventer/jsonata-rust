@@ -122,7 +122,7 @@ impl Evaluator {
         match *op {
             UnaryOp::Minus(ref value) => {
                 let result = self.evaluate(value, input, frame)?;
-                let result = match *result.as_ref() {
+                let result = match *result {
                     ValueKind::Undefined => Ok(self.pool.undefined()),
                     ValueKind::Number(num) if !num.is_nan() => Ok(self.pool.number(-num)),
                     _ => Err(Error::negating_non_numeric(node.position, &result)),
@@ -243,13 +243,13 @@ impl Evaluator {
             | BinaryOp::Multiply
             | BinaryOp::Divide
             | BinaryOp::Modulus => {
-                let lhs = match *lhs.as_ref() {
+                let lhs = match *lhs {
                     ValueKind::Undefined => return Ok(self.pool.undefined()),
                     ValueKind::Number(n) if !n.is_nan() => f64::from(n),
                     _ => return Err(Error::left_side_not_number(node.position, op)),
                 };
 
-                let rhs = match *rhs.as_ref() {
+                let rhs = match *rhs {
                     ValueKind::Undefined => return Ok(self.pool.undefined()),
                     ValueKind::Number(n) if !n.is_nan() => f64::from(n),
                     _ => return Err(Error::right_side_not_number(node.position, op)),
@@ -283,9 +283,7 @@ impl Evaluator {
                     return Err(Error::binary_op_types(node.position, op));
                 }
 
-                if let (ValueKind::Number(ref lhs), ValueKind::Number(ref rhs)) =
-                    (&*lhs.as_ref(), &*rhs.as_ref())
-                {
+                if let (ValueKind::Number(ref lhs), ValueKind::Number(ref rhs)) = (&*lhs, &*rhs) {
                     let lhs = f64::from(*lhs);
                     let rhs = f64::from(*rhs);
                     return Ok(self.pool.bool(match op {
@@ -297,9 +295,7 @@ impl Evaluator {
                     }));
                 }
 
-                if let (ValueKind::String(ref lhs), ValueKind::String(ref rhs)) =
-                    (&*lhs.as_ref(), &*rhs.as_ref())
-                {
+                if let (ValueKind::String(ref lhs), ValueKind::String(ref rhs)) = (&*lhs, &*rhs) {
                     return Ok(self.pool.bool(match op {
                         BinaryOp::LessThan => lhs < rhs,
                         BinaryOp::LessThanEqual => lhs <= rhs,
@@ -615,7 +611,7 @@ impl Evaluator {
         evaluated_args: &Value,
         frame: &Frame,
     ) -> Result<Value> {
-        match *evaluated_proc.as_ref() {
+        match **evaluated_proc {
             ValueKind::Lambda(_, ref lambda) => {
                 if let NodeKind::Lambda {
                     ref body, ref args, ..
