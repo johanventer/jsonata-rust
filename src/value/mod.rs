@@ -11,7 +11,6 @@ pub use pool::ValuePool;
 
 use crate::ast::{Node, NodeKind};
 use crate::json::codegen::{DumpGenerator, Generator, PrettyGenerator};
-use crate::node_pool::{NodePool, NodeRef};
 
 /// A thin wrapper around the index to a `ValueKind` within a `ValuePool`.
 ///
@@ -31,53 +30,53 @@ pub struct Value {
 impl Value {
     #[inline]
     pub fn is_undefined(&self) -> bool {
-        matches!(self.pool.borrow().get(self.index), ValueKind::Undefined)
+        matches!(self.pool.get(self.index), ValueKind::Undefined)
     }
 
     #[inline]
     pub fn is_null(&self) -> bool {
-        matches!(self.pool.borrow().get(self.index), ValueKind::Null)
+        matches!(self.pool.get(self.index), ValueKind::Null)
     }
 
     #[inline]
     pub fn is_bool(&self) -> bool {
-        matches!(self.pool.borrow().get(self.index), ValueKind::Bool(..))
+        matches!(self.pool.get(self.index), ValueKind::Bool(..))
     }
 
     #[inline]
     pub fn is_number(&self) -> bool {
-        matches!(self.pool.borrow().get(self.index), ValueKind::Number(..))
+        matches!(self.pool.get(self.index), ValueKind::Number(..))
     }
 
     #[inline]
     pub fn is_usize(&self) -> bool {
-        matches!(self.pool.borrow().get(self.index), ValueKind::Number(n) if usize::try_from(*n).is_ok())
+        matches!(self.pool.get(self.index), ValueKind::Number(n) if usize::try_from(*n).is_ok())
     }
 
     #[inline]
     pub fn is_nan(&self) -> bool {
-        matches!(self.pool.borrow().get(self.index), ValueKind::Number(n) if n.is_nan())
+        matches!(self.pool.get(self.index), ValueKind::Number(n) if n.is_nan())
     }
 
     #[inline]
     pub fn is_string(&self) -> bool {
-        matches!(self.pool.borrow().get(self.index), ValueKind::String(..))
+        matches!(self.pool.get(self.index), ValueKind::String(..))
     }
 
     #[inline]
     pub fn is_array(&self) -> bool {
-        matches!(self.pool.borrow().get(self.index), ValueKind::Array(..))
+        matches!(self.pool.get(self.index), ValueKind::Array(..))
     }
 
     #[inline]
     pub fn is_object(&self) -> bool {
-        matches!(self.pool.borrow().get(self.index), ValueKind::Object(..))
+        matches!(self.pool.get(self.index), ValueKind::Object(..))
     }
 
     #[inline]
     pub fn is_function(&self) -> bool {
         matches!(
-            self.pool.borrow().get(self.index),
+            self.pool.get(self.index),
             ValueKind::Lambda { .. }
                 | ValueKind::NativeFn0(..)
                 | ValueKind::NativeFn1(..)
@@ -87,7 +86,7 @@ impl Value {
     }
 
     pub fn is_truthy(&self) -> bool {
-        match self.pool.borrow().get(self.index) {
+        match self.pool.get(self.index) {
             ValueKind::Undefined => false,
             ValueKind::Null => false,
             ValueKind::Number(n) => *n != 0.0,
@@ -115,7 +114,7 @@ impl Value {
     }
 
     pub fn arity(&self) -> usize {
-        match self.pool.borrow().get(self.index) {
+        match self.pool.get(self.index) {
             ValueKind::Lambda(
                 _,
                 Node {
@@ -131,73 +130,74 @@ impl Value {
         }
     }
 
-    pub fn as_ref(&self) -> NodeRef<ValueKind> {
-        // This looks weird, but I need a way around the borrow checker (both compile-time and the
-        // runtime borrow checking on the pool) to get a NodeRef that doesn't borrow the pool for the
-        // entirety of its lifetime.
+    pub fn as_ref(&self) -> &ValueKind {
+        self.pool.get(self.index)
+        // // This looks weird, but I need a way around the borrow checker (both compile-time and the
+        // // runtime borrow checking on the pool) to get a NodeRef that doesn't borrow the pool for the
+        // // entirety of its lifetime.
 
-        let pool_ref = self.pool.borrow();
-        let pool_ptr = &*pool_ref as *const NodePool<ValueKind>;
+        // let pool_ref = self.pool.borrow();
+        // let pool_ptr = &*pool_ref as *const NodePool<ValueKind>;
 
-        // Safety: The pointer was just created, and will still be valid as long as the pool lives.
-        let node_ref = unsafe { pool_ptr.as_ref().unwrap().get_ref(self.index) };
+        // // Safety: The pointer was just created, and will still be valid as long as the pool lives.
+        // let node_ref = unsafe { pool_ptr.as_ref().unwrap().get_ref(self.index) };
 
-        node_ref
+        // node_ref
     }
 
     pub fn as_bool(&self) -> bool {
-        match *self.pool.borrow().get(self.index) {
-            ValueKind::Bool(b) => b,
+        match self.pool.get(self.index) {
+            ValueKind::Bool(b) => *b,
             _ => panic!("Not a bool"),
         }
     }
 
     pub fn as_f32(&self) -> f32 {
-        match *self.pool.borrow().get(self.index) {
-            ValueKind::Number(n) => n.into(),
+        match self.pool.get(self.index) {
+            ValueKind::Number(n) => f32::from(*n),
             _ => panic!("Not a number"),
         }
     }
 
     pub fn as_f64(&self) -> f64 {
-        match *self.pool.borrow().get(self.index) {
-            ValueKind::Number(n) => n.into(),
+        match self.pool.get(self.index) {
+            ValueKind::Number(n) => f64::from(*n),
             _ => panic!("Not a number"),
         }
     }
 
     pub fn as_usize(&self) -> usize {
-        match *self.pool.borrow().get(self.index) {
+        match self.pool.get(self.index) {
             ValueKind::Number(n) => {
-                usize::try_from(n).unwrap_or_else(|_| panic!("Number is not a valid usize"))
+                usize::try_from(*n).unwrap_or_else(|_| panic!("Number is not a valid usize"))
             }
             _ => panic!("Not a number"),
         }
     }
 
     pub fn as_string(&self) -> String {
-        match self.pool.borrow().get(self.index) {
+        match self.pool.get(self.index) {
             ValueKind::String(s) => s.clone(),
             _ => panic!("Not a string"),
         }
     }
 
     pub fn len(&self) -> usize {
-        match self.pool.borrow().get(self.index) {
+        match self.pool.get(self.index) {
             ValueKind::Array(array, _) => array.len(),
             _ => panic!("Not an array"),
         }
     }
 
     pub fn is_empty(&self) -> bool {
-        match self.pool.borrow().get(self.index) {
+        match self.pool.get(self.index) {
             ValueKind::Array(array, _) => array.is_empty(),
             _ => panic!("Not an array"),
         }
     }
 
     pub fn get_member(&self, index: usize) -> Value {
-        match self.pool.borrow().get(self.index) {
+        match self.pool.get(self.index) {
             ValueKind::Array(ref array, _) => match array.get(index) {
                 Some(index) => Value {
                     pool: self.pool.clone(),
@@ -210,7 +210,7 @@ impl Value {
     }
 
     pub fn get_entry(&self, key: &str) -> Value {
-        match self.pool.borrow().get(self.index) {
+        match self.pool.get(self.index) {
             ValueKind::Object(ref map) => match map.get(key) {
                 Some(index) => Value {
                     pool: self.pool.clone(),
@@ -222,10 +222,9 @@ impl Value {
         }
     }
 
-    pub fn insert(&self, key: &str, kind: ValueKind) {
-        let mut pool = self.pool.borrow_mut();
-        let index = pool.insert(kind);
-        match pool.get_mut(self.index) {
+    pub fn insert(&mut self, key: &str, kind: ValueKind) {
+        let index = self.pool.insert(kind);
+        match self.pool.get_mut(self.index) {
             ValueKind::Object(ref mut map) => {
                 map.insert(key.to_owned(), index);
             }
@@ -233,8 +232,8 @@ impl Value {
         }
     }
 
-    pub fn insert_index(&self, key: &str, index: usize) {
-        match self.pool.borrow_mut().get_mut(self.index) {
+    pub fn insert_index(&mut self, key: &str, index: usize) {
+        match self.pool.get_mut(self.index) {
             ValueKind::Object(ref mut map) => {
                 map.insert(key.to_owned(), index);
             }
@@ -247,10 +246,9 @@ impl Value {
     /// # Panics
     ///
     /// If the `ValueKind` wrapped by this `Value` is anot a `ValueKind::Array`.
-    pub fn push(&self, kind: ValueKind) {
-        let mut pool = self.pool.borrow_mut();
-        let index = pool.insert(kind);
-        match pool.get_mut(self.index) {
+    pub fn push(&mut self, kind: ValueKind) {
+        let index = self.pool.insert(kind);
+        match self.pool.get_mut(self.index) {
             ValueKind::Array(ref mut array, _) => {
                 array.push(index);
             }
@@ -270,8 +268,8 @@ impl Value {
     /// # Panics
     ///
     /// If the `ValueKind` wrapped by this `Value` is not a `ValueKind::Array`.
-    pub fn push_index(&self, index: usize) {
-        match self.pool.borrow_mut().get_mut(self.index) {
+    pub fn push_index(&mut self, index: usize) {
+        match self.pool.get_mut(self.index) {
             ValueKind::Array(ref mut array, _) => {
                 array.push(index);
             }
@@ -281,7 +279,7 @@ impl Value {
 
     /// Wraps an existing value in an array.
     pub fn wrap_in_array(&self, flags: ArrayFlags) -> Value {
-        let array = self.pool.array_with_capacity(1, flags);
+        let mut array = self.pool.array_with_capacity(1, flags);
         array.push_index(self.index);
         array
     }
@@ -301,7 +299,7 @@ impl Value {
     ///
     /// If the `ValueKind` wrapped by this `Value` is not a `ValueKind::Array`.
     pub fn members(&self) -> Members {
-        match self.pool.borrow().get(self.index) {
+        match self.pool.get(self.index) {
             ValueKind::Array(ref array, _) => unsafe { Members::new(&self.pool, array) },
             _ => panic!("Not an array"),
         }
@@ -313,35 +311,35 @@ impl Value {
     ///
     /// If the `ValueKind` wrapped by this `Value` is not a `ValueKind::Object`.
     pub fn entries(&self) -> Entries {
-        match self.pool.borrow().get(self.index) {
+        match self.pool.get(self.index) {
             ValueKind::Object(ref map) => unsafe { Entries::new(&self.pool, map) },
             _ => panic!("Not an object"),
         }
     }
 
     pub fn get_flags(&self) -> ArrayFlags {
-        match self.pool.borrow().get(self.index) {
+        match self.pool.get(self.index) {
             ValueKind::Array(_, flags) => *flags,
             _ => panic!("Not an array"),
         }
     }
 
-    pub fn set_flags(&self, new_flags: ArrayFlags) {
-        match self.pool.borrow_mut().get_mut(self.index) {
+    pub fn set_flags(&mut self, new_flags: ArrayFlags) {
+        match self.pool.get_mut(self.index) {
             ValueKind::Array(_, ref mut flags) => *flags = new_flags,
             _ => panic!("Not an array"),
         }
     }
 
-    pub fn add_flags(&self, flags_to_add: ArrayFlags) {
-        match self.pool.borrow_mut().get_mut(self.index) {
+    pub fn add_flags(&mut self, flags_to_add: ArrayFlags) {
+        match self.pool.get_mut(self.index) {
             ValueKind::Array(_, ref mut flags) => flags.insert(flags_to_add),
             _ => panic!("Not an array"),
         }
     }
 
     pub fn has_flags(&self, check_flags: ArrayFlags) -> bool {
-        match self.pool.borrow().get(self.index) {
+        match self.pool.get(self.index) {
             ValueKind::Array(_, flags) => flags.contains(check_flags),
             _ => false,
         }
@@ -369,7 +367,7 @@ impl Value {
 /// directly compare `Value`s to determine if their underlying `ValueKind`s are equal.
 impl PartialEq<Value> for Value {
     fn eq(&self, other: &Value) -> bool {
-        match self.pool.borrow().get(self.index) {
+        match self.pool.get(self.index) {
             ValueKind::Array(..) => {
                 if other.is_array() && other.len() == self.len() {
                     self.members().zip(other.members()).all(|(l, r)| l == r)
@@ -384,20 +382,20 @@ impl PartialEq<Value> for Value {
                     false
                 }
             }
-            _ => self.pool.borrow().get(self.index) == self.pool.borrow().get(other.index),
+            _ => self.pool.get(self.index) == self.pool.get(other.index),
         }
     }
 }
 
 impl PartialEq<ValueKind> for Value {
     fn eq(&self, other: &ValueKind) -> bool {
-        self.pool.borrow().get(self.index) == other
+        self.pool.get(self.index) == other
     }
 }
 
 impl PartialEq<bool> for Value {
     fn eq(&self, other: &bool) -> bool {
-        match self.pool.borrow().get(self.index) {
+        match self.pool.get(self.index) {
             ValueKind::Bool(ref b) => *b == *other,
             _ => false,
         }
@@ -406,7 +404,7 @@ impl PartialEq<bool> for Value {
 
 impl PartialEq<i32> for Value {
     fn eq(&self, other: &i32) -> bool {
-        match self.pool.borrow().get(self.index) {
+        match self.pool.get(self.index) {
             ValueKind::Number(ref n) => *n == *other,
             _ => false,
         }
@@ -415,7 +413,7 @@ impl PartialEq<i32> for Value {
 
 impl PartialEq<i64> for Value {
     fn eq(&self, other: &i64) -> bool {
-        match self.pool.borrow().get(self.index) {
+        match self.pool.get(self.index) {
             ValueKind::Number(ref n) => *n == *other,
             _ => false,
         }
@@ -424,7 +422,7 @@ impl PartialEq<i64> for Value {
 
 impl PartialEq<f32> for Value {
     fn eq(&self, other: &f32) -> bool {
-        match self.pool.borrow().get(self.index) {
+        match self.pool.get(self.index) {
             ValueKind::Number(ref n) => *n == *other,
             _ => false,
         }
@@ -433,8 +431,8 @@ impl PartialEq<f32> for Value {
 
 impl PartialEq<f64> for Value {
     fn eq(&self, other: &f64) -> bool {
-        match self.pool.borrow().get(self.index) {
-            ValueKind::Number(ref n) => *n == *other,
+        match self.pool.get(self.index) {
+            ValueKind::Number(n) => *n == *other,
             _ => false,
         }
     }
@@ -442,7 +440,7 @@ impl PartialEq<f64> for Value {
 
 impl PartialEq<&str> for Value {
     fn eq(&self, other: &&str) -> bool {
-        match self.pool.borrow().get(self.index) {
+        match self.pool.get(self.index) {
             ValueKind::String(s) => *s == **other,
             _ => false,
         }
@@ -451,7 +449,7 @@ impl PartialEq<&str> for Value {
 
 impl PartialEq<String> for Value {
     fn eq(&self, other: &String) -> bool {
-        match self.pool.borrow().get(self.index) {
+        match self.pool.get(self.index) {
             ValueKind::String(s) => *s == *other,
             _ => false,
         }
@@ -526,7 +524,7 @@ impl fmt::Display for Value {
         if f.alternate() {
             f.write_str(&self.pretty(4))
         } else {
-            match self.pool.borrow().get(self.index) {
+            match self.pool.get(self.index) {
                 ValueKind::String(ref value) => value.fmt(f),
                 ValueKind::Number(ref value) => value.fmt(f),
                 ValueKind::Bool(ref value) => value.fmt(f),
@@ -537,23 +535,6 @@ impl fmt::Display for Value {
     }
 }
 
-// FIXME: This is going to break if the pool grows as it will reallocate and
-// the pointer will no longer be correct
-pub struct ValueRef<'a> {
-    pool: PhantomData<&'a ValuePool>,
-    kind: *const ValueKind,
-}
-
-impl Deref for ValueRef<'_> {
-    type Target = ValueKind;
-
-    fn deref(&self) -> &Self::Target {
-        // SAFETY: The reference's lifetime is tied to the pool, as long the ValueKind is not
-        // removed from the pool then this is safe.
-        unsafe { &*self.kind }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -561,7 +542,7 @@ mod tests {
     #[test]
     fn members_iter() {
         let pool = ValuePool::new();
-        let a = pool.array(ArrayFlags::empty());
+        let mut a = pool.array(ArrayFlags::empty());
         a.push(ValueKind::Number(5.into()));
         a.push(ValueKind::Number(4.into()));
         a.push(ValueKind::Number(3.into()));
@@ -580,7 +561,7 @@ mod tests {
     fn entries_iter() {
         let map = HashMap::from([("a", "1"), ("b", "2"), ("c", "3"), ("d", "4"), ("e", "5")]);
         let pool = ValuePool::new();
-        let o = pool.object();
+        let mut o = pool.object();
         map.iter().for_each(|(k, v)| o.insert(*k, (*v).into()));
         let entries: Vec<(String, String)> = o
             .entries()

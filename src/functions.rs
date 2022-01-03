@@ -23,7 +23,7 @@ impl<'a> FunctionContext<'a> {
 pub fn fn_lookup_internal(context: &FunctionContext, input: &Value, key: &str) -> Value {
     match *input.as_ref() {
         ValueKind::Array { .. } => {
-            let result = context.pool.array_with_flags(ArrayFlags::SEQUENCE);
+            let mut result = context.pool.array(ArrayFlags::SEQUENCE);
 
             for input in input.members() {
                 let res = fn_lookup_internal(context, &input, key);
@@ -57,7 +57,7 @@ pub fn fn_append(context: &FunctionContext, arg1: &Value, arg2: &Value) -> Resul
     }
 
     let result = context.pool.value((*arg1.as_ref()).clone());
-    let result = result.wrap_in_array_if_needed(ArrayFlags::SEQUENCE);
+    let mut result = result.wrap_in_array_if_needed(ArrayFlags::SEQUENCE);
     let arg2 = arg2.wrap_in_array_if_needed(ArrayFlags::empty());
     arg2.members().for_each(|m| result.push_index(m.index));
 
@@ -101,10 +101,10 @@ pub fn fn_filter(context: &FunctionContext, arr: &Value, func: &Value) -> Result
     debug_assert!(arr.is_array());
     debug_assert!(func.is_function());
 
-    let result = context.pool.array_with_flags(ArrayFlags::SEQUENCE);
+    let mut result = context.pool.array(ArrayFlags::SEQUENCE);
 
     for (index, item) in arr.members().enumerate() {
-        let args = context.pool.array(ArrayFlags::empty());
+        let mut args = context.pool.array(ArrayFlags::empty());
         let arity = func.arity();
 
         args.push_index(item.index);

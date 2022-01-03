@@ -168,7 +168,7 @@ impl Evaluator {
         }
 
         let mut groups: HashMap<String, Group> = HashMap::new();
-        let input = input.wrap_in_array_if_needed(ArrayFlags::empty());
+        let mut input = input.wrap_in_array_if_needed(ArrayFlags::empty());
 
         if input.is_empty() {
             input.push(ValueKind::Undefined);
@@ -203,7 +203,7 @@ impl Evaluator {
             }
         }
 
-        let result = self.pool.object();
+        let mut result = self.pool.object();
 
         for key in groups.keys() {
             let group = groups.get(key).unwrap();
@@ -350,7 +350,7 @@ impl Evaluator {
                     unreachable!()
                 }
 
-                let result = self.pool.array_with_capacity(size, ArrayFlags::SEQUENCE);
+                let mut result = self.pool.array_with_capacity(size, ArrayFlags::SEQUENCE);
                 for index in lhs..rhs + 1 {
                     result.push(ValueKind::Number(index.into()));
                 }
@@ -482,7 +482,7 @@ impl Evaluator {
             {
                 result.get_member(0)
             } else {
-                let result_sequence = self.pool.array(ArrayFlags::SEQUENCE);
+                let mut result_sequence = self.pool.array(ArrayFlags::SEQUENCE);
 
                 for result_item in result.members() {
                     if !result_item.is_array() || result_item.has_flags(ArrayFlags::CONS) {
@@ -592,7 +592,7 @@ impl Evaluator {
             }
         }
 
-        let evaluated_args = self.pool.array(ArrayFlags::empty());
+        let mut evaluated_args = self.pool.array(ArrayFlags::empty());
         for arg in args {
             let arg = self.evaluate(arg, input, frame)?;
             evaluated_args.push_index(arg.index);

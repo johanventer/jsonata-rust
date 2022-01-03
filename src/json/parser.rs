@@ -699,7 +699,7 @@ impl<'a> Parser<'a> {
                         return Ok(value);
                     }
 
-                    Some(StackBlock(ref stack_value, ref mut key)) => {
+                    Some(StackBlock(ref mut stack_value, ref mut key)) => {
                         if stack_value.is_array() {
                             stack_value.push_index(value.index);
 

@@ -5,7 +5,6 @@ pub mod evaluator;
 pub mod frame;
 pub mod functions;
 pub mod json;
-pub mod node_pool;
 pub mod parser;
 pub mod position;
 pub mod process;
