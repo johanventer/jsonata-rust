@@ -60,6 +60,7 @@ impl Number {
     /// THe goal of the 'unsafe' is to deter from using this method in favor of its safe equivalent
     /// `from_parts`, at least in context when the associated performance cost is negligible.
     #[inline]
+    #[allow(clippy::missing_safety_doc)]
     pub unsafe fn from_parts_unchecked(positive: bool, mantissa: u64, exponent: i16) -> Self {
         Number {
             category: positive as u8,
