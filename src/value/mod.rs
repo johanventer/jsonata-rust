@@ -1,5 +1,4 @@
 use std::convert::TryFrom;
-use std::marker::PhantomData;
 use std::ops::Deref;
 use std::{collections::HashMap, fmt};
 

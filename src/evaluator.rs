@@ -122,12 +122,11 @@ impl Evaluator {
         match *op {
             UnaryOp::Minus(ref value) => {
                 let result = self.evaluate(value, input, frame)?;
-                let result = match *result {
+                match *result {
                     ValueKind::Undefined => Ok(self.pool.undefined()),
                     ValueKind::Number(num) if !num.is_nan() => Ok(self.pool.number(-num)),
                     _ => Err(Error::negating_non_numeric(node.position, &result)),
-                };
-                result
+                }
             }
             UnaryOp::ArrayConstructor(ref array) => {
                 let mut result = self.pool.array(if node.cons_array {
