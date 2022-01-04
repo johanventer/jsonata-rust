@@ -454,6 +454,24 @@ impl Evaluator {
                 }
             }
 
+            BinaryOp::In => {
+                let rhs = self.evaluate(rhs_ast, input, frame)?;
+
+                if lhs.is_undefined() || rhs.is_undefined() {
+                    return Ok(self.pool.bool(false));
+                }
+
+                let rhs = rhs.wrap_in_array_if_needed(ArrayFlags::empty());
+
+                for item in rhs.members() {
+                    if item == lhs {
+                        return Ok(self.pool.bool(true));
+                    }
+                }
+
+                Ok(self.pool.bool(false))
+            }
+
             _ => unimplemented!("TODO: binary op not supported yet: {:#?}", *op),
         }
     }
@@ -733,6 +751,7 @@ impl Evaluator {
                 if evaluated_args.len() > 1 {
                     Err(Error::argument_not_valid(&context, 2))
                 } else if evaluated_args.is_empty() {
+                    // Some functions take the input as the first argument if one was not provided
                     func(&context, input)
                 } else {
                     func(&context, &evaluated_args.get_member(0))
