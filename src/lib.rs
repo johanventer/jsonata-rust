@@ -99,8 +99,11 @@ impl JsonAta {
         bind!("lowercase", nativefn1, fn_lowercase);
         bind!("substring", nativefn3, fn_substring);
         bind!("abs", nativefn1, fn_abs);
+        bind!("max", nativefn1, fn_max);
 
-        let evaluator = Evaluator::new(self.pool.clone());
+        let chain_ast = parser::parse("function($f, $g) { function($x){ $g($f($x)) } }")?;
+
+        let evaluator = Evaluator::new(self.pool.clone(), chain_ast);
         evaluator.evaluate(&self.ast, &input, &self.frame)
     }
 }

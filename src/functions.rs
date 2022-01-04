@@ -102,9 +102,7 @@ pub fn fn_filter(context: &FunctionContext, arr: &Value, func: &Value) -> Result
         return Ok(context.pool.undefined());
     }
 
-    if !arr.is_array() {
-        return Err(Error::argument_not_valid(context, 1));
-    }
+    let arr = arr.wrap_in_array_if_needed(ArrayFlags::empty());
 
     if !func.is_function() {
         return Err(Error::argument_not_valid(context, 2));
@@ -237,5 +235,24 @@ pub fn fn_abs(context: &FunctionContext, arg: &Value) -> Result<Value> {
         Err(Error::argument_not_valid(context, 1))
     } else {
         Ok(context.pool.number(arg.as_f64().abs()))
+    }
+}
+
+pub fn fn_max(context: &FunctionContext, args: &Value) -> Result<Value> {
+    if args.is_undefined() {
+        Ok(context.pool.undefined())
+    } else if !args.is_array() {
+        Err(Error::argument_not_valid(context, 1))
+    } else if args.is_empty() {
+        Ok(context.pool.undefined())
+    } else {
+        let mut max = 0.0;
+        for arg in args.members() {
+            if !arg.is_number() {
+                return Err(Error::argument_not_valid(context, 2));
+            }
+            max = f64::max(max, arg.as_f64());
+        }
+        Ok(context.pool.number(max))
     }
 }

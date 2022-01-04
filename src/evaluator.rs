@@ -8,12 +8,13 @@ use super::value::{ArrayFlags, Value, ValueKind, ValuePool};
 use super::{Error, Result};
 
 pub struct Evaluator {
-    pub pool: ValuePool,
+    pool: ValuePool,
+    chain_ast: Ast,
 }
 
 impl Evaluator {
-    pub fn new(pool: ValuePool) -> Self {
-        Evaluator { pool }
+    pub fn new(pool: ValuePool, chain_ast: Ast) -> Self {
+        Evaluator { pool, chain_ast }
     }
 
     fn fn_context<'a>(
@@ -62,7 +63,7 @@ impl Evaluator {
                 ref args,
                 is_partial,
                 ..
-            } => self.evaluate_function(input, proc, args, is_partial, frame)?,
+            } => self.evaluate_function(input, proc, args, is_partial, frame, None)?,
 
             _ => unimplemented!("TODO: node kind not yet supported: {:#?}", node.kind),
         };
@@ -230,14 +231,14 @@ impl Evaluator {
         &self,
         node: &Ast,
         op: &BinaryOp,
-        lhs: &Ast,
-        rhs: &Ast,
+        lhs_ast: &Ast,
+        rhs_ast: &Ast,
         input: &Value,
         frame: &Frame,
     ) -> Result<Value> {
         if *op == BinaryOp::Bind {
-            if let AstKind::Var(ref name) = lhs.kind {
-                let rhs = self.evaluate(rhs, input, frame)?;
+            if let AstKind::Var(ref name) = lhs_ast.kind {
+                let rhs = self.evaluate(rhs_ast, input, frame)?;
                 frame.bind(name, &rhs);
                 return Ok(rhs);
             }
@@ -246,7 +247,7 @@ impl Evaluator {
 
         // NOTE: rhs is not evaluated until absolutely necessary to support short circuiting
         // of boolean expressions.
-        let lhs = self.evaluate(lhs, input, frame)?;
+        let lhs = self.evaluate(lhs_ast, input, frame)?;
 
         match op {
             BinaryOp::Add
@@ -254,7 +255,7 @@ impl Evaluator {
             | BinaryOp::Multiply
             | BinaryOp::Divide
             | BinaryOp::Modulus => {
-                let rhs = self.evaluate(rhs, input, frame)?;
+                let rhs = self.evaluate(rhs_ast, input, frame)?;
 
                 let lhs = match *lhs {
                     ValueKind::Undefined => return Ok(self.pool.undefined()),
@@ -288,7 +289,7 @@ impl Evaluator {
             | BinaryOp::LessThanEqual
             | BinaryOp::GreaterThan
             | BinaryOp::GreaterThanEqual => {
-                let rhs = self.evaluate(rhs, input, frame)?;
+                let rhs = self.evaluate(rhs_ast, input, frame)?;
 
                 if lhs.is_undefined() || rhs.is_undefined() {
                     return Ok(self.pool.undefined());
@@ -324,7 +325,7 @@ impl Evaluator {
             }
 
             BinaryOp::Equal | BinaryOp::NotEqual => {
-                let rhs = self.evaluate(rhs, input, frame)?;
+                let rhs = self.evaluate(rhs_ast, input, frame)?;
 
                 if lhs.is_undefined() || rhs.is_undefined() {
                     return Ok(self.pool.bool(false));
@@ -338,7 +339,7 @@ impl Evaluator {
             }
 
             BinaryOp::Range => {
-                let rhs = self.evaluate(rhs, input, frame)?;
+                let rhs = self.evaluate(rhs_ast, input, frame)?;
 
                 if !lhs.is_undefined() && !lhs.is_usize() {
                     return Err(Error::LeftSideNotInteger(node.position));
@@ -374,7 +375,7 @@ impl Evaluator {
             }
 
             BinaryOp::Concat => {
-                let rhs = self.evaluate(rhs, input, frame)?;
+                let rhs = self.evaluate(rhs_ast, input, frame)?;
                 let mut result = String::new();
                 if !lhs.is_undefined() {
                     result.push_str(
@@ -399,11 +400,59 @@ impl Evaluator {
 
             BinaryOp::And => Ok(self
                 .pool
-                .bool(lhs.is_truthy() && self.evaluate(rhs, input, frame)?.is_truthy())),
+                .bool(lhs.is_truthy() && self.evaluate(rhs_ast, input, frame)?.is_truthy())),
 
             BinaryOp::Or => Ok(self
                 .pool
-                .bool(lhs.is_truthy() || self.evaluate(rhs, input, frame)?.is_truthy())),
+                .bool(lhs.is_truthy() || self.evaluate(rhs_ast, input, frame)?.is_truthy())),
+
+            BinaryOp::Apply => {
+                if let AstKind::Function {
+                    ref proc,
+                    ref args,
+                    is_partial,
+                    ..
+                } = rhs_ast.kind
+                {
+                    // Function invocation with lhs as the first argument
+                    self.evaluate_function(input, proc, args, is_partial, frame, Some(&lhs))
+                } else {
+                    let rhs = self.evaluate(rhs_ast, input, frame)?;
+
+                    if !rhs.is_function() {
+                        // TODO T2006
+                        unreachable!()
+                    }
+
+                    if lhs.is_function() {
+                        // Apply function chaining
+                        let chain =
+                            self.evaluate(&self.chain_ast, &self.pool.undefined(), frame)?;
+
+                        let mut args = self.pool.array_with_capacity(2, ArrayFlags::empty());
+                        args.push_index(lhs.index);
+                        args.push_index(rhs.index);
+
+                        self.apply_function(
+                            lhs_ast.position,
+                            &self.pool.undefined(),
+                            &chain,
+                            &args,
+                            frame,
+                        )
+                    } else {
+                        let mut args = self.pool.array_with_capacity(1, ArrayFlags::empty());
+                        args.push_index(lhs.index);
+                        self.apply_function(
+                            rhs_ast.position,
+                            &self.pool.undefined(),
+                            &rhs,
+                            &args,
+                            frame,
+                        )
+                    }
+                }
+            }
 
             _ => unimplemented!("TODO: binary op not supported yet: {:#?}", *op),
         }
@@ -606,6 +655,7 @@ impl Evaluator {
         args: &[Ast],
         _is_partial: bool,
         frame: &Frame,
+        context: Option<&Value>,
     ) -> Result<Value> {
         let evaluated_proc = self.evaluate(proc, input, frame)?;
 
@@ -624,6 +674,11 @@ impl Evaluator {
         }
 
         let mut evaluated_args = self.pool.array(ArrayFlags::empty());
+
+        if let Some(context) = context {
+            evaluated_args.push_index(context.index);
+        }
+
         for arg in args {
             let arg = self.evaluate(arg, input, frame)?;
             evaluated_args.push_index(arg.index);
