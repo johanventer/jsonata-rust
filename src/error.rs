@@ -54,7 +54,6 @@
 // "S0401": "Type parameters can only be applied to functions and arrays",
 // "S0500": "Attempted to evaluate an expression containing syntax error(s)",
 // "T0411": "Context value is not a compatible type with argument {{index}} of function {{token}}",
-// "T0412": "Argument {{index}} of function {{token}} must be an array of {{type}}",
 // "D1004": "Regular expression matches zero length string",
 // "T1007": "Attempted to partially apply a non-function. Did you mean ${{{token}}}?",
 // "T1008": "Attempted to partially apply a non-function",
@@ -156,6 +155,7 @@ pub enum Error {
     NegatingNonNumeric(Position, String),
     MultipleKeys(Position, String),
     ArgumentNotValid(Position, usize, String),
+    ArgumentMustBeArrayOfType(Position, usize, String, String),
 
     // Type errors
     NonStringKey(Position, String),
@@ -199,6 +199,7 @@ impl Error {
             Error::NegatingNonNumeric(..) => "D1002",
             Error::MultipleKeys(..) => "D1009",
             Error::ArgumentNotValid(..) => "T0410",
+            Error::ArgumentMustBeArrayOfType(..) => "T0412",
             Error::NonStringKey(..) => "T1003",
             Error::InvokedNonFunctionSuggest(..) => "T1005",
             Error::InvokedNonFunction(..) => "T1006",
@@ -278,6 +279,11 @@ impl Error {
     pub fn argument_not_valid(context: &FunctionContext, arg_index: usize) -> Self {
         Error::ArgumentNotValid(context.position, arg_index, context.name.to_string())
     }
+
+    pub fn argument_must_be_array_of_type(context: &FunctionContext, arg_index: usize, ty: &str) -> Self {
+        Error::ArgumentMustBeArrayOfType(context.position, arg_index, context.name.to_string(), ty.to_string())
+    }
+    
 }
 
 impl fmt::Display for Error {
@@ -355,7 +361,9 @@ impl fmt::Display for Error {
             RightSideNotInteger(ref p) =>
                 write!(f, "{} The right side of the range operator (..) must evaluate to an integer", p),
             ArgumentNotValid(ref p, ref i, ref t) =>
-                write!(f, "{} Argument {} of function {} does not match function signature", p, i, t)
+                write!(f, "{} Argument {} of function {} does not match function signature", p, i, t),
+            ArgumentMustBeArrayOfType(ref p, ref i, ref t, ref ty) =>
+                write!(f, "{} Argument {} of function {} must be an array of {}", p, i, t, ty)
         }
     }
 }

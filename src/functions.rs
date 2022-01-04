@@ -193,6 +193,10 @@ pub fn fn_substring(
     start: &Value,
     length: &Value,
 ) -> Result<Value> {
+    if string.is_undefined() {
+        return Ok(context.pool.undefined());
+    }
+
     if !string.is_string() {
         return Err(Error::argument_not_valid(context, 1));
     }
@@ -202,16 +206,24 @@ pub fn fn_substring(
     }
 
     let string = string.as_str();
-    let start = start.as_isize();
 
-    let start = if string.len() as isize + start < 0 {
-        0
-    } else {
-        start as usize
-    };
+    // Scan the string chars for the actual number of characters.
+    // NOTE: Chars are not grapheme clusters, so for some inputs like "नमस्ते" we will get 6
+    //       as it will include the diacritics.
+    //       See: https://doc.rust-lang.org/nightly/book/ch08-02-strings.html
+    let len = string.chars().count() as isize;
+    let mut start = start.as_isize();
+
+    // If start is negative and runs off the front of the string
+    if len + start < 0 {
+        start = 0;
+    }
+
+    // If start is negative, count from the end of the string
+    let start = if start < 0 { len + start } else { start };
 
     if length.is_undefined() {
-        Ok(context.pool.string(string[start..].to_string()))
+        Ok(context.pool.string(string[start as usize..].to_string()))
     } else {
         if !length.is_number() {
             return Err(Error::argument_not_valid(context, 3));
@@ -221,9 +233,19 @@ pub fn fn_substring(
         if length < 0 {
             Ok(context.pool.string(String::from("")))
         } else {
-            Ok(context
-                .pool
-                .string(string[start..start + length as usize].to_string()))
+            let end = if start >= 0 {
+                (start + length) as usize
+            } else {
+                (len + start + length) as usize
+            };
+
+            let substring = string
+                .chars()
+                .skip(start as usize)
+                .take(end - start as usize)
+                .collect::<String>();
+
+            Ok(context.pool.string(substring))
         }
     }
 }
@@ -239,20 +261,31 @@ pub fn fn_abs(context: &FunctionContext, arg: &Value) -> Result<Value> {
 }
 
 pub fn fn_max(context: &FunctionContext, args: &Value) -> Result<Value> {
-    if args.is_undefined() {
-        Ok(context.pool.undefined())
-    } else if !args.is_array() {
-        Err(Error::argument_not_valid(context, 1))
-    } else if args.is_empty() {
-        Ok(context.pool.undefined())
-    } else {
-        let mut max = 0.0;
-        for arg in args.members() {
-            if !arg.is_number() {
-                return Err(Error::argument_not_valid(context, 2));
-            }
-            max = f64::max(max, arg.as_f64());
-        }
-        Ok(context.pool.number(max))
+    if args.is_undefined() || (args.is_array() && args.is_empty()) {
+        return Ok(context.pool.undefined());
     }
+    let args = args.wrap_in_array_if_needed(ArrayFlags::empty());
+    let mut max = f64::MIN;
+    for arg in args.members() {
+        if !arg.is_number() {
+            return Err(Error::argument_must_be_array_of_type(context, 2, "number"));
+        }
+        max = f64::max(max, arg.as_f64());
+    }
+    Ok(context.pool.number(max))
+}
+
+pub fn fn_min(context: &FunctionContext, args: &Value) -> Result<Value> {
+    if args.is_undefined() || (args.is_array() && args.is_empty()) {
+        return Ok(context.pool.undefined());
+    }
+    let args = args.wrap_in_array_if_needed(ArrayFlags::empty());
+    let mut min = f64::MAX;
+    for arg in args.members() {
+        if !arg.is_number() {
+            return Err(Error::argument_must_be_array_of_type(context, 2, "number"));
+        }
+        min = f64::min(min, arg.as_f64());
+    }
+    Ok(context.pool.number(min))
 }

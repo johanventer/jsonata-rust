@@ -100,6 +100,7 @@ impl JsonAta {
         bind!("substring", nativefn3, fn_substring);
         bind!("abs", nativefn1, fn_abs);
         bind!("max", nativefn1, fn_max);
+        bind!("min", nativefn1, fn_min);
 
         let chain_ast = parser::parse("function($f, $g) { function($x){ $g($f($x)) } }")?;
 
