@@ -260,6 +260,26 @@ pub fn fn_abs(context: &FunctionContext, arg: &Value) -> Result<Value> {
     }
 }
 
+pub fn fn_floor(context: &FunctionContext, arg: &Value) -> Result<Value> {
+    if arg.is_undefined() {
+        Ok(context.pool.undefined())
+    } else if !arg.is_number() {
+        Err(Error::argument_not_valid(context, 1))
+    } else {
+        Ok(context.pool.number(arg.as_f64().floor()))
+    }
+}
+
+pub fn fn_ceil(context: &FunctionContext, arg: &Value) -> Result<Value> {
+    if arg.is_undefined() {
+        Ok(context.pool.undefined())
+    } else if !arg.is_number() {
+        Err(Error::argument_not_valid(context, 1))
+    } else {
+        Ok(context.pool.number(arg.as_f64().ceil()))
+    }
+}
+
 pub fn fn_max(context: &FunctionContext, args: &Value) -> Result<Value> {
     if args.is_undefined() || (args.is_array() && args.is_empty()) {
         return Ok(context.pool.undefined());
@@ -288,4 +308,19 @@ pub fn fn_min(context: &FunctionContext, args: &Value) -> Result<Value> {
         min = f64::min(min, arg.as_f64());
     }
     Ok(context.pool.number(min))
+}
+
+pub fn fn_sum(context: &FunctionContext, args: &Value) -> Result<Value> {
+    if args.is_undefined() || (args.is_array() && args.is_empty()) {
+        return Ok(context.pool.undefined());
+    }
+    let args = args.wrap_in_array_if_needed(ArrayFlags::empty());
+    let mut sum = 0.0;
+    for arg in args.members() {
+        if !arg.is_number() {
+            return Err(Error::argument_must_be_array_of_type(context, 2, "number"));
+        }
+        sum += arg.as_f64();
+    }
+    Ok(context.pool.number(sum))
 }
