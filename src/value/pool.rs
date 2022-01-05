@@ -10,7 +10,7 @@ use crate::Result;
 /// by referencing children by index.
 ///
 /// During evaluation, `ValueKind`s are created regularly, and referenced by the `Value`
-/// type which stores the index and a reference to the pool.
+/// type which wraps the index and a reference to the pool.
 ///
 /// The tree structure of both JSON input and evaluation results is represented
 /// in the pool as a flat list of `ValueKind` where children are referenced by index.
@@ -47,6 +47,11 @@ impl ValuePool {
         let item_ptr = &pool[index] as *const ValueKind;
 
         // SAFETY: Items in the pool are never removed, so pointers to them will always be valid.
+        //         The only kinds that can be mutated in any way are arrays and objects, and even
+        //         then only to push new values or insert new keys, and the pointer here is to the
+        //         ValueKind (which contains a Vec or HashMap) and not to the data contained within,
+        //         so the pointer will remain stable and valid for the lifetime of the reference even
+        //         if the underlying Vec or HashMap reallocates.
         unsafe { &*item_ptr }
     }
 
