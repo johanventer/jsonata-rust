@@ -11,6 +11,12 @@ impl Position {
         self.source_pos += x;
     }
 
+    pub fn advance_line(&mut self) {
+        self.column = 0;
+        self.line += 1;
+        self.source_pos += 1;
+    }
+
     pub fn advance1(&mut self) {
         self.advance(1);
     }

@@ -3,16 +3,17 @@ use super::symbol::Symbol;
 use super::tokenizer::*;
 use super::{Error, Result};
 
+#[derive(Debug)]
 pub struct Parser {
-    tokenizer: Tokenizer,
-    token: Token,
+    pub tokenizer: Tokenizer,
+    pub token: Token,
 }
 
 impl Parser {
     fn new(source: &str) -> Result<Self> {
         let mut tokenizer = Tokenizer::new(source);
         Ok(Self {
-            token: tokenizer.next(false)?,
+            token: tokenizer.next(false, false)?,
             tokenizer,
         })
     }
@@ -21,12 +22,12 @@ impl Parser {
         &self.token
     }
 
-    pub fn next(&mut self, infix: bool) -> Result<()> {
-        self.token = self.tokenizer.next(infix)?;
+    pub fn next(&mut self, infix: bool, signature: bool) -> Result<()> {
+        self.token = self.tokenizer.next(infix, signature)?;
         Ok(())
     }
 
-    pub fn expect(&mut self, expected: TokenKind, infix: bool) -> Result<()> {
+    pub fn expect(&mut self, expected: TokenKind, infix: bool, signature: bool) -> Result<()> {
         if self.token.kind == TokenKind::End {
             return Err(Error::expected_token_before_end(
                 self.token.position,
@@ -42,19 +43,20 @@ impl Parser {
             ));
         }
 
-        self.next(infix)?;
+        self.next(infix, signature)?;
 
         Ok(())
     }
 
-    pub fn expression(&mut self, bp: u32) -> Result<Ast> {
+    pub fn expression(&mut self, bp: u32, signature: bool) -> Result<Ast> {
         let mut last = self.token.clone();
-        self.next(true)?;
+        self.next(true, signature)?;
+
         let mut left = last.null_denotation(self)?;
 
         while bp < self.token.left_binding_power() {
             last = self.token.clone();
-            self.next(false)?;
+            self.next(false, false)?;
             left = last.left_denotation(self, left)?;
         }
 
@@ -64,7 +66,7 @@ impl Parser {
 
 pub fn parse(source: &str) -> Result<Ast> {
     let mut parser = Parser::new(source)?;
-    let ast = parser.expression(0)?;
+    let ast = parser.expression(0, false)?;
     if !matches!(parser.token().kind, TokenKind::End) {
         return Err(Error::syntax_error(
             parser.token().position,

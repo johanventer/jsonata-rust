@@ -2,6 +2,7 @@ mod process;
 
 use super::json::Number;
 use super::position::Position;
+use super::signature::Arg;
 
 // Object constructor, represented by tuples of (key, value)
 pub type Object = Vec<(Ast, Ast)>;
@@ -99,6 +100,7 @@ pub enum AstKind {
         name: String,
         args: Vec<Ast>,
         body: Box<Ast>,
+        signature: Option<Vec<Arg>>,
     },
     Ternary {
         cond: Box<Ast>,

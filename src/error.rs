@@ -132,6 +132,22 @@ pub enum Error {
     FailedUtf8Parsing,
     WrongType(String),
 
+    // Signature parsing errors
+    UnexpectedEndOfSignature,
+    SignatureStartInvalid,
+    SignatureEndInvalid,
+    UnexpectedCharsAtEndOfSignature,
+    OptionalShouldComeAfterType,
+    AllowContextShouldComeAfterType,
+    OneOrMoreShouldComeAfterType,
+    NoTypeBetweenCarets,
+    MultipleTypesInArray,
+    UnterminatedCaret,
+    NoTypeBetweenParens,
+    UnterminatedParen,
+    ExpectedInSignature(String),
+    UnexpectedCharInSignature(String),
+
     // Compile time errors
     UnterminatedStringLiteral(Position),
     LexedNumberOutOfRange(Position, String),
@@ -154,10 +170,10 @@ pub enum Error {
     NumberOfOutRange(f64),
     NegatingNonNumeric(Position, String),
     MultipleKeys(Position, String),
-    ArgumentNotValid(Position, usize, String),
-    ArgumentMustBeArrayOfType(Position, usize, String, String),
 
     // Type errors
+    ArgumentNotValid(Position, usize, String),
+    ArgumentMustBeArrayOfType(Position, usize, String, String),
     NonStringKey(Position, String),
     InvokedNonFunctionSuggest(Position, String),
     InvokedNonFunction(Position),
@@ -172,13 +188,48 @@ pub enum Error {
 impl error::Error for Error {}
 
 impl Error {
+    /**
+     * Error codes
+     *
+     * Ixxxx    - JSON parsing errors
+     * Fxxxx    - Function signature parsing errors
+     * Sxxxx    - Static errors (compile time)
+     * Txxxx    - Type errors
+     * Dxxxx    - Dynamic errors (evaluate time)
+     *  01xx    - tokenizer
+     *  02xx    - parser
+     *  03xx    - regex parser
+     *  04xx    - function signature parser/evaluator
+     *  10xx    - evaluator
+     *  20xx    - operators
+     *  3xxx    - functions (blocks of 10 for each function)
+     */
     pub fn code(&self) -> &str {
         match *self {
-            Error::UnexpectedCharacter { .. } => "I0101",
-            Error::UnexpectedEndOfJson => "I0102",
-            Error::ExceededDepthLimit => "I0103",
-            Error::FailedUtf8Parsing => "I0104",
-            Error::WrongType(..) => "I0105",
+            // JSON parsing errors
+            Error::UnexpectedCharacter { .. } => "I0201",
+            Error::UnexpectedEndOfJson => "I0202",
+            Error::ExceededDepthLimit => "I0203",
+            Error::FailedUtf8Parsing => "I0204",
+            Error::WrongType(..) => "I0205",
+
+            // Signature parsing errors
+            Error::UnexpectedEndOfSignature => "F0401",
+            Error::SignatureStartInvalid => "F0402",
+            Error::SignatureEndInvalid => "F0403",
+            Error::UnexpectedCharsAtEndOfSignature => "F0404",
+            Error::OptionalShouldComeAfterType => "F0405",
+            Error::AllowContextShouldComeAfterType => "F0406",
+            Error::OneOrMoreShouldComeAfterType => "F0407",
+            Error::NoTypeBetweenCarets => "F0408",
+            Error::MultipleTypesInArray => "F0409",
+            Error::UnterminatedCaret => "F0410",
+            Error::NoTypeBetweenParens => "F0411",
+            Error::UnterminatedParen => "F0412",
+            Error::ExpectedInSignature(..) => "F0413",
+            Error::UnexpectedCharInSignature(..) => "F0314",
+
+            // Compile time errors
             Error::UnterminatedStringLiteral(..) => "S0101",
             Error::LexedNumberOutOfRange(..) => "S0102",
             Error::UnsupportedEscape(..) => "S0103",
@@ -195,9 +246,13 @@ impl Error {
             Error::ExpectedVarLeft(..) => "S0212",
             Error::InvalidStep(..) => "S0213",
             Error::ExpectedVarRight(..) => "S0214",
+
+            // Runtime errors
             Error::NumberOfOutRange(..) => "D1001",
             Error::NegatingNonNumeric(..) => "D1002",
             Error::MultipleKeys(..) => "D1009",
+
+            // Type errors
             Error::ArgumentNotValid(..) => "T0410",
             Error::ArgumentMustBeArrayOfType(..) => "T0412",
             Error::NonStringKey(..) => "T1003",
@@ -280,10 +335,18 @@ impl Error {
         Error::ArgumentNotValid(context.position, arg_index, context.name.to_string())
     }
 
-    pub fn argument_must_be_array_of_type(context: &FunctionContext, arg_index: usize, ty: &str) -> Self {
-        Error::ArgumentMustBeArrayOfType(context.position, arg_index, context.name.to_string(), ty.to_string())
+    pub fn argument_must_be_array_of_type(
+        context: &FunctionContext,
+        arg_index: usize,
+        ty: &str,
+    ) -> Self {
+        Error::ArgumentMustBeArrayOfType(
+            context.position,
+            arg_index,
+            context.name.to_string(),
+            ty.to_string(),
+        )
     }
-    
 }
 
 impl fmt::Display for Error {
@@ -354,7 +417,7 @@ impl fmt::Display for Error {
                 write!(f, "Number out of range: {}", n),
             InvokedNonFunction(ref p) =>
                 write!(f, "{} Attempted to invoke a non-function", p),
-            InvokedNonFunctionSuggest(ref p, ref t) => 
+            InvokedNonFunctionSuggest(ref p, ref t) =>
                 write!(f, "{} Attempted to invoke a non-function. Did you mean ${}?", p, t),
             LeftSideNotInteger(ref p) =>
                 write!(f, "{} The left side of the range operator (..) must evaluate to an integer", p),
@@ -363,7 +426,35 @@ impl fmt::Display for Error {
             ArgumentNotValid(ref p, ref i, ref t) =>
                 write!(f, "{} Argument {} of function {} does not match function signature", p, i, t),
             ArgumentMustBeArrayOfType(ref p, ref i, ref t, ref ty) =>
-                write!(f, "{} Argument {} of function {} must be an array of {}", p, i, t, ty)
+                write!(f, "{} Argument {} of function {} must be an array of {}", p, i, t, ty),
+            UnexpectedEndOfSignature => 
+                write!(f, "Unexpected end of signature"),
+            SignatureStartInvalid => 
+                write!(f, "Signature does not start with '<'"),
+            SignatureEndInvalid => 
+                write!(f, "Signature does not end with '>'"),
+            UnexpectedCharsAtEndOfSignature => 
+                write!(f, "Unexpected characters at end of signature"),
+            OptionalShouldComeAfterType => 
+                write!(f, "`?` should come after a type in signature"),
+            AllowContextShouldComeAfterType => 
+                write!(f, "`-` should come after a type in signature"),
+            OneOrMoreShouldComeAfterType => 
+                write!(f, "`+` should come after a type in signature"),
+            NoTypeBetweenCarets => 
+                write!(f, "No type specified between '<' and '>' in signature"),
+            MultipleTypesInArray => 
+                write!(f, "Arrays can only contain a single type in a signature"),
+            UnterminatedCaret => 
+                write!(f, "Unterminated '>' in signature"),
+            NoTypeBetweenParens => 
+                write!(f, "No types specified between '(' and ')' in signature"),
+            UnterminatedParen => 
+                write!(f, "Unterminated ')' in signature"),
+            ExpectedInSignature(ref t) => 
+                write!(f, "Expected '{}' in signature", t),
+            UnexpectedCharInSignature(ref t) =>
+                write!(f, "Unexpected char '{}' in signature", t),
         }
     }
 }
