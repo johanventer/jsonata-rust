@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["NodePool","A flat array of nodes with a free list."]]});

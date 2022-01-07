@@ -1,0 +1,12 @@
+/home/johan/dev/jsonata-rust/target/release/deps/libtest_case-8b94109c9f941eae.so: /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/lib.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/expected/mod.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/expected/expr_case.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/expected/ignore_case.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/expected/panic_case.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/expected/pattern_case.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/test_case.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/utils.rs
+
+/home/johan/dev/jsonata-rust/target/release/deps/test_case-8b94109c9f941eae.d: /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/lib.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/expected/mod.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/expected/expr_case.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/expected/ignore_case.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/expected/panic_case.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/expected/pattern_case.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/test_case.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/utils.rs
+
+/home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/lib.rs:
+/home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/expected/mod.rs:
+/home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/expected/expr_case.rs:
+/home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/expected/ignore_case.rs:
+/home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/expected/panic_case.rs:
+/home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/expected/pattern_case.rs:
+/home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/test_case.rs:
+/home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/test-case-1.2.1/src/utils.rs:
