@@ -6,8 +6,6 @@ pub mod frame;
 pub mod functions;
 pub mod json;
 pub mod parser;
-pub mod position;
-pub mod signature;
 pub mod symbol;
 pub mod tokenizer;
 pub mod value;

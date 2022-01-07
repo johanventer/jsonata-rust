@@ -1,5 +1,8 @@
+use lazy_static;
+
 use jsonata_errors::Result;
 use jsonata_shared::Position;
+use jsonata_signature_macro::signature;
 
 use super::error::*;
 use super::evaluator::Evaluator;
@@ -46,6 +49,7 @@ pub fn fn_lookup_internal(context: &FunctionContext, input: &Value, key: &str) -
     }
 }
 
+#[signature("<x-s:x>")]
 pub fn fn_lookup(context: &FunctionContext, input: &Value, key: &Value) -> Result<Value> {
     if !key.is_string() {
         Err(argument_not_valid(context, 1))
@@ -54,6 +58,7 @@ pub fn fn_lookup(context: &FunctionContext, input: &Value, key: &Value) -> Resul
     }
 }
 
+#[signature("<xx:a>")]
 pub fn fn_append(context: &FunctionContext, arg1: &Value, arg2: &Value) -> Result<Value> {
     if arg1.is_undefined() {
         return Ok(arg2.clone());
@@ -71,6 +76,7 @@ pub fn fn_append(context: &FunctionContext, arg1: &Value, arg2: &Value) -> Resul
     Ok(result)
 }
 
+#[signature("<x-:b>")]
 pub fn fn_boolean(context: &FunctionContext, arg: &Value) -> Result<Value> {
     Ok(match **arg {
         ValueKind::Undefined => context.pool.undefined(),
@@ -99,6 +105,7 @@ pub fn fn_boolean(context: &FunctionContext, arg: &Value) -> Result<Value> {
     })
 }
 
+#[signature("<af>")]
 pub fn fn_filter(context: &FunctionContext, arr: &Value, func: &Value) -> Result<Value> {
     if arr.is_undefined() {
         return Ok(context.pool.undefined());
@@ -134,6 +141,7 @@ pub fn fn_filter(context: &FunctionContext, arr: &Value, func: &Value) -> Result
     Ok(result)
 }
 
+#[signature("<x-b?:s>")]
 pub fn fn_string(context: &FunctionContext, arg: &Value) -> Result<Value> {
     if arg.is_undefined() {
         return Ok(context.pool.undefined());
@@ -155,6 +163,7 @@ pub fn fn_string(context: &FunctionContext, arg: &Value) -> Result<Value> {
     }
 }
 
+#[signature("<a:n>")]
 pub fn fn_count(context: &FunctionContext, arg: &Value) -> Result<Value> {
     Ok(context.pool.number(if arg.is_undefined() {
         0
@@ -165,6 +174,7 @@ pub fn fn_count(context: &FunctionContext, arg: &Value) -> Result<Value> {
     }))
 }
 
+#[signature("<x-:b>")]
 pub fn fn_not(context: &FunctionContext, arg: &Value) -> Result<Value> {
     Ok(if arg.is_undefined() {
         context.pool.undefined()
@@ -173,6 +183,7 @@ pub fn fn_not(context: &FunctionContext, arg: &Value) -> Result<Value> {
     })
 }
 
+#[signature("<s-:s>")]
 pub fn fn_lowercase(context: &FunctionContext, arg: &Value) -> Result<Value> {
     Ok(if !arg.is_string() {
         context.pool.undefined()
@@ -181,6 +192,7 @@ pub fn fn_lowercase(context: &FunctionContext, arg: &Value) -> Result<Value> {
     })
 }
 
+#[signature("<s-:s>")]
 pub fn fn_uppercase(context: &FunctionContext, arg: &Value) -> Result<Value> {
     if !arg.is_string() {
         Ok(context.pool.undefined())
@@ -189,6 +201,7 @@ pub fn fn_uppercase(context: &FunctionContext, arg: &Value) -> Result<Value> {
     }
 }
 
+#[signature("<s-nn?:s>")]
 pub fn fn_substring(
     context: &FunctionContext,
     string: &Value,
@@ -252,6 +265,7 @@ pub fn fn_substring(
     }
 }
 
+#[signature("<n-:n>")]
 pub fn fn_abs(context: &FunctionContext, arg: &Value) -> Result<Value> {
     if arg.is_undefined() {
         Ok(context.pool.undefined())
@@ -262,6 +276,7 @@ pub fn fn_abs(context: &FunctionContext, arg: &Value) -> Result<Value> {
     }
 }
 
+#[signature("<n-:n>")]
 pub fn fn_floor(context: &FunctionContext, arg: &Value) -> Result<Value> {
     if arg.is_undefined() {
         Ok(context.pool.undefined())
@@ -272,6 +287,7 @@ pub fn fn_floor(context: &FunctionContext, arg: &Value) -> Result<Value> {
     }
 }
 
+#[signature("<n-:n>")]
 pub fn fn_ceil(context: &FunctionContext, arg: &Value) -> Result<Value> {
     if arg.is_undefined() {
         Ok(context.pool.undefined())
@@ -282,6 +298,7 @@ pub fn fn_ceil(context: &FunctionContext, arg: &Value) -> Result<Value> {
     }
 }
 
+#[signature("<a<n>:n>")]
 pub fn fn_max(context: &FunctionContext, args: &Value) -> Result<Value> {
     if args.is_undefined() || (args.is_array() && args.is_empty()) {
         return Ok(context.pool.undefined());
@@ -297,6 +314,7 @@ pub fn fn_max(context: &FunctionContext, args: &Value) -> Result<Value> {
     Ok(context.pool.number(max))
 }
 
+#[signature("<a<n>:n>")]
 pub fn fn_min(context: &FunctionContext, args: &Value) -> Result<Value> {
     if args.is_undefined() || (args.is_array() && args.is_empty()) {
         return Ok(context.pool.undefined());
@@ -312,6 +330,7 @@ pub fn fn_min(context: &FunctionContext, args: &Value) -> Result<Value> {
     Ok(context.pool.number(min))
 }
 
+#[signature("<a<n>:n>")]
 pub fn fn_sum(context: &FunctionContext, args: &Value) -> Result<Value> {
     if args.is_undefined() || (args.is_array() && args.is_empty()) {
         return Ok(context.pool.undefined());
