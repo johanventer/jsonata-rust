@@ -25,8 +25,8 @@ pub enum ArgKind {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Arg {
-    kind: ArgKind,
-    flags: Flags,
+    pub kind: ArgKind,
+    pub flags: Flags,
 }
 
 impl Arg {

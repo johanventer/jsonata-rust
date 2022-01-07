@@ -7,8 +7,10 @@ edition = "2021"
 proc-macro = true
 
 [dependencies]
+jsonata-errors = { path = "../jsonata-errors" }
 jsonata-signatures = { path = "../jsonata-signatures" }
 
 syn = "1.0.85"
 quote = "1.0.14"
+proc-macro2 = "1.0.36"
 
