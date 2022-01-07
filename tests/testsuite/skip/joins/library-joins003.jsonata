@@ -1,5 +1,0 @@
-library.loans@$l.books@$b[$l.isbn=$b.isbn].customers[$l.customer=id].{
-  'title': $b.title,
-  'customer': $l.customer,
-  'name': name
-}

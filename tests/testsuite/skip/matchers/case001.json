@@ -1,6 +1,0 @@
-{
-  "expr": "$split('some text', $uppercase)",
-  "dataset": null,
-  "bindings": {},
-  "code": "T1010"
-}

@@ -1,6 +1,0 @@
-{
-    "expr": "$encodeUrlComponent(\"?x=test\")",
-    "dataset": "dataset5",
-    "bindings": {},
-    "result": "%3Fx%3Dtest"
-}

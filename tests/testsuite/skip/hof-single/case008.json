@@ -1,6 +1,0 @@
-{
-    "expr": "$single([true, false, true], function($v) {$v=false})",
-    "data": {"data": 5},
-    "bindings": {},
-    "result": false
-}

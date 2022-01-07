@@ -1,5 +1,0 @@
-{
-    "expr": "{ 'foo': { 'sequence': true, 'bar': 'baz' } } ",
-    "data": {},
-    "result": { "foo": { "sequence": true, "bar": "baz" } }
-}

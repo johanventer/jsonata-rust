@@ -1,9 +1,0 @@
-{
-    "expr": "$error()",
-    "dataset": "dataset5",
-    "bindings": {},
-    "error": {
-        "code": "D3137",
-        "message": "$error() function evaluated"
-    }
-}

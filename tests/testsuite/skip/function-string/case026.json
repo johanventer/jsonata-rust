@@ -1,6 +1,0 @@
-{
-    "expr": "$string([\"string\", 5], true)",
-    "dataset": null,
-    "bindings": {},
-    "result": "[\n  \"string\",\n  5\n]"
-}

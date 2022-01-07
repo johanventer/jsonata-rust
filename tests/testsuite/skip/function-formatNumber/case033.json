@@ -1,6 +1,0 @@
-{
-    "expr": "$formatNumber(2, '000.000')",
-    "dataset": null,
-    "bindings": {},
-    "result": "002.000"
-}

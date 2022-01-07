@@ -1,6 +1,0 @@
-{
-    "expr": "$formatNumber(2, 'AAA.AAA', {'zero-digit': 'A'})",
-    "dataset": null,
-    "bindings": {},
-    "result": "AAC.AAA"
-}

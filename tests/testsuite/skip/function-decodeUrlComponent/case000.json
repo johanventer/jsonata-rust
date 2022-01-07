@@ -1,6 +1,0 @@
-{
-    "expr": "$decodeUrlComponent(\"%3Fx%3Dtest\")",
-    "dataset": "dataset5",
-    "bindings": {},
-    "result": "?x=test"
-}

@@ -1,6 +1,0 @@
-{
-    "expr": "$assert(Account.Order[0].Product[0].Price < 35, 'Too Expensive')",
-    "dataset": "dataset5",
-    "bindings": {},
-    "undefinedResult": true
-}

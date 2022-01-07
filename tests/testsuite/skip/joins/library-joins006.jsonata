@@ -1,4 +1,0 @@
-library.loans@$l#$il.customers#$ic[$il=$ic].{
-  'customer': name,
-  'return': $l.return
-}

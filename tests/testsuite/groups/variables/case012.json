@@ -1,6 +1,0 @@
-{
-    "expr": "($a := [1,2]; $a[1]:=3; $a)",
-    "dataset": null,
-    "bindings": {},
-    "code": "S0212"
-}
