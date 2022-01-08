@@ -143,11 +143,11 @@ impl Symbol for Token {
                 if let TokenKind::Signature(ref s) = parser.token().kind {
                     Ok(Ast::new(AstKind::String(s.clone()), self.position))
                 } else {
-                    Err(invalid_unary(self.position, &self.kind))
+                    Err(s0211_invalid_unary(self.position, &self.kind))
                 }
             }
 
-            _ => Err(invalid_unary(self.position, &self.kind)),
+            _ => Err(s0211_invalid_unary(self.position, &self.kind)),
         }
     }
 
@@ -219,7 +219,10 @@ impl Symbol for Token {
                             // All of the args must be Variable nodes
                             for arg in &args {
                                 if !matches!(arg.kind, AstKind::Var(..)) {
-                                    return Err(invalid_function_param(arg.position, &self.kind));
+                                    return Err(s0208_invalid_function_param(
+                                        arg.position,
+                                        &self.kind,
+                                    ));
                                 }
                             }
                         }
@@ -280,7 +283,7 @@ impl Symbol for Token {
             // Variable assignment
             TokenKind::Bind => {
                 if !matches!(left.kind, AstKind::Var(..)) {
-                    return Err(Error::ExpectedVarLeft(left.position));
+                    return Err(Error::S0212ExpectedVarLeft(left.position));
                 }
 
                 Ok(Ast::new(
@@ -327,7 +330,7 @@ impl Symbol for Token {
                 let rhs = parser.expression(self.left_binding_power())?;
 
                 if !matches!(rhs.kind, AstKind::Var(..)) {
-                    return Err(expected_var_right(rhs.position, "@"));
+                    return Err(s0214_expected_var_right(rhs.position, "@"));
                 }
 
                 Ok(Ast::new(
@@ -341,7 +344,7 @@ impl Symbol for Token {
                 let rhs = parser.expression(self.left_binding_power())?;
 
                 if !matches!(rhs.kind, AstKind::Var(..)) {
-                    return Err(expected_var_right(rhs.position, "#"));
+                    return Err(s0214_expected_var_right(rhs.position, "#"));
                 }
 
                 Ok(Ast::new(
@@ -405,7 +408,10 @@ impl Symbol for Token {
                 }
             }
 
-            _ => Err(syntax_error(self.position, &self.kind)),
+            _ => Err(Error::S0201SyntaxError(
+                self.byte_index,
+                parser.tokenizer.string_from_token(self),
+            )),
         }
     }
 }

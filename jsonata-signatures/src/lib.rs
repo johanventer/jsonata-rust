@@ -43,29 +43,29 @@ pub fn parse(sig: &str) -> Result<Vec<Arg>> {
 
     // Empty signatures are not valid
     if sig.len() < 3 {
-        return Err(Error::UnexpectedEndOfSignature);
+        return Err(Error::F0401UnexpectedEndOfSignature);
     }
 
     // All signatures must start with <...
     if &sig[index..index + 1] != "<" {
-        return Err(Error::SignatureStartInvalid);
+        return Err(Error::F0402SignatureStartInvalid);
     }
     index += 1;
 
     let args = parse_signature(sig, &mut index)?;
 
     if index > sig.len() - 1 {
-        return Err(Error::UnexpectedEndOfSignature);
+        return Err(Error::F0401UnexpectedEndOfSignature);
     }
 
     // ...and end with '>'
     if &sig[index..index + 1] != ">" {
-        return Err(Error::SignatureEndInvalid);
+        return Err(Error::F0403SignatureEndInvalid);
     }
     index += 1;
 
     if index < sig.len() {
-        return Err(Error::UnexpectedCharsAtEndOfSignature);
+        return Err(Error::F0404UnexpectedCharsAtEndOfSignature);
     }
 
     Ok(args)
@@ -102,7 +102,7 @@ fn parse_signature(sig: &str, index: &mut usize) -> Result<Vec<Arg>> {
                 match args.last_mut() {
                     Some(arg) => arg.flags.insert(Flags::OPTIONAL),
                     None => {
-                        return Err(Error::OptionalShouldComeAfterType);
+                        return Err(Error::F0405OptionalShouldComeAfterType);
                     }
                 }
             }
@@ -111,7 +111,7 @@ fn parse_signature(sig: &str, index: &mut usize) -> Result<Vec<Arg>> {
                 match args.last_mut() {
                     Some(arg) => arg.flags.insert(Flags::ACCEPT_CONTEXT),
                     None => {
-                        return Err(Error::AllowContextShouldComeAfterType);
+                        return Err(Error::F0406AllowContextShouldComeAfterType);
                     }
                 }
             }
@@ -120,7 +120,7 @@ fn parse_signature(sig: &str, index: &mut usize) -> Result<Vec<Arg>> {
                 match args.last_mut() {
                     Some(arg) => arg.flags.insert(Flags::ONE_OR_MORE),
                     None => {
-                        return Err(Error::OneOrMoreShouldComeAfterType);
+                        return Err(Error::F0407OneOrMoreShouldComeAfterType);
                     }
                 }
             }
@@ -154,20 +154,20 @@ fn parse_signature(sig: &str, index: &mut usize) -> Result<Vec<Arg>> {
                     let inner = parse_signature(sig, index)?;
                     match inner.len().cmp(&1) {
                         cmp::Ordering::Less => {
-                            return Err(Error::NoTypeBetweenCarets);
+                            return Err(Error::F0408NoTypeBetweenCarets);
                         }
                         cmp::Ordering::Equal => args.push(Arg::new(ArgKind::Array(Some(
                             Box::new(inner[0].kind.clone()),
                         )))),
                         cmp::Ordering::Greater => {
-                            return Err(Error::MultipleTypesInArray);
+                            return Err(Error::F0409MultipleTypesInArray);
                         }
                     };
                     if *index > sig.len() - 2 {
-                        return Err(Error::UnterminatedCaret);
+                        return Err(Error::F0410UnterminatedCaret);
                     }
                     if &sig[*index..*index + 1] != ">" {
-                        return Err(Error::ExpectedInSignature(">".to_string()));
+                        return Err(Error::F0413ExpectedInSignature(">".to_string()));
                     }
                     *index += 1;
                     if *index > sig.len() - 2 {
@@ -183,13 +183,13 @@ fn parse_signature(sig: &str, index: &mut usize) -> Result<Vec<Arg>> {
                 *index += 1;
                 let mut inner = parse_signature(sig, index)?;
                 if inner.is_empty() {
-                    return Err(Error::NoTypeBetweenParens);
+                    return Err(Error::F0411NoTypeBetweenParens);
                 }
                 if *index > sig.len() - 2 {
-                    return Err(Error::UnterminatedParen);
+                    return Err(Error::F0412UnterminatedParen);
                 }
                 if &sig[*index..*index + 1] != ")" {
-                    return Err(Error::ExpectedInSignature(")".to_string()));
+                    return Err(Error::F0413ExpectedInSignature(")".to_string()));
                 }
                 *index += 1;
                 let kinds: Vec<ArgKind> = inner.drain(..).map(|a| a.kind).collect();
@@ -265,7 +265,7 @@ fn parse_signature(sig: &str, index: &mut usize) -> Result<Vec<Arg>> {
                 return Ok(args);
             }
             c => {
-                return Err(Error::UnexpectedCharInSignature(c.to_string()));
+                return Err(Error::F0414UnexpectedCharInSignature(c.to_string()));
             }
         }
     }

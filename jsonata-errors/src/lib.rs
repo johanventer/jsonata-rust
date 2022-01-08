@@ -7,67 +7,68 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, PartialEq)]
 pub enum Error {
     // JSON parsing errors
-    UnexpectedCharacter {
+    I0201UnexpectedCharacter {
         ch: char,
         line: usize,
         column: usize,
     },
-    UnexpectedEndOfJson,
-    ExceededDepthLimit,
-    FailedUtf8Parsing,
-    WrongType(String),
+    I0202UnexpectedEndOfJson,
+    I0203ExceededDepthLimit,
+    I0204FailedUtf8Parsing,
+    I0205WrongType(String),
 
     // Signature parsing errors
-    UnexpectedEndOfSignature,
-    SignatureStartInvalid,
-    SignatureEndInvalid,
-    UnexpectedCharsAtEndOfSignature,
-    OptionalShouldComeAfterType,
-    AllowContextShouldComeAfterType,
-    OneOrMoreShouldComeAfterType,
-    NoTypeBetweenCarets,
-    MultipleTypesInArray,
-    UnterminatedCaret,
-    NoTypeBetweenParens,
-    UnterminatedParen,
-    ExpectedInSignature(String),
-    UnexpectedCharInSignature(String),
+    F0401UnexpectedEndOfSignature,
+    F0402SignatureStartInvalid,
+    F0403SignatureEndInvalid,
+    F0404UnexpectedCharsAtEndOfSignature,
+    F0405OptionalShouldComeAfterType,
+    F0406AllowContextShouldComeAfterType,
+    F0407OneOrMoreShouldComeAfterType,
+    F0408NoTypeBetweenCarets,
+    F0409MultipleTypesInArray,
+    F0410UnterminatedCaret,
+    F0411NoTypeBetweenParens,
+    F0412UnterminatedParen,
+    F0413ExpectedInSignature(String),
+    F0414UnexpectedCharInSignature(String),
 
     // Compile time errors
-    UnterminatedStringLiteral(Position),
-    LexedNumberOutOfRange(Position, String),
-    UnsupportedEscape(Position, String),
-    InvalidUnicodeEscape(Position),
-    UnterminatedQuoteProp(Position),
-    UnterminatedComment(Position),
-    SyntaxError(Position, String),
-    UnexpectedToken(Position, String, String),
-    ExpectedTokenBeforeEnd(Position, String),
-    InvalidFunctionParam(Position, String),
-    InvalidPredicate(Position),
-    MultipleGroupBy(Position),
-    InvalidUnary(Position, String),
-    ExpectedVarLeft(Position),
-    InvalidStep(Position, String),
-    ExpectedVarRight(Position, String),
+    S0101UnterminatedStringLiteral(usize),
+    S0102LexedNumberOutOfRange(Position, String),
+    S0103UnsupportedEscape(usize, char),
+    S0104InvalidUnicodeEscape(usize),
+    S0105UnterminatedQuoteProp(usize),
+    S0106UnterminatedComment(usize),
+    S0201SyntaxError(usize, String),
+    S0202UnexpectedToken(Position, String, String),
+    S0204UnknownOperator(usize, String),
+    S0203ExpectedTokenBeforeEnd(Position, String),
+    S0208InvalidFunctionParam(Position, String),
+    S0209InvalidPredicate(Position),
+    S0210MultipleGroupBy(Position),
+    S0211InvalidUnary(Position, String),
+    S0212ExpectedVarLeft(Position),
+    S0213InvalidStep(Position, String),
+    S0214ExpectedVarRight(Position, String),
 
     // Runtime errors
-    NumberOfOutRange(f64),
-    NegatingNonNumeric(Position, String),
-    MultipleKeys(Position, String),
+    D1001NumberOfOutRange(f64),
+    D1002NegatingNonNumeric(Position, String),
+    D1009MultipleKeys(Position, String),
 
     // Type errors
-    ArgumentNotValid(Position, usize, String),
-    ArgumentMustBeArrayOfType(Position, usize, String, String),
-    NonStringKey(Position, String),
-    InvokedNonFunctionSuggest(Position, String),
-    InvokedNonFunction(Position),
-    LeftSideNotNumber(Position, String),
-    RightSideNotNumber(Position, String),
-    LeftSideNotInteger(Position),
-    RightSideNotInteger(Position),
-    BinaryOpMismatch(Position, String, String, String),
-    BinaryOpTypes(Position, String),
+    T0410ArgumentNotValid(Position, usize, String),
+    T0412ArgumentMustBeArrayOfType(Position, usize, String, String),
+    T1003NonStringKey(Position, String),
+    T1005InvokedNonFunctionSuggest(Position, String),
+    T1006InvokedNonFunction(Position),
+    T2001LeftSideNotNumber(Position, String),
+    T2002RightSideNotNumber(Position, String),
+    T2003LeftSideNotInteger(Position),
+    T2004RightSideNotInteger(Position),
+    T2009BinaryOpMismatch(Position, String, String, String),
+    T2010BinaryOpTypes(Position, String),
 }
 
 impl error::Error for Error {}
@@ -92,63 +93,64 @@ impl Error {
     pub fn code(&self) -> &str {
         match *self {
             // JSON parsing errors
-            Error::UnexpectedCharacter { .. } => "I0201",
-            Error::UnexpectedEndOfJson => "I0202",
-            Error::ExceededDepthLimit => "I0203",
-            Error::FailedUtf8Parsing => "I0204",
-            Error::WrongType(..) => "I0205",
+            Error::I0201UnexpectedCharacter { .. } => "I0201",
+            Error::I0202UnexpectedEndOfJson => "I0202",
+            Error::I0203ExceededDepthLimit => "I0203",
+            Error::I0204FailedUtf8Parsing => "I0204",
+            Error::I0205WrongType(..) => "I0205",
 
             // Signature parsing errors
-            Error::UnexpectedEndOfSignature => "F0401",
-            Error::SignatureStartInvalid => "F0402",
-            Error::SignatureEndInvalid => "F0403",
-            Error::UnexpectedCharsAtEndOfSignature => "F0404",
-            Error::OptionalShouldComeAfterType => "F0405",
-            Error::AllowContextShouldComeAfterType => "F0406",
-            Error::OneOrMoreShouldComeAfterType => "F0407",
-            Error::NoTypeBetweenCarets => "F0408",
-            Error::MultipleTypesInArray => "F0409",
-            Error::UnterminatedCaret => "F0410",
-            Error::NoTypeBetweenParens => "F0411",
-            Error::UnterminatedParen => "F0412",
-            Error::ExpectedInSignature(..) => "F0413",
-            Error::UnexpectedCharInSignature(..) => "F0314",
+            Error::F0401UnexpectedEndOfSignature => "F0401",
+            Error::F0402SignatureStartInvalid => "F0402",
+            Error::F0403SignatureEndInvalid => "F0403",
+            Error::F0404UnexpectedCharsAtEndOfSignature => "F0404",
+            Error::F0405OptionalShouldComeAfterType => "F0405",
+            Error::F0406AllowContextShouldComeAfterType => "F0406",
+            Error::F0407OneOrMoreShouldComeAfterType => "F0407",
+            Error::F0408NoTypeBetweenCarets => "F0408",
+            Error::F0409MultipleTypesInArray => "F0409",
+            Error::F0410UnterminatedCaret => "F0410",
+            Error::F0411NoTypeBetweenParens => "F0411",
+            Error::F0412UnterminatedParen => "F0412",
+            Error::F0413ExpectedInSignature(..) => "F0413",
+            Error::F0414UnexpectedCharInSignature(..) => "F0414",
 
             // Compile time errors
-            Error::UnterminatedStringLiteral(..) => "S0101",
-            Error::LexedNumberOutOfRange(..) => "S0102",
-            Error::UnsupportedEscape(..) => "S0103",
-            Error::InvalidUnicodeEscape(..) => "S0104",
-            Error::UnterminatedQuoteProp(..) => "S0105",
-            Error::UnterminatedComment(..) => "S0106",
-            Error::SyntaxError(..) => "S0201",
-            Error::UnexpectedToken(..) => "S0202",
-            Error::ExpectedTokenBeforeEnd(..) => "S0203",
-            Error::InvalidFunctionParam(..) => "S0208",
-            Error::InvalidPredicate(..) => "S0209",
-            Error::MultipleGroupBy(..) => "S0210",
-            Error::InvalidUnary(..) => "S0211",
-            Error::ExpectedVarLeft(..) => "S0212",
-            Error::InvalidStep(..) => "S0213",
-            Error::ExpectedVarRight(..) => "S0214",
+            Error::S0101UnterminatedStringLiteral(..) => "S0101",
+            Error::S0102LexedNumberOutOfRange(..) => "S0102",
+            Error::S0103UnsupportedEscape(..) => "S0103",
+            Error::S0104InvalidUnicodeEscape(..) => "S0104",
+            Error::S0105UnterminatedQuoteProp(..) => "S0105",
+            Error::S0106UnterminatedComment(..) => "S0106",
+            Error::S0201SyntaxError(..) => "S0201",
+            Error::S0202UnexpectedToken(..) => "S0202",
+            Error::S0203ExpectedTokenBeforeEnd(..) => "S0203",
+            Error::S0204UnknownOperator(..) => "S0204",
+            Error::S0208InvalidFunctionParam(..) => "S0208",
+            Error::S0209InvalidPredicate(..) => "S0209",
+            Error::S0210MultipleGroupBy(..) => "S0210",
+            Error::S0211InvalidUnary(..) => "S0211",
+            Error::S0212ExpectedVarLeft(..) => "S0212",
+            Error::S0213InvalidStep(..) => "S0213",
+            Error::S0214ExpectedVarRight(..) => "S0214",
 
             // Runtime errors
-            Error::NumberOfOutRange(..) => "D1001",
-            Error::NegatingNonNumeric(..) => "D1002",
-            Error::MultipleKeys(..) => "D1009",
+            Error::D1001NumberOfOutRange(..) => "D1001",
+            Error::D1002NegatingNonNumeric(..) => "D1002",
+            Error::D1009MultipleKeys(..) => "D1009",
 
             // Type errors
-            Error::ArgumentNotValid(..) => "T0410",
-            Error::ArgumentMustBeArrayOfType(..) => "T0412",
-            Error::NonStringKey(..) => "T1003",
-            Error::InvokedNonFunctionSuggest(..) => "T1005",
-            Error::InvokedNonFunction(..) => "T1006",
-            Error::LeftSideNotNumber(..) => "T2001",
-            Error::RightSideNotNumber(..) => "T2002",
-            Error::LeftSideNotInteger(..) => "T2003",
-            Error::RightSideNotInteger(..) => "T2004",
-            Error::BinaryOpMismatch(..) => "T2009",
-            Error::BinaryOpTypes(..) => "T2010",
+            Error::T0410ArgumentNotValid(..) => "T0410",
+            Error::T0412ArgumentMustBeArrayOfType(..) => "T0412",
+            Error::T1003NonStringKey(..) => "T1003",
+            Error::T1005InvokedNonFunctionSuggest(..) => "T1005",
+            Error::T1006InvokedNonFunction(..) => "T1006",
+            Error::T2001LeftSideNotNumber(..) => "T2001",
+            Error::T2002RightSideNotNumber(..) => "T2002",
+            Error::T2003LeftSideNotInteger(..) => "T2003",
+            Error::T2004RightSideNotInteger(..) => "T2004",
+            Error::T2009BinaryOpMismatch(..) => "T2009",
+            Error::T2010BinaryOpTypes(..) => "T2010",
         }
     }
 }  
@@ -158,154 +160,113 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use Error::*;
 
-        write!(f, "{}: ", self.code())?;
+        write!(f, "{} @ ", self.code())?;
 
         match *self {
-            UnexpectedCharacter { ref ch, ref line, ref column, } =>
+            I0201UnexpectedCharacter { ref ch, ref line, ref column, } =>
                 write!(f, "Unexpected character in input: {} at ({}:{})", ch, line, column),
-            UnexpectedEndOfJson =>
+            I0202UnexpectedEndOfJson =>
                 write!(f, "Unexpected end of JSON input"),
-            ExceededDepthLimit =>
+            I0203ExceededDepthLimit =>
                 write!(f, "Exceeded depth limit while parsing input"),
-            FailedUtf8Parsing =>
+            I0204FailedUtf8Parsing =>
                 write!(f, "Failed to parse UTF-8 bytes in input"),
-            WrongType(ref s) =>
+            I0205WrongType(ref s) =>
                 write!(f, "Wrong type in input, expected: {}", s),
-            SyntaxError(ref p, ref t) =>
+            S0201SyntaxError(ref p, ref t) =>
                 write!(f, "{} Syntax error `{}`", p, t),
-            UnterminatedStringLiteral(ref p) =>
+            S0204UnknownOperator(ref p, ref t) =>
+                write!(f, "{} Unknown operator: `{}`", p, t),
+            S0101UnterminatedStringLiteral(ref p) =>
                 write!(f, "{} Unterminated string literal", p),
-            UnexpectedToken(ref p, ref e, ref a) =>
+            S0202UnexpectedToken(ref p, ref e, ref a) =>
                 write!(f, "{} Expected `{}`, got `{}`", p, e, a),
-            ExpectedTokenBeforeEnd(ref p, ref t) =>
+            S0203ExpectedTokenBeforeEnd(ref p, ref t) =>
                 write!(f, "{} Expected `{}` before end of expression", p, t),
-            InvalidStep(ref p, ref k) =>
+            S0213InvalidStep(ref p, ref k) =>
                 write!(f, "{} The literal value `{}` cannot be used as a step within a path expression", p, k),
-            InvalidPredicate(ref p) =>
+            S0209InvalidPredicate(ref p) =>
                 write!(f, "{} A predicate cannot follow a grouping expression in a step", p),
-            MultipleGroupBy(ref p) =>
+            S0210MultipleGroupBy(ref p) =>
                 write!(f, "{} Each step can only have one grouping expression", p),
-            InvalidUnary(ref p, ref k) =>
+            S0211InvalidUnary(ref p, ref k) =>
                 write!(f, "{} The symbol `{}` cannot be used as a unary operator", p, k),
-            InvalidFunctionParam(ref p, ref k) =>
+            S0208InvalidFunctionParam(ref p, ref k) =>
                 write!(f, "{} Parameter `{}` of function definition must be a variable name (start with $)", p, k),
-            ExpectedVarLeft(ref p) =>
+            S0212ExpectedVarLeft(ref p) =>
                 write!(f, "{} The left side of `:=` must be a variable name (start with $)", p),
-            ExpectedVarRight(ref p, ref k) =>
+            S0214ExpectedVarRight(ref p, ref k) =>
                 write!(f, "{} The right side of `{}` must be a variable name (start with $)", p, k),
-            UnterminatedComment(ref p) =>
+            S0106UnterminatedComment(ref p) =>
                 write!(f, "{} Comment has no closing tag", p),
-            LexedNumberOutOfRange(ref p, ref n) =>
+            S0102LexedNumberOutOfRange(ref p, ref n) =>
                 write!(f, "{} Number out of range: {}", p, n),
-            InvalidUnicodeEscape(ref p) =>
-                write!(f, "{} The escape sequence \\u must be followed by 4 hex digits", p),
-            UnsupportedEscape(ref p, ref c) =>
+            S0104InvalidUnicodeEscape(ref p) =>
+                write!(f, "{}: The escape sequence \\u must be followed by 4 hex digits", p),
+            S0103UnsupportedEscape(ref p, ref c) =>
                 write!(f, "{} Unsupported escape sequence: \\{}", p, c),
-            UnterminatedQuoteProp(ref p) =>
+            S0105UnterminatedQuoteProp(ref p) =>
                 write!(f, "{} Quoted property name must be terminated with a backquote (`)", p),
-            NegatingNonNumeric(ref p, ref v) =>
+            D1002NegatingNonNumeric(ref p, ref v) =>
                 write!(f, "{} Cannot negate a non-numeric value `{}`", p, v),
-            NonStringKey(ref p, ref v) =>
+            T1003NonStringKey(ref p, ref v) =>
                 write!( f, "{} Key in object structure must evaluate to a string; got: {}", p, v),
-            MultipleKeys(ref p, ref k) =>
+            D1009MultipleKeys(ref p, ref k) =>
                 write!( f, "{} Multiple key definitions evaluate to same key: {}", p, k),
-            LeftSideNotNumber(ref p, ref o) =>
+            T2001LeftSideNotNumber(ref p, ref o) =>
                 write!( f, "{} The left side of the `{}` operator must evaluate to a number", p, o),
-            RightSideNotNumber(ref p, ref o) =>
+            T2002RightSideNotNumber(ref p, ref o) =>
                 write!( f, "{} The right side of the `{}` operator must evaluate to a number", p, o),
-            BinaryOpMismatch(ref p,ref l ,ref r ,ref o ) =>
+            T2009BinaryOpMismatch(ref p,ref l ,ref r ,ref o ) =>
                 write!(f, "{} The values {} and {} either side of operator {} must be of the same data type", p, l, r, o),
-            BinaryOpTypes(ref p, ref o) =>
+            T2010BinaryOpTypes(ref p, ref o) =>
                 write!(f, "{} The expressions either side of operator `{}` must evaluate to numeric or string values", p, o),
-            NumberOfOutRange(ref n) =>
+            D1001NumberOfOutRange(ref n) =>
                 write!(f, "Number out of range: {}", n),
-            InvokedNonFunction(ref p) =>
+            T1006InvokedNonFunction(ref p) =>
                 write!(f, "{} Attempted to invoke a non-function", p),
-            InvokedNonFunctionSuggest(ref p, ref t) =>
+            T1005InvokedNonFunctionSuggest(ref p, ref t) =>
                 write!(f, "{} Attempted to invoke a non-function. Did you mean ${}?", p, t),
-            LeftSideNotInteger(ref p) =>
+            T2003LeftSideNotInteger(ref p) =>
                 write!(f, "{} The left side of the range operator (..) must evaluate to an integer", p),
-            RightSideNotInteger(ref p) =>
+            T2004RightSideNotInteger(ref p) =>
                 write!(f, "{} The right side of the range operator (..) must evaluate to an integer", p),
-            ArgumentNotValid(ref p, ref i, ref t) =>
+            T0410ArgumentNotValid(ref p, ref i, ref t) =>
                 write!(f, "{} Argument {} of function {} does not match function signature", p, i, t),
-            ArgumentMustBeArrayOfType(ref p, ref i, ref t, ref ty) =>
+            T0412ArgumentMustBeArrayOfType(ref p, ref i, ref t, ref ty) =>
                 write!(f, "{} Argument {} of function {} must be an array of {}", p, i, t, ty),
-            UnexpectedEndOfSignature => 
+            F0401UnexpectedEndOfSignature => 
                 write!(f, "Unexpected end of signature"),
-            SignatureStartInvalid => 
+            F0402SignatureStartInvalid => 
                 write!(f, "Signature does not start with '<'"),
-            SignatureEndInvalid => 
+            F0403SignatureEndInvalid => 
                 write!(f, "Signature does not end with '>'"),
-            UnexpectedCharsAtEndOfSignature => 
+            F0404UnexpectedCharsAtEndOfSignature => 
                 write!(f, "Unexpected characters at end of signature"),
-            OptionalShouldComeAfterType => 
+            F0405OptionalShouldComeAfterType => 
                 write!(f, "`?` should come after a type in signature"),
-            AllowContextShouldComeAfterType => 
+            F0406AllowContextShouldComeAfterType => 
                 write!(f, "`-` should come after a type in signature"),
-            OneOrMoreShouldComeAfterType => 
+            F0407OneOrMoreShouldComeAfterType => 
                 write!(f, "`+` should come after a type in signature"),
-            NoTypeBetweenCarets => 
+            F0408NoTypeBetweenCarets => 
                 write!(f, "No type specified between '<' and '>' in signature"),
-            MultipleTypesInArray => 
+            F0409MultipleTypesInArray => 
                 write!(f, "Arrays can only contain a single type in a signature"),
-            UnterminatedCaret => 
+            F0410UnterminatedCaret => 
                 write!(f, "Unterminated '>' in signature"),
-            NoTypeBetweenParens => 
+            F0411NoTypeBetweenParens => 
                 write!(f, "No types specified between '(' and ')' in signature"),
-            UnterminatedParen => 
+            F0412UnterminatedParen => 
                 write!(f, "Unterminated ')' in signature"),
-            ExpectedInSignature(ref t) => 
+            F0413ExpectedInSignature(ref t) => 
                 write!(f, "Expected '{}' in signature", t),
-            UnexpectedCharInSignature(ref t) =>
+            F0414UnexpectedCharInSignature(ref t) =>
                 write!(f, "Unexpected char '{}' in signature", t),
         }
     }
 }
 
-// use crate::parser::Position;
-
-// pub trait Error: std::error::Error + std::fmt::Debug + std::fmt::Display {
-//     fn code(&self) -> &str;
-// }
-
-// macro_rules! define_error {
-//     ($name:ident, $template:literal, $( $arg:ident ),*) => {
-//         pub struct $name {
-//             pub position: Position,
-//             $( pub $arg: String, )*
-//         }
-
-//         impl std::error::Error for $name {}
-
-//         impl Error for $name {
-//             fn code(&self) -> &str {
-//                 stringify!($name)
-//             }
-//         }
-
-//         impl std::fmt::Display for $name {
-//             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//                 write!(f, concat!("Error @ character {}: {} - ", $template), self.position.source_pos, self.code(), $( self.$arg, )*)
-//             }
-//         }
-
-//         impl std::fmt::Debug for $name {
-//             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//                 write!(f, concat!("Error @ character {}: {} - ", $template), self.position.source_pos, self.code(), $( self.$arg, )*)
-//             }
-//         }
-//     };
-
-//     ($name:ident, $template:literal) => {
-//         define_error!($name, $template,);
-//     };
-// }
-
-// define_error!(InvalidJson, "The input is not valid JSON");
-// define_error!(S0202, "Expected `{}`, got `{}`", expected, actual);
-// define_error!(S0203, "Expected `{}` before end of expression", expected);
-//define_error!(S0204, "Unknown operator: `{}`", token);
 // "S0205": "Unexpected token: {{token}}",
 // "S0206": "Unknown expression type: {{token}}",
 // "S0207": "Unexpected end of expression",

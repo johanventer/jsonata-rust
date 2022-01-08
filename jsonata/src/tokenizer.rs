@@ -5,7 +5,6 @@ use std::{char, str};
 use jsonata_errors::{Error, Result};
 use jsonata_shared::Position;
 
-use super::error::*;
 use super::json::Number;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -80,6 +79,8 @@ impl std::fmt::Display for TokenKind {
 #[derive(Debug, Clone)]
 pub struct Token {
     pub kind: TokenKind,
+    pub byte_index: usize,
+    pub len: usize,
     pub position: Position,
 }
 
@@ -88,14 +89,54 @@ pub struct Tokenizer<'a> {
     input: &'a str,
     chars: Chars<'a>,
 
+    /// Internal buffer used for building strings
     buffer: Vec<char>,
 
+    /// The current bytes index into the input
     byte_index: usize,
+
+    /// The current char index into the input (used for errors)
     char_index: usize,
+
+    /// The starting byte index of the current token being generated (used for errors)
+    start_byte_index: usize,
+
+    /// The starting char index of the current token being generated (used for errors)
+    start_char_index: usize,
 }
 
 const NULL: char = '\0';
-const MAX_PRECISION: u64 = 576460752303423500;
+
+/// The mantissa in a json::Number is a u64, but we know that f64 has 53 bits for mantissa
+/// (52 in the mantissa field, and the implict 1 at the start), so at this point we have
+/// already blown the range of f64, so it's just to prevent u64 overflow.
+const MAX_PARSED_MANTISSA: u64 = u64::pow(2, 59);
+
+/// The actual maximum mantissa allowed, used for final range checks
+const MAX_MANTISSA: u64 = u64::pow(2, 53);
+
+/// Final checks on a number for out of range conditions
+fn finalize_number(mut mantissa: u64, mut exponent: i16) -> Result<Number> {
+    // Strip any trailing zeroes from the the mantissa and check in we are still in bounds
+    while mantissa % 10 == 0 {
+        if exponent < 0 {
+            exponent += 1;
+        } else {
+            exponent -= 1;
+        }
+
+        mantissa /= 10;
+
+        if mantissa > MAX_MANTISSA
+            || exponent < f64::MIN_10_EXP as i16
+            || exponent > f64::MAX_10_EXP as i16
+        {
+            return Err(Error::D1001NumberOfOutRange(0.0));
+        }
+    }
+
+    Ok(unsafe { Number::from_parts_unchecked(true, mantissa, exponent) })
+}
 
 fn is_whitespace(c: char) -> bool {
     matches!(
@@ -152,6 +193,8 @@ impl<'a> Tokenizer<'a> {
             buffer: Vec::with_capacity(32),
             byte_index: 0,
             char_index: 0,
+            start_byte_index: 0,
+            start_char_index: 0,
         }
     }
 
@@ -185,18 +228,26 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
+    fn token_string(&self) -> String {
+        String::from(&self.input[self.start_byte_index..self.byte_index])
+    }
+
+    pub fn string_from_token(&self, token: &Token) -> String {
+        String::from(&self.input[token.byte_index..token.byte_index + token.len])
+    }
+
     fn get_hex_digit(&mut self) -> Result<u16> {
         let ch = self.bump();
         if ch.len_utf8() != 1 {
             // Not a single byte
-            return Err(Error::InvalidUnicodeEscape(self.pos()));
+            return Err(Error::S0104InvalidUnicodeEscape(self.start_char_index));
         }
         let ch = ch as u8;
         Ok(match ch {
             b'0'..=b'9' => (ch - b'0'),
             b'a'..=b'f' => (ch + 10 - b'a'),
             b'A'..=b'F' => (ch + 10 - b'A'),
-            _ => return Err(Error::InvalidUnicodeEscape(self.pos())),
+            _ => return Err(Error::S0104InvalidUnicodeEscape(self.start_char_index)),
         } as u16)
     }
 
@@ -210,9 +261,9 @@ impl<'a> Tokenizer<'a> {
     pub fn next_token(&mut self) -> Result<Token> {
         use TokenKind::*;
 
-        let (kind, start_byte_index, start_char_index) = loop {
-            let start_byte_index = self.byte_index;
-            let start_char_index = self.char_index;
+        let kind = loop {
+            self.start_byte_index = self.byte_index;
+            self.start_char_index = self.char_index;
 
             let kind = match self.bump() {
                 NULL => End,
@@ -238,7 +289,7 @@ impl<'a> Tokenizer<'a> {
 
                             // Check for unterminated comments
                             if self.eof() {
-                                return Err(Error::UnterminatedComment(self.pos()));
+                                return Err(Error::S0106UnterminatedComment(self.start_char_index));
                             }
 
                             // Is this the end of the comment?
@@ -355,7 +406,7 @@ impl<'a> Tokenizer<'a> {
 
                     // Check for unterminated quotes
                     if self.eof() {
-                        return Err(Error::UnterminatedQuoteProp(self.pos()));
+                        return Err(Error::S0105UnterminatedQuoteProp(self.start_char_index));
                     }
 
                     let token = Name(String::from(&self.input[start_byte_index..self.byte_index]));
@@ -402,14 +453,18 @@ impl<'a> Tokenizer<'a> {
                                                 {
                                                     Some(Ok(code)) => code,
                                                     _ => {
-                                                        return Err(Error::InvalidUnicodeEscape(
-                                                            self.pos(),
-                                                        ))
+                                                        return Err(
+                                                            Error::S0104InvalidUnicodeEscape(
+                                                                self.start_char_index,
+                                                            ),
+                                                        )
                                                     }
                                                 }
                                             }
                                             _ => {
-                                                return Err(Error::InvalidUnicodeEscape(self.pos()))
+                                                return Err(Error::S0104InvalidUnicodeEscape(
+                                                    self.start_char_index,
+                                                ))
                                             }
                                         },
                                     };
@@ -417,7 +472,10 @@ impl<'a> Tokenizer<'a> {
                                     self.buffer.push(unicode);
                                 }
                                 c => {
-                                    return Err(unsupported_escape(self.pos(), c));
+                                    return Err(Error::S0103UnsupportedEscape(
+                                        self.start_char_index,
+                                        c,
+                                    ));
                                 }
                             },
 
@@ -429,7 +487,9 @@ impl<'a> Tokenizer<'a> {
                             c => {
                                 // Check for unterminated strings
                                 if self.eof() {
-                                    return Err(Error::UnterminatedStringLiteral(self.pos()));
+                                    return Err(Error::S0101UnterminatedStringLiteral(
+                                        self.start_char_index,
+                                    ));
                                 }
 
                                 self.buffer.push(c);
@@ -468,53 +528,55 @@ impl<'a> Tokenizer<'a> {
 
                     if c == '$' {
                         Var(String::from(
-                            &self.input[start_byte_index + 1..self.byte_index],
+                            &self.input[self.start_byte_index + 1..self.byte_index],
                         ))
                     } else {
-                        match &self.input[start_byte_index..self.byte_index] {
+                        match &self.input[self.start_byte_index..self.byte_index] {
                             "or" => Or,
                             "in" => In,
                             "and" => And,
                             "true" => Bool(true),
                             "false" => Bool(false),
                             "null" => Null,
-                            _ => Name(String::from(&self.input[start_byte_index..self.byte_index])),
+                            _ => Name(String::from(
+                                &self.input[self.start_byte_index..self.byte_index],
+                            )),
                         }
                     }
                 }
 
-                c => {
-                    // TODO: An error about unknown characters
-                    eprintln!("UNHANDLED CHAR: {}", c);
-                    unimplemented!()
+                _ => {
+                    return Err(Error::S0204UnknownOperator(
+                        self.start_char_index,
+                        self.token_string(),
+                    ));
                 }
             };
 
             if !matches!(kind, Whitespace | Comment) {
-                break (kind, start_byte_index, start_char_index);
+                break kind;
             }
         };
+
+        // Check for out of range numbers,
 
         let token = Token {
             kind,
             position: self.pos(),
+            byte_index: self.start_byte_index,
+            len: self.byte_index - self.start_byte_index,
         };
 
-        if let Num(n) = token.kind {
-            eprintln!("NUMBER: {}", n);
-        } else {
-            eprintln!(
-                "{:?}, byte_len: {}, char_len: {}",
-                token,
-                self.byte_index - start_byte_index,
-                self.char_index - start_char_index
-            );
-        }
+        eprintln!(
+            "{:?}, bytes: {} -> {}",
+            token, self.start_byte_index, self.byte_index
+        );
 
         Ok(token)
     }
 
-    // NOTE: Much of this number parsing was stolen from the json create, see json/README.md.
+    // NOTE: Much of this number parsing was stolen from the json create, and modified
+    // as needed. See json/README.md.
 
     fn number(&mut self, first_char: char) -> Result<Number> {
         let mut mantissa = (first_char as u8 - b'0') as u64;
@@ -522,9 +584,8 @@ impl<'a> Tokenizer<'a> {
         let result: Number;
 
         loop {
-            if mantissa >= MAX_PRECISION {
-                // TODO: Big numbers
-                return Err(Error::NumberOfOutRange(0.0));
+            if mantissa > MAX_PARSED_MANTISSA {
+                return Err(Error::D1001NumberOfOutRange(0.0));
             }
 
             if self.eof() {
@@ -562,41 +623,53 @@ impl<'a> Tokenizer<'a> {
         // Have to have at least one fractional digit
         match self.bump() {
             c @ '0'..='9' => {
-                if *mantissa < MAX_PRECISION {
+                if *mantissa < MAX_PARSED_MANTISSA {
                     *mantissa = *mantissa * 10 + (c as u8 - b'0') as u64;
                     *exponent -= 1;
-                } else if let Some(result) = mantissa
-                    .checked_mul(10)
-                    .and_then(|m| m.checked_add((c as u8 - b'0') as u64))
-                {
-                    *mantissa = result;
-                    *exponent -= 1;
+                } else {
+                    match mantissa
+                        .checked_mul(10)
+                        .and_then(|m| m.checked_add((c as u8 - b'0') as u64))
+                    {
+                        Some(result) => {
+                            *mantissa = result;
+                            *exponent -= 1;
+                        }
+                        None => return Err(Error::D1001NumberOfOutRange(0.0)),
+                    }
                 }
             }
             _ => {
-                // TODO
-                unimplemented!()
+                return Err(Error::S0201SyntaxError(
+                    self.start_char_index,
+                    self.token_string(),
+                ));
             }
         }
 
         // Get the rest of the fractional digits
         loop {
             if self.eof() {
-                result = unsafe { Number::from_parts_unchecked(true, *mantissa, *exponent) };
+                result = finalize_number(*mantissa, *exponent)?;
                 break;
             }
 
             match self.bump() {
                 c @ '0'..='9' => {
-                    if *mantissa < MAX_PRECISION {
+                    if *mantissa < MAX_PARSED_MANTISSA {
                         *mantissa = *mantissa * 10 + (c as u8 - b'0') as u64;
                         *exponent -= 1;
-                    } else if let Some(result) = mantissa
-                        .checked_mul(10)
-                        .and_then(|m| m.checked_add((c as u8 - b'0') as u64))
-                    {
-                        *mantissa = result;
-                        *exponent -= 1;
+                    } else {
+                        match mantissa
+                            .checked_mul(10)
+                            .and_then(|m| m.checked_add((c as u8 - b'0') as u64))
+                        {
+                            Some(result) => {
+                                *mantissa = result;
+                                *exponent -= 1;
+                            }
+                            None => return Err(Error::D1001NumberOfOutRange(0.0)),
+                        }
                     }
                 }
                 'e' | 'E' => {
@@ -604,7 +677,7 @@ impl<'a> Tokenizer<'a> {
                     break;
                 }
                 _ => {
-                    result = unsafe { Number::from_parts_unchecked(true, *mantissa, *exponent) };
+                    result = finalize_number(*mantissa, *exponent)?;
                     break;
                 }
             }
@@ -633,8 +706,10 @@ impl<'a> Tokenizer<'a> {
         let mut exponent = match self.bump() {
             c @ '0'..='9' => (c as u8 - b'0') as i16,
             _ => {
-                // TODO
-                unimplemented!()
+                return Err(Error::S0201SyntaxError(
+                    self.start_char_index,
+                    self.token_string(),
+                ));
             }
         };
 
@@ -653,13 +728,7 @@ impl<'a> Tokenizer<'a> {
             }
         }
 
-        Ok(unsafe {
-            Number::from_parts_unchecked(
-                true,
-                *mantissa,
-                original_exponent.saturating_add(exponent * sign),
-            )
-        })
+        finalize_number(*mantissa, original_exponent.saturating_add(exponent * sign))
     }
 }
 

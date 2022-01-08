@@ -59,7 +59,7 @@ struct Parser<'a> {
 macro_rules! expect_byte {
     ($parser:ident) => {{
         if $parser.is_eof() {
-            return Err(Error::UnexpectedEndOfJson);
+            return Err(Error::I0202UnexpectedEndOfJson);
         }
 
         let ch = $parser.read_byte();
@@ -412,7 +412,7 @@ impl<'a> Parser<'a> {
 
         let colno = col.chars().count();
 
-        Err(Error::UnexpectedCharacter {
+        Err(Error::I0201UnexpectedCharacter {
             ch,
             line: lineno + 1,
             column: colno + 1,
@@ -455,7 +455,7 @@ impl<'a> Parser<'a> {
                     .next()
                 {
                     Some(Ok(code)) => code,
-                    _ => return Err(Error::FailedUtf8Parsing),
+                    _ => return Err(Error::I0204FailedUtf8Parsing),
                 }
             }
         };
@@ -559,7 +559,7 @@ impl<'a> Parser<'a> {
                         .and_then(|num| num.checked_add((ch - b'0') as u64))
                     {
                         Some(result) => num = result,
-                        None => e = e.checked_add(1).ok_or(Error::ExceededDepthLimit)?,
+                        None => e = e.checked_add(1).ok_or(Error::I0203ExceededDepthLimit)?,
                     }
                 }
                 b'.' => {
@@ -627,7 +627,7 @@ impl<'a> Parser<'a> {
 
                     if ch != b']' {
                         if stack.len() == DEPTH_LIMIT {
-                            return Err(Error::ExceededDepthLimit);
+                            return Err(Error::I0203ExceededDepthLimit);
                         }
 
                         stack.push(StackBlock(
@@ -644,7 +644,7 @@ impl<'a> Parser<'a> {
 
                     if ch != b'}' {
                         if stack.len() == DEPTH_LIMIT {
-                            return Err(Error::ExceededDepthLimit);
+                            return Err(Error::I0203ExceededDepthLimit);
                         }
 
                         let object = self.pool.object_with_capacity(3);

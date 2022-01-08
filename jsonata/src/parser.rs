@@ -1,4 +1,4 @@
-use jsonata_errors::Result;
+use jsonata_errors::{Error, Result};
 
 use super::ast::*;
 use super::error::*;
@@ -31,11 +31,14 @@ impl<'a> Parser<'a> {
 
     pub fn expect(&mut self, expected: TokenKind) -> Result<()> {
         if self.token.kind == TokenKind::End {
-            return Err(expected_token_before_end(self.token.position, &expected));
+            return Err(s0203_expected_token_before_end(
+                self.token.position,
+                &expected,
+            ));
         }
 
         if self.token.kind != expected {
-            return Err(unexpected_token(
+            return Err(s0202_unexpected_token(
                 self.token.position,
                 &expected,
                 &self.token.kind,
@@ -67,7 +70,10 @@ pub fn parse(source: &str) -> Result<Ast> {
     let mut parser = Parser::new(source)?;
     let ast = parser.expression(0)?;
     if !matches!(parser.token().kind, TokenKind::End) {
-        return Err(syntax_error(parser.token().position, &parser.token().kind));
+        return Err(Error::S0201SyntaxError(
+            parser.token().byte_index,
+            parser.tokenizer.string_from_token(parser.token()),
+        ));
     }
     ast.process()
 }

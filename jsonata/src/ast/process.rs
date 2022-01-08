@@ -200,7 +200,7 @@ fn process_path(position: Position, lhs: &mut Box<Ast>, rhs: &mut Box<Ast>) -> R
             match step.kind {
                 // Steps can't be literal values other than strings
                 AstKind::Number(..) | AstKind::Bool(..) | AstKind::Null => {
-                    return Err(invalid_step(step.position, "TODO"));
+                    return Err(s0213_invalid_step(step.position, "TODO"));
                 }
 
                 // Steps that are string literals should become Names
@@ -242,7 +242,7 @@ fn process_predicate(position: Position, lhs: &mut Box<Ast>, rhs: &mut Box<Ast>)
 
     // Predicates can't follow group-by
     if node.group_by.is_some() {
-        return Err(Error::InvalidPredicate(position));
+        return Err(Error::S0209InvalidPredicate(position));
     }
 
     let filter = Ast::new(
@@ -277,7 +277,7 @@ fn process_group_by(position: Position, lhs: &mut Box<Ast>, rhs: &mut Object) ->
 
     // Can only have a single grouping expression
     if result.group_by.is_some() {
-        return Err(Error::MultipleGroupBy(position));
+        return Err(Error::S0210MultipleGroupBy(position));
     }
 
     // Process all the key, value pairs

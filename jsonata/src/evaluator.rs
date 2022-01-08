@@ -137,7 +137,7 @@ impl Evaluator {
                 match *result {
                     ValueKind::Undefined => Ok(self.pool.undefined()),
                     ValueKind::Number(num) if !num.is_nan() => Ok(self.pool.number(-num)),
-                    _ => Err(negating_non_numeric(node.position, &result)),
+                    _ => Err(d1002_negating_non_numeric(node.position, &result)),
                 }
             }
             UnaryOp::ArrayConstructor(ref array) => {
@@ -189,7 +189,7 @@ impl Evaluator {
             for (index, pair) in object.iter().enumerate() {
                 let key = self.evaluate(&pair.0, &item, frame)?;
                 if !key.is_string() {
-                    return Err(non_string_key(position, &key));
+                    return Err(t1003_non_string_key(position, &key));
                 }
 
                 let key = key.as_str();
@@ -198,7 +198,7 @@ impl Evaluator {
                     hash_map::Entry::Occupied(mut entry) => {
                         let group = entry.get_mut();
                         if group.index != index {
-                            return Err(multiple_keys(position, &key));
+                            return Err(d1009_multiple_keys(position, &key));
                         }
                         group.data = fn_append(
                             &self.fn_context("append", &position, &input, frame),
@@ -262,13 +262,13 @@ impl Evaluator {
                 let lhs = match *lhs {
                     ValueKind::Undefined => return Ok(self.pool.undefined()),
                     ValueKind::Number(n) if !n.is_nan() => f64::from(n),
-                    _ => return Err(left_side_not_number(node.position, op)),
+                    _ => return Err(t2001_left_side_not_number(node.position, op)),
                 };
 
                 let rhs = match *rhs {
                     ValueKind::Undefined => return Ok(self.pool.undefined()),
                     ValueKind::Number(n) if !n.is_nan() => f64::from(n),
-                    _ => return Err(right_side_not_number(node.position, op)),
+                    _ => return Err(t2002_right_side_not_number(node.position, op)),
                 };
 
                 let result = match op {
@@ -281,7 +281,7 @@ impl Evaluator {
                 };
 
                 if result.is_infinite() {
-                    Err(Error::NumberOfOutRange(result))
+                    Err(Error::D1001NumberOfOutRange(result))
                 } else {
                     Ok(self.pool.number(result))
                 }
@@ -298,7 +298,7 @@ impl Evaluator {
                 }
 
                 if !((lhs.is_number() || lhs.is_string()) && (rhs.is_number() || rhs.is_string())) {
-                    return Err(binary_op_types(node.position, op));
+                    return Err(t2010_binary_op_types(node.position, op));
                 }
 
                 if let (ValueKind::Number(ref lhs), ValueKind::Number(ref rhs)) = (&*lhs, &*rhs) {
@@ -323,7 +323,7 @@ impl Evaluator {
                     }));
                 }
 
-                Err(binary_op_mismatch(node.position, &lhs, &rhs, op))
+                Err(t2009_binary_op_mismatch(node.position, &lhs, &rhs, op))
             }
 
             BinaryOp::Equal | BinaryOp::NotEqual => {
@@ -344,11 +344,11 @@ impl Evaluator {
                 let rhs = self.evaluate(rhs_ast, input, frame)?;
 
                 if !lhs.is_undefined() && !lhs.is_usize() {
-                    return Err(Error::LeftSideNotInteger(node.position));
+                    return Err(Error::T2003LeftSideNotInteger(node.position));
                 };
 
                 if !rhs.is_undefined() && !rhs.is_usize() {
-                    return Err(Error::RightSideNotInteger(node.position));
+                    return Err(Error::T2004RightSideNotInteger(node.position));
                 }
 
                 if lhs.is_undefined() || rhs.is_undefined() {
@@ -684,7 +684,7 @@ impl Evaluator {
             if let AstKind::Path(ref steps) = proc.kind {
                 if let AstKind::Name(ref name) = steps[0].kind {
                     if frame.lookup(name).is_some() {
-                        return Err(Error::InvokedNonFunctionSuggest(
+                        return Err(Error::T1005InvokedNonFunctionSuggest(
                             proc.position,
                             name.clone(),
                         ));
@@ -751,7 +751,7 @@ impl Evaluator {
             ValueKind::NativeFn1(ref name, ref func) => {
                 let context = self.fn_context(name, &position, input, frame);
                 if evaluated_args.len() > 1 {
-                    Err(argument_not_valid(&context, 2))
+                    Err(t0410_argument_not_valid(&context, 2))
                 } else if evaluated_args.is_empty() {
                     // Some functions take the input as the first argument if one was not provided
                     func(&context, input)
@@ -762,7 +762,7 @@ impl Evaluator {
             ValueKind::NativeFn2(ref name, ref func) => {
                 let context = self.fn_context(name, &position, input, frame);
                 if evaluated_args.len() > 2 {
-                    Err(argument_not_valid(&context, 3))
+                    Err(t0410_argument_not_valid(&context, 3))
                 } else {
                     func(
                         &context,
@@ -774,7 +774,7 @@ impl Evaluator {
             ValueKind::NativeFn3(ref name, ref func) => {
                 let context = self.fn_context(name, &position, input, frame);
                 if evaluated_args.len() > 3 {
-                    Err(argument_not_valid(&context, 4))
+                    Err(t0410_argument_not_valid(&context, 4))
                 } else {
                     func(
                         &context,
@@ -784,7 +784,7 @@ impl Evaluator {
                     )
                 }
             }
-            _ => Err(Error::InvokedNonFunction(position)),
+            _ => Err(Error::T1006InvokedNonFunction(position)),
         }
     }
 }
