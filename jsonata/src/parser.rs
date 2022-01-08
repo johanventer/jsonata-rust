@@ -6,16 +6,16 @@ use super::symbol::Symbol;
 use super::tokenizer::*;
 
 #[derive(Debug)]
-pub struct Parser {
-    pub tokenizer: Tokenizer,
+pub struct Parser<'a> {
+    pub tokenizer: Tokenizer<'a>,
     pub token: Token,
 }
 
-impl Parser {
-    fn new(source: &str) -> Result<Self> {
+impl<'a> Parser<'a> {
+    fn new(source: &'a str) -> Result<Self> {
         let mut tokenizer = Tokenizer::new(source);
         Ok(Self {
-            token: tokenizer.next(false, false)?,
+            token: tokenizer.next_token()?,
             tokenizer,
         })
     }
@@ -24,12 +24,12 @@ impl Parser {
         &self.token
     }
 
-    pub fn next(&mut self, infix: bool, signature: bool) -> Result<()> {
-        self.token = self.tokenizer.next(infix, signature)?;
+    pub fn next_token(&mut self) -> Result<()> {
+        self.token = self.tokenizer.next_token()?;
         Ok(())
     }
 
-    pub fn expect(&mut self, expected: TokenKind, infix: bool, signature: bool) -> Result<()> {
+    pub fn expect(&mut self, expected: TokenKind) -> Result<()> {
         if self.token.kind == TokenKind::End {
             return Err(expected_token_before_end(self.token.position, &expected));
         }
@@ -42,20 +42,20 @@ impl Parser {
             ));
         }
 
-        self.next(infix, signature)?;
+        self.next_token()?;
 
         Ok(())
     }
 
-    pub fn expression(&mut self, bp: u32, signature: bool) -> Result<Ast> {
+    pub fn expression(&mut self, bp: u32) -> Result<Ast> {
         let mut last = self.token.clone();
-        self.next(true, signature)?;
+        self.next_token()?;
 
         let mut left = last.null_denotation(self)?;
 
         while bp < self.token.left_binding_power() {
             last = self.token.clone();
-            self.next(false, false)?;
+            self.next_token()?;
             left = last.left_denotation(self, left)?;
         }
 
@@ -65,7 +65,7 @@ impl Parser {
 
 pub fn parse(source: &str) -> Result<Ast> {
     let mut parser = Parser::new(source)?;
-    let ast = parser.expression(0, false)?;
+    let ast = parser.expression(0)?;
     if !matches!(parser.token().kind, TokenKind::End) {
         return Err(syntax_error(parser.token().position, &parser.token().kind));
     }

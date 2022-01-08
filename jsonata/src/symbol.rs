@@ -16,17 +16,17 @@ impl Symbol for Token {
     fn left_binding_power(&self) -> u32 {
         use TokenKind::*;
         match &self.kind {
-            End | Range | Colon | Comma | SemiColon | RightParen | RightBracket | RightBrace
-            | Pipe | Not | Tilde | Null | Bool(..) | Str(..) | Num(..) | Name(..) | Var(..) => 0,
-            Signature(..) => 0,
+            End | Whitespace | Comment | Range | Colon | Comma | SemiColon | RightParen
+            | RightBracket | RightBrace | Pipe | ExclamationMark | Tilde | Null | Bool(..)
+            | Str(..) | Num(..) | Name(..) | Var(..) | Signature(..) => 0,
             Bind => 10,
-            Question => 20,
+            QuestionMark => 20,
             Or => 25,
             And => 30,
-            NotEqual | GreaterEqual | LessEqual | Apply | In | Equal | RightCaret | LeftCaret
-            | Caret => 40,
+            NotEqual | GreaterEqual | LessEqual | Apply | In | Equal | RightAngleBracket
+            | LeftAngleBracket | Caret => 40,
             Ampersand | Plus | Minus => 50,
-            Wildcard | Descendent | ForwardSlash | Percent => 60,
+            Asterisk | Descendent | ForwardSlash | PercentSign => 60,
             LeftBrace => 70,
             Period => 75,
             LeftBracket | LeftParen => 80,
@@ -46,25 +46,25 @@ impl Symbol for Token {
             TokenKind::Or => Ok(Ast::new(AstKind::Name(String::from("or")), self.position)),
             TokenKind::In => Ok(Ast::new(AstKind::Name(String::from("in")), self.position)),
             TokenKind::Minus => Ok(Ast::new(
-                AstKind::Unary(UnaryOp::Minus(Box::new(parser.expression(70, false)?))),
+                AstKind::Unary(UnaryOp::Minus(Box::new(parser.expression(70)?))),
                 self.position,
             )),
-            TokenKind::Wildcard => Ok(Ast::new(AstKind::Wildcard, self.position)),
+            TokenKind::Asterisk => Ok(Ast::new(AstKind::Wildcard, self.position)),
             TokenKind::Descendent => Ok(Ast::new(AstKind::Descendent, self.position)),
-            TokenKind::Percent => Ok(Ast::new(AstKind::Parent, self.position)),
+            TokenKind::PercentSign => Ok(Ast::new(AstKind::Parent, self.position)),
 
             // Block of expressions
             TokenKind::LeftParen => {
                 let mut expressions = Vec::new();
 
                 while parser.token().kind != TokenKind::RightParen {
-                    expressions.push(parser.expression(0, false)?);
+                    expressions.push(parser.expression(0)?);
                     if parser.token().kind != TokenKind::SemiColon {
                         break;
                     }
-                    parser.expect(TokenKind::SemiColon, false, false)?;
+                    parser.expect(TokenKind::SemiColon)?;
                 }
-                parser.expect(TokenKind::RightParen, true, false)?;
+                parser.expect(TokenKind::RightParen)?;
 
                 Ok(Ast::new(AstKind::Block(expressions), self.position))
             }
@@ -75,15 +75,15 @@ impl Symbol for Token {
 
                 if parser.token().kind != TokenKind::RightBracket {
                     loop {
-                        let mut item = parser.expression(0, false)?;
+                        let mut item = parser.expression(0)?;
 
                         if parser.token().kind == TokenKind::Range {
-                            parser.expect(TokenKind::Range, false, false)?;
+                            parser.expect(TokenKind::Range)?;
                             item = Ast::new(
                                 AstKind::Binary(
                                     BinaryOp::Range,
                                     Box::new(item),
-                                    Box::new(parser.expression(0, false)?),
+                                    Box::new(parser.expression(0)?),
                                 ),
                                 self.position,
                             )
@@ -95,10 +95,10 @@ impl Symbol for Token {
                             break;
                         }
 
-                        parser.expect(TokenKind::Comma, false, false)?;
+                        parser.expect(TokenKind::Comma)?;
                     }
                 }
-                parser.expect(TokenKind::RightBracket, true, false)?;
+                parser.expect(TokenKind::RightBracket)?;
 
                 Ok(Ast::new(
                     AstKind::Unary(UnaryOp::ArrayConstructor(expressions)),
@@ -114,20 +114,20 @@ impl Symbol for Token {
 
             // Object transformer
             TokenKind::Pipe => {
-                let pattern = Box::new(parser.expression(0, false)?);
+                let pattern = Box::new(parser.expression(0)?);
 
-                parser.expect(TokenKind::Pipe, false, false)?;
+                parser.expect(TokenKind::Pipe)?;
 
-                let update = Box::new(parser.expression(0, false)?);
+                let update = Box::new(parser.expression(0)?);
 
                 let delete = if parser.token().kind == TokenKind::Comma {
-                    parser.expect(TokenKind::Comma, false, false)?;
-                    Some(Box::new(parser.expression(0, false)?))
+                    parser.expect(TokenKind::Comma)?;
+                    Some(Box::new(parser.expression(0)?))
                 } else {
                     None
                 };
 
-                parser.expect(TokenKind::Pipe, false, false)?;
+                parser.expect(TokenKind::Pipe)?;
 
                 Ok(Ast::new(
                     AstKind::Transform {
@@ -139,7 +139,7 @@ impl Symbol for Token {
                 ))
             }
 
-            TokenKind::LeftCaret => {
+            TokenKind::LeftAngleBracket => {
                 if let TokenKind::Signature(ref s) = parser.token().kind {
                     Ok(Ast::new(AstKind::String(s.clone()), self.position))
                 } else {
@@ -158,7 +158,7 @@ impl Symbol for Token {
                     AstKind::Binary(
                         BinaryOp::$n,
                         Box::new(left),
-                        Box::new(parser.expression(self.left_binding_power(), false)?),
+                        Box::new(parser.expression(self.left_binding_power())?),
                     ),
                     self.position,
                 ))
@@ -169,12 +169,12 @@ impl Symbol for Token {
             TokenKind::Period => binary!(Map),
             TokenKind::Plus => binary!(Add),
             TokenKind::Minus => binary!(Subtract),
-            TokenKind::Wildcard => binary!(Multiply),
+            TokenKind::Asterisk => binary!(Multiply),
             TokenKind::ForwardSlash => binary!(Divide),
-            TokenKind::Percent => binary!(Modulus),
+            TokenKind::PercentSign => binary!(Modulus),
             TokenKind::Equal => binary!(Equal),
-            TokenKind::LeftCaret => binary!(LessThan),
-            TokenKind::RightCaret => binary!(GreaterThan),
+            TokenKind::LeftAngleBracket => binary!(LessThan),
+            TokenKind::RightAngleBracket => binary!(GreaterThan),
             TokenKind::NotEqual => binary!(NotEqual),
             TokenKind::LessEqual => binary!(LessThanEqual),
             TokenKind::GreaterEqual => binary!(GreaterThanEqual),
@@ -193,22 +193,22 @@ impl Symbol for Token {
                 if parser.token().kind != TokenKind::RightParen {
                     loop {
                         match parser.token().kind {
-                            TokenKind::Question => {
+                            TokenKind::QuestionMark => {
                                 is_partial = true;
                                 args.push(Ast::new(AstKind::PartialArg, parser.token().position));
-                                parser.expect(TokenKind::Question, false, false)?;
+                                parser.expect(TokenKind::QuestionMark)?;
                             }
                             _ => {
-                                args.push(parser.expression(0, false)?);
+                                args.push(parser.expression(0)?);
                             }
                         }
                         if parser.token().kind != TokenKind::Comma {
                             break;
                         }
-                        parser.expect(TokenKind::Comma, false, false)?;
+                        parser.expect(TokenKind::Comma)?;
                     }
                 }
-                parser.expect(TokenKind::RightParen, true, true)?;
+                parser.expect(TokenKind::RightParen)?;
 
                 let name = match left.kind {
                     AstKind::Name(ref name) => {
@@ -232,8 +232,8 @@ impl Symbol for Token {
                 let func: Ast;
 
                 if is_lambda {
-                    let signature = if parser.token().kind == TokenKind::LeftCaret {
-                        Some(parser.expression(0, true)?)
+                    let signature = if parser.token().kind == TokenKind::LeftAngleBracket {
+                        Some(parser.expression(0)?)
                     } else {
                         None
                     };
@@ -244,14 +244,14 @@ impl Symbol for Token {
                             kind: AstKind::String(ref s),
                             ..
                         }) => {
-                            parser.next(false, false)?;
+                            parser.next_token()?;
                             Some(jsonata_signatures::parse(s)?)
                         }
                         _ => None,
                     };
 
-                    parser.expect(TokenKind::LeftBrace, false, false)?;
-                    let body = Box::new(parser.expression(0, false)?);
+                    parser.expect(TokenKind::LeftBrace)?;
+                    let body = Box::new(parser.expression(0)?);
                     func = Ast::new(
                         AstKind::Lambda {
                             name,
@@ -261,7 +261,7 @@ impl Symbol for Token {
                         },
                         self.position,
                     );
-                    parser.expect(TokenKind::RightBrace, false, false)?;
+                    parser.expect(TokenKind::RightBrace)?;
                 } else {
                     func = Ast::new(
                         AstKind::Function {
@@ -287,7 +287,7 @@ impl Symbol for Token {
                     AstKind::Binary(
                         BinaryOp::Bind,
                         Box::new(left),
-                        Box::new(parser.expression(self.left_binding_power() - 1, false)?),
+                        Box::new(parser.expression(self.left_binding_power() - 1)?),
                     ),
                     self.position,
                 ))
@@ -297,24 +297,24 @@ impl Symbol for Token {
             TokenKind::Caret => {
                 let mut terms = Vec::new();
 
-                parser.expect(TokenKind::LeftParen, false, false)?;
+                parser.expect(TokenKind::LeftParen)?;
                 loop {
                     let mut descending = false;
-                    if parser.token().kind == TokenKind::LeftCaret {
-                        parser.expect(TokenKind::LeftCaret, false, false)?;
-                    } else if parser.token().kind == TokenKind::RightCaret {
-                        parser.expect(TokenKind::RightCaret, false, false)?;
+                    if parser.token().kind == TokenKind::LeftAngleBracket {
+                        parser.expect(TokenKind::LeftAngleBracket)?;
+                    } else if parser.token().kind == TokenKind::RightAngleBracket {
+                        parser.expect(TokenKind::RightAngleBracket)?;
                         descending = true;
                     }
 
-                    terms.push((parser.expression(0, false)?, descending));
+                    terms.push((parser.expression(0)?, descending));
 
                     if parser.token().kind != TokenKind::Comma {
                         break;
                     }
-                    parser.expect(TokenKind::Comma, false, false)?;
+                    parser.expect(TokenKind::Comma)?;
                 }
-                parser.expect(TokenKind::RightParen, false, false)?;
+                parser.expect(TokenKind::RightParen)?;
 
                 Ok(Ast::new(
                     AstKind::OrderBy(Box::new(left), terms),
@@ -324,7 +324,7 @@ impl Symbol for Token {
 
             // Context variable bind
             TokenKind::At => {
-                let rhs = parser.expression(self.left_binding_power(), false)?;
+                let rhs = parser.expression(self.left_binding_power())?;
 
                 if !matches!(rhs.kind, AstKind::Var(..)) {
                     return Err(expected_var_right(rhs.position, "@"));
@@ -338,7 +338,7 @@ impl Symbol for Token {
 
             // Positional variable bind
             TokenKind::Hash => {
-                let rhs = parser.expression(self.left_binding_power(), false)?;
+                let rhs = parser.expression(self.left_binding_power())?;
 
                 if !matches!(rhs.kind, AstKind::Var(..)) {
                     return Err(expected_var_right(rhs.position, "#"));
@@ -351,12 +351,12 @@ impl Symbol for Token {
             }
 
             // Ternary conditional
-            TokenKind::Question => {
-                let truthy = Box::new(parser.expression(0, false)?);
+            TokenKind::QuestionMark => {
+                let truthy = Box::new(parser.expression(0)?);
 
                 let falsy = if parser.token().kind == TokenKind::Colon {
-                    parser.expect(TokenKind::Colon, false, false)?;
-                    Some(Box::new(parser.expression(0, false)?))
+                    parser.expect(TokenKind::Colon)?;
+                    Some(Box::new(parser.expression(0)?))
                 } else {
                     None
                 };
@@ -392,12 +392,12 @@ impl Symbol for Token {
 
                     step.keep_array = true;
 
-                    parser.expect(TokenKind::RightBracket, false, false)?;
+                    parser.expect(TokenKind::RightBracket)?;
 
                     Ok(left)
                 } else {
-                    let rhs = parser.expression(0, false)?;
-                    parser.expect(TokenKind::RightBracket, true, false)?;
+                    let rhs = parser.expression(0)?;
+                    parser.expect(TokenKind::RightBracket)?;
                     Ok(Ast::new(
                         AstKind::Binary(BinaryOp::Predicate, Box::new(left), Box::new(rhs)),
                         self.position,
@@ -415,16 +415,16 @@ fn parse_object(parser: &mut Parser) -> Result<Object> {
     let mut object: Object = Vec::new();
     if parser.token().kind != TokenKind::RightBrace {
         loop {
-            let key = parser.expression(0, false)?;
-            parser.expect(TokenKind::Colon, false, false)?;
-            let value = parser.expression(0, false)?;
+            let key = parser.expression(0)?;
+            parser.expect(TokenKind::Colon)?;
+            let value = parser.expression(0)?;
             object.push((key, value));
             if parser.token().kind != TokenKind::Comma {
                 break;
             }
-            parser.expect(TokenKind::Comma, false, false)?;
+            parser.expect(TokenKind::Comma)?;
         }
     }
-    parser.expect(TokenKind::RightBrace, true, false)?;
+    parser.expect(TokenKind::RightBrace)?;
     Ok(object)
 }

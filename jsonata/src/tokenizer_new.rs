@@ -42,7 +42,7 @@ pub enum TokenKind {
     LeftAngleBracket,
     Caret,
     Ampersand,
-    ExclamationMark,
+    ExlamationMark,
     Tilde,
 
     // Double character operators
@@ -71,20 +71,13 @@ pub enum TokenKind {
     Signature(String),
 }
 
-impl std::fmt::Display for TokenKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "TODO")
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct Token {
     pub kind: TokenKind,
-    pub position: Position,
 }
 
 #[derive(Debug)]
-pub struct Tokenizer<'a> {
+struct Tokenizer<'a> {
     input: &'a str,
     chars: Chars<'a>,
 
@@ -107,10 +100,6 @@ fn is_whitespace(c: char) -> bool {
         | '\u{000D}' // \r
         | '\u{0020}' // space
     )
-}
-
-fn is_name_start(c: char) -> bool {
-    c.is_alphabetic() || c == '$'
 }
 
 fn is_operator(c: char) -> bool {
@@ -170,6 +159,12 @@ impl<'a> Tokenizer<'a> {
         self.chars.clone().next().unwrap_or(NULL)
     }
 
+    fn second(&mut self) -> char {
+        let mut iter = self.chars.clone();
+        iter.next();
+        iter.next().unwrap_or(NULL)
+    }
+
     fn eat_while(&mut self, mut predicate: impl FnMut(char) -> bool) {
         while predicate(self.peek()) && !self.eof() {
             self.bump();
@@ -207,7 +202,7 @@ impl<'a> Tokenizer<'a> {
             | self.get_hex_digit()?)
     }
 
-    pub fn next_token(&mut self) -> Result<Token> {
+    pub fn next(&mut self) -> Result<Token> {
         use TokenKind::*;
 
         let (kind, start_byte_index, start_char_index) = loop {
@@ -273,7 +268,7 @@ impl<'a> Tokenizer<'a> {
                         self.bump();
                         NotEqual
                     }
-                    _ => ExclamationMark,
+                    _ => ExlamationMark,
                 },
 
                 '*' => match self.peek() {
@@ -463,23 +458,17 @@ impl<'a> Tokenizer<'a> {
                 }
 
                 // Names
-                c if is_name_start(c) => {
+                c if c.is_alphabetic() => {
                     self.eat_while(|c| !(is_whitespace(c) || is_operator(c)));
 
-                    if c == '$' {
-                        Var(String::from(
-                            &self.input[start_byte_index + 1..self.byte_index],
-                        ))
-                    } else {
-                        match &self.input[start_byte_index..self.byte_index] {
-                            "or" => Or,
-                            "in" => In,
-                            "and" => And,
-                            "true" => Bool(true),
-                            "false" => Bool(false),
-                            "null" => Null,
-                            _ => Name(String::from(&self.input[start_byte_index..self.byte_index])),
-                        }
+                    match &self.input[start_byte_index..self.byte_index] {
+                        "or" => Or,
+                        "in" => In,
+                        "and" => And,
+                        "true" => Bool(true),
+                        "false" => Bool(false),
+                        "null" => Null,
+                        _ => Name(String::from(&self.input[start_byte_index..self.byte_index])),
                     }
                 }
 
@@ -495,10 +484,7 @@ impl<'a> Tokenizer<'a> {
             }
         };
 
-        let token = Token {
-            kind,
-            position: self.pos(),
-        };
+        let token = Token { kind };
 
         if let Num(n) = token.kind {
             eprintln!("NUMBER: {}", n);
@@ -670,8 +656,8 @@ mod tests {
     #[test]
     fn comment() {
         let mut t = Tokenizer::new("/* This is a comment */");
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Comment));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::End));
+        assert!(matches!(t.next().unwrap().kind, TokenKind::Comment));
+        assert!(matches!(t.next().unwrap().kind, TokenKind::End));
     }
 
     #[test]
@@ -681,7 +667,7 @@ mod tests {
             "-1.1234",
         );
         loop {
-            let token = t.next_token().unwrap();
+            let token = t.next().unwrap();
             if token.kind == TokenKind::End {
                 break;
             }
