@@ -35,7 +35,7 @@ pub enum Error {
 
     // Compile time errors
     S0101UnterminatedStringLiteral(usize),
-    S0102LexedNumberOutOfRange(Position, String),
+    S0102LexedNumberOutOfRange(usize, String),
     S0103UnsupportedEscape(usize, char),
     S0104InvalidUnicodeEscape(usize),
     S0105UnterminatedQuoteProp(usize),
@@ -43,7 +43,7 @@ pub enum Error {
     S0201SyntaxError(usize, String),
     S0202UnexpectedToken(Position, String, String),
     S0204UnknownOperator(usize, String),
-    S0203ExpectedTokenBeforeEnd(Position, String),
+    S0203ExpectedTokenBeforeEnd(usize, String),
     S0208InvalidFunctionParam(Position, String),
     S0209InvalidPredicate(Position),
     S0210MultipleGroupBy(Position),
@@ -163,6 +163,7 @@ impl fmt::Display for Error {
         write!(f, "{} @ ", self.code())?;
 
         match *self {
+            // JSON parsing errors
             I0201UnexpectedCharacter { ref ch, ref line, ref column, } =>
                 write!(f, "Unexpected character in input: {} at ({}:{})", ch, line, column),
             I0202UnexpectedEndOfJson =>
@@ -173,68 +174,8 @@ impl fmt::Display for Error {
                 write!(f, "Failed to parse UTF-8 bytes in input"),
             I0205WrongType(ref s) =>
                 write!(f, "Wrong type in input, expected: {}", s),
-            S0201SyntaxError(ref p, ref t) =>
-                write!(f, "{} Syntax error `{}`", p, t),
-            S0204UnknownOperator(ref p, ref t) =>
-                write!(f, "{} Unknown operator: `{}`", p, t),
-            S0101UnterminatedStringLiteral(ref p) =>
-                write!(f, "{} Unterminated string literal", p),
-            S0202UnexpectedToken(ref p, ref e, ref a) =>
-                write!(f, "{} Expected `{}`, got `{}`", p, e, a),
-            S0203ExpectedTokenBeforeEnd(ref p, ref t) =>
-                write!(f, "{} Expected `{}` before end of expression", p, t),
-            S0213InvalidStep(ref p, ref k) =>
-                write!(f, "{} The literal value `{}` cannot be used as a step within a path expression", p, k),
-            S0209InvalidPredicate(ref p) =>
-                write!(f, "{} A predicate cannot follow a grouping expression in a step", p),
-            S0210MultipleGroupBy(ref p) =>
-                write!(f, "{} Each step can only have one grouping expression", p),
-            S0211InvalidUnary(ref p, ref k) =>
-                write!(f, "{} The symbol `{}` cannot be used as a unary operator", p, k),
-            S0208InvalidFunctionParam(ref p, ref k) =>
-                write!(f, "{} Parameter `{}` of function definition must be a variable name (start with $)", p, k),
-            S0212ExpectedVarLeft(ref p) =>
-                write!(f, "{} The left side of `:=` must be a variable name (start with $)", p),
-            S0214ExpectedVarRight(ref p, ref k) =>
-                write!(f, "{} The right side of `{}` must be a variable name (start with $)", p, k),
-            S0106UnterminatedComment(ref p) =>
-                write!(f, "{} Comment has no closing tag", p),
-            S0102LexedNumberOutOfRange(ref p, ref n) =>
-                write!(f, "{} Number out of range: {}", p, n),
-            S0104InvalidUnicodeEscape(ref p) =>
-                write!(f, "{}: The escape sequence \\u must be followed by 4 hex digits", p),
-            S0103UnsupportedEscape(ref p, ref c) =>
-                write!(f, "{} Unsupported escape sequence: \\{}", p, c),
-            S0105UnterminatedQuoteProp(ref p) =>
-                write!(f, "{} Quoted property name must be terminated with a backquote (`)", p),
-            D1002NegatingNonNumeric(ref p, ref v) =>
-                write!(f, "{} Cannot negate a non-numeric value `{}`", p, v),
-            T1003NonStringKey(ref p, ref v) =>
-                write!( f, "{} Key in object structure must evaluate to a string; got: {}", p, v),
-            D1009MultipleKeys(ref p, ref k) =>
-                write!( f, "{} Multiple key definitions evaluate to same key: {}", p, k),
-            T2001LeftSideNotNumber(ref p, ref o) =>
-                write!( f, "{} The left side of the `{}` operator must evaluate to a number", p, o),
-            T2002RightSideNotNumber(ref p, ref o) =>
-                write!( f, "{} The right side of the `{}` operator must evaluate to a number", p, o),
-            T2009BinaryOpMismatch(ref p,ref l ,ref r ,ref o ) =>
-                write!(f, "{} The values {} and {} either side of operator {} must be of the same data type", p, l, r, o),
-            T2010BinaryOpTypes(ref p, ref o) =>
-                write!(f, "{} The expressions either side of operator `{}` must evaluate to numeric or string values", p, o),
-            D1001NumberOfOutRange(ref n) =>
-                write!(f, "Number out of range: {}", n),
-            T1006InvokedNonFunction(ref p) =>
-                write!(f, "{} Attempted to invoke a non-function", p),
-            T1005InvokedNonFunctionSuggest(ref p, ref t) =>
-                write!(f, "{} Attempted to invoke a non-function. Did you mean ${}?", p, t),
-            T2003LeftSideNotInteger(ref p) =>
-                write!(f, "{} The left side of the range operator (..) must evaluate to an integer", p),
-            T2004RightSideNotInteger(ref p) =>
-                write!(f, "{} The right side of the range operator (..) must evaluate to an integer", p),
-            T0410ArgumentNotValid(ref p, ref i, ref t) =>
-                write!(f, "{} Argument {} of function {} does not match function signature", p, i, t),
-            T0412ArgumentMustBeArrayOfType(ref p, ref i, ref t, ref ty) =>
-                write!(f, "{} Argument {} of function {} must be an array of {}", p, i, t, ty),
+                
+            // Signature parsing errors
             F0401UnexpectedEndOfSignature => 
                 write!(f, "Unexpected end of signature"),
             F0402SignatureStartInvalid => 
@@ -263,6 +204,74 @@ impl fmt::Display for Error {
                 write!(f, "Expected '{}' in signature", t),
             F0414UnexpectedCharInSignature(ref t) =>
                 write!(f, "Unexpected char '{}' in signature", t),
+                
+            // Compile time errors
+            S0101UnterminatedStringLiteral(ref p) =>
+                write!(f, "{}: Unterminated string literal", p),
+            S0102LexedNumberOutOfRange(ref p, ref n) =>
+                write!(f, "{}: Number out of range: {}", p, n),
+            S0103UnsupportedEscape(ref p, ref c) =>
+                write!(f, "{}: Unsupported escape sequence: \\{}", p, c),
+            S0104InvalidUnicodeEscape(ref p) =>
+                write!(f, "{}: The escape sequence \\u must be followed by 4 hex digits", p),
+            S0105UnterminatedQuoteProp(ref p) =>
+                write!(f, "{}: Quoted property name must be terminated with a backquote (`)", p),
+            S0106UnterminatedComment(ref p) =>
+                write!(f, "{}: Comment has no closing tag", p),
+            S0201SyntaxError(ref p, ref t) =>
+                write!(f, "{}: Syntax error `{}`", p, t),
+            S0202UnexpectedToken(ref p, ref e, ref a) =>
+                write!(f, "{}: Expected `{}`, got `{}`", p, e, a),
+            S0203ExpectedTokenBeforeEnd(ref p, ref t) =>
+                write!(f, "{}: Expected `{}` before end of expression", p, t),
+            S0204UnknownOperator(ref p, ref t) =>
+                write!(f, "{}: Unknown operator: `{}`", p, t),
+            S0208InvalidFunctionParam(ref p, ref k) =>
+                write!(f, "{}: Parameter `{}` of function definition must be a variable name (start with $)", p, k),
+            S0209InvalidPredicate(ref p) =>
+                write!(f, "{}: A predicate cannot follow a grouping expression in a step", p),
+            S0210MultipleGroupBy(ref p) =>
+                write!(f, "{}: Each step can only have one grouping expression", p),
+            S0211InvalidUnary(ref p, ref k) =>
+                write!(f, "{}: The symbol `{}` cannot be used as a unary operator", p, k),
+            S0212ExpectedVarLeft(ref p) =>
+                write!(f, "{}: The left side of `:=` must be a variable name (start with $)", p),
+            S0213InvalidStep(ref p, ref k) =>
+                write!(f, "{}: The literal value `{}` cannot be used as a step within a path expression", p, k),
+            S0214ExpectedVarRight(ref p, ref k) =>
+                write!(f, "{}: The right side of `{}` must be a variable name (start with $)", p, k),
+            
+            // Runtime errors
+            D1001NumberOfOutRange(ref n) =>
+                write!(f, "Number out of range: {}", n),
+            D1002NegatingNonNumeric(ref p, ref v) =>
+                write!(f, "{}: Cannot negate a non-numeric value `{}`", p, v),
+            D1009MultipleKeys(ref p, ref k) =>
+                write!( f, "{}: Multiple key definitions evaluate to same key: {}", p, k),
+            
+            // Type errors
+            T0410ArgumentNotValid(ref p, ref i, ref t) =>
+                write!(f, "{}: Argument {} of function {} does not match function signature", p, i, t),
+            T0412ArgumentMustBeArrayOfType(ref p, ref i, ref t, ref ty) =>
+                write!(f, "{}: Argument {} of function {} must be an array of {}", p, i, t, ty),
+            T1003NonStringKey(ref p, ref v) =>
+                write!( f, "{}: Key in object structure must evaluate to a string; got: {}", p, v),
+            T1005InvokedNonFunctionSuggest(ref p, ref t) =>
+                write!(f, "{}: Attempted to invoke a non-function. Did you mean ${}?", p, t),
+            T1006InvokedNonFunction(ref p) =>
+                write!(f, "{}: Attempted to invoke a non-function", p),
+            T2001LeftSideNotNumber(ref p, ref o) =>
+                write!( f, "{}: The left side of the `{}` operator must evaluate to a number", p, o),
+            T2002RightSideNotNumber(ref p, ref o) =>
+                write!( f, "{}: The right side of the `{}` operator must evaluate to a number", p, o),
+            T2003LeftSideNotInteger(ref p) =>
+                write!(f, "{}: The left side of the range operator (..) must evaluate to an integer", p),
+            T2004RightSideNotInteger(ref p) =>
+                write!(f, "{}: The right side of the range operator (..) must evaluate to an integer", p),
+            T2009BinaryOpMismatch(ref p,ref l ,ref r ,ref o ) =>
+                write!(f, "{}: The values {} and {} either side of operator {} must be of the same data type", p, l, r, o),
+            T2010BinaryOpTypes(ref p, ref o) =>
+                write!(f, "{}: The expressions either side of operator `{}` must evaluate to numeric or string values", p, o),
         }
     }
 }

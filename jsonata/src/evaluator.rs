@@ -343,11 +343,11 @@ impl Evaluator {
             BinaryOp::Range => {
                 let rhs = self.evaluate(rhs_ast, input, frame)?;
 
-                if !lhs.is_undefined() && !lhs.is_usize() {
+                if !lhs.is_undefined() && !lhs.is_integer() {
                     return Err(Error::T2003LeftSideNotInteger(node.position));
                 };
 
-                if !rhs.is_undefined() && !rhs.is_usize() {
+                if !rhs.is_undefined() && !rhs.is_integer() {
                     return Err(Error::T2004RightSideNotInteger(node.position));
                 }
 

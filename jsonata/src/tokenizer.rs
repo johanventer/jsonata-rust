@@ -72,7 +72,54 @@ pub enum TokenKind {
 
 impl std::fmt::Display for TokenKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "TODO")
+        match self {
+            TokenKind::End => write!(f, "(end)"),
+            TokenKind::Whitespace => write!(f, "(whitespace)"),
+            TokenKind::Comment => write!(f, "(comment"),
+            TokenKind::Period => write!(f, "."),
+            TokenKind::LeftBracket => write!(f, "["),
+            TokenKind::RightBracket => write!(f, "]"),
+            TokenKind::LeftBrace => write!(f, "{{"),
+            TokenKind::RightBrace => write!(f, "}}"),
+            TokenKind::LeftParen => write!(f, "("),
+            TokenKind::RightParen => write!(f, ")"),
+            TokenKind::Comma => write!(f, ","),
+            TokenKind::At => write!(f, "@"),
+            TokenKind::Hash => write!(f, "#"),
+            TokenKind::SemiColon => write!(f, ";"),
+            TokenKind::Colon => write!(f, ":"),
+            TokenKind::QuestionMark => write!(f, "?"),
+            TokenKind::Plus => write!(f, "+"),
+            TokenKind::Minus => write!(f, "-"),
+            TokenKind::Asterisk => write!(f, "*"),
+            TokenKind::ForwardSlash => write!(f, "/"),
+            TokenKind::PercentSign => write!(f, "%"),
+            TokenKind::Pipe => write!(f, "|"),
+            TokenKind::Equal => write!(f, "="),
+            TokenKind::RightAngleBracket => write!(f, ">"),
+            TokenKind::LeftAngleBracket => write!(f, "<"),
+            TokenKind::Caret => write!(f, "^"),
+            TokenKind::Ampersand => write!(f, "&"),
+            TokenKind::ExclamationMark => write!(f, "!"),
+            TokenKind::Tilde => write!(f, "~"),
+            TokenKind::Range => write!(f, ".."),
+            TokenKind::Bind => write!(f, ":="),
+            TokenKind::NotEqual => write!(f, "!="),
+            TokenKind::GreaterEqual => write!(f, ">="),
+            TokenKind::LessEqual => write!(f, "<="),
+            TokenKind::Descendent => write!(f, "**"),
+            TokenKind::Apply => write!(f, "~>"),
+            TokenKind::Or => write!(f, "or"),
+            TokenKind::In => write!(f, "in"),
+            TokenKind::And => write!(f, "and"),
+            TokenKind::Null => write!(f, "null"),
+            TokenKind::Bool(v) => write!(f, "{}", v),
+            TokenKind::Str(v) => write!(f, "\"{}\"", v),
+            TokenKind::Num(v) => write!(f, "{}", v),
+            TokenKind::Name(v) => write!(f, "{}", v),
+            TokenKind::Var(v) => write!(f, "${}", v),
+            TokenKind::Signature(v) => write!(f, "{}", v),
+        }
     }
 }
 
@@ -110,34 +157,9 @@ const NULL: char = '\0';
 /// The mantissa in a json::Number is a u64, but we know that f64 has 53 bits for mantissa
 /// (52 in the mantissa field, and the implict 1 at the start), so at this point we have
 /// already blown the range of f64, so it's just to prevent u64 overflow.
-const MAX_PARSED_MANTISSA: u64 = u64::pow(2, 59);
+const MAX_PRECISION: u64 = u64::pow(2, 59);
 
-/// The actual maximum mantissa allowed, used for final range checks
-const MAX_MANTISSA: u64 = u64::pow(2, 53);
-
-/// Final checks on a number for out of range conditions
-fn finalize_number(mut mantissa: u64, mut exponent: i16) -> Result<Number> {
-    // Strip any trailing zeroes from the the mantissa and check in we are still in bounds
-    while mantissa % 10 == 0 {
-        if exponent < 0 {
-            exponent += 1;
-        } else {
-            exponent -= 1;
-        }
-
-        mantissa /= 10;
-
-        if mantissa > MAX_MANTISSA
-            || exponent < f64::MIN_10_EXP as i16
-            || exponent > f64::MAX_10_EXP as i16
-        {
-            return Err(Error::D1001NumberOfOutRange(0.0));
-        }
-    }
-
-    Ok(unsafe { Number::from_parts_unchecked(true, mantissa, exponent) })
-}
-
+#[inline]
 fn is_whitespace(c: char) -> bool {
     matches!(
         c,
@@ -150,10 +172,12 @@ fn is_whitespace(c: char) -> bool {
     )
 }
 
+#[inline]
 fn is_name_start(c: char) -> bool {
     c.is_alphabetic() || c == '$'
 }
 
+#[inline]
 fn is_operator(c: char) -> bool {
     matches!(
         c,
@@ -211,6 +235,12 @@ impl<'a> Tokenizer<'a> {
 
     fn peek(&mut self) -> char {
         self.chars.clone().next().unwrap_or(NULL)
+    }
+
+    fn peek_second(&mut self) -> char {
+        let mut iter = self.chars.clone();
+        iter.next();
+        iter.next().unwrap_or(NULL)
     }
 
     fn eat_while(&mut self, mut predicate: impl FnMut(char) -> bool) {
@@ -558,8 +588,6 @@ impl<'a> Tokenizer<'a> {
             }
         };
 
-        // Check for out of range numbers,
-
         let token = Token {
             kind,
             position: self.pos(),
@@ -567,10 +595,10 @@ impl<'a> Tokenizer<'a> {
             len: self.byte_index - self.start_byte_index,
         };
 
-        eprintln!(
-            "{:?}, bytes: {} -> {}",
-            token, self.start_byte_index, self.byte_index
-        );
+        // eprintln!(
+        //     "{:?}, index: {}, len: {}",
+        //     token, token.byte_index, token.len
+        // );
 
         Ok(token)
     }
@@ -584,7 +612,7 @@ impl<'a> Tokenizer<'a> {
         let result: Number;
 
         loop {
-            if mantissa > MAX_PARSED_MANTISSA {
+            if mantissa > MAX_PRECISION {
                 return Err(Error::D1001NumberOfOutRange(0.0));
             }
 
@@ -610,9 +638,19 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn number_extensions(&mut self, mantissa: &mut u64, exponent: &mut i16) -> Result<Number> {
-        match self.bump() {
-            '.' => self.number_fraction(mantissa, exponent),
-            'e' | 'E' => self.number_exponent(mantissa, exponent),
+        match self.peek() {
+            '.' => match self.peek_second() {
+                // Range operator
+                '.' => Ok((*mantissa).into()),
+                _ => {
+                    self.bump();
+                    self.number_fraction(mantissa, exponent)
+                }
+            },
+            'e' | 'E' => {
+                self.bump();
+                self.number_exponent(mantissa, exponent)
+            }
             _ => Ok((*mantissa).into()),
         }
     }
@@ -621,9 +659,10 @@ impl<'a> Tokenizer<'a> {
         let result: Number;
 
         // Have to have at least one fractional digit
-        match self.bump() {
+        match self.peek() {
             c @ '0'..='9' => {
-                if *mantissa < MAX_PARSED_MANTISSA {
+                self.bump();
+                if *mantissa < MAX_PRECISION {
                     *mantissa = *mantissa * 10 + (c as u8 - b'0') as u64;
                     *exponent -= 1;
                 } else {
@@ -650,13 +689,14 @@ impl<'a> Tokenizer<'a> {
         // Get the rest of the fractional digits
         loop {
             if self.eof() {
-                result = finalize_number(*mantissa, *exponent)?;
+                result = self.finalize_number(*mantissa, *exponent)?;
                 break;
             }
 
-            match self.bump() {
+            match self.peek() {
                 c @ '0'..='9' => {
-                    if *mantissa < MAX_PARSED_MANTISSA {
+                    self.bump();
+                    if *mantissa < MAX_PRECISION {
                         *mantissa = *mantissa * 10 + (c as u8 - b'0') as u64;
                         *exponent -= 1;
                     } else {
@@ -673,11 +713,12 @@ impl<'a> Tokenizer<'a> {
                     }
                 }
                 'e' | 'E' => {
+                    self.bump();
                     result = self.number_exponent(mantissa, exponent)?;
                     break;
                 }
                 _ => {
-                    result = finalize_number(*mantissa, *exponent)?;
+                    result = self.finalize_number(*mantissa, *exponent)?;
                     break;
                 }
             }
@@ -703,8 +744,11 @@ impl<'a> Tokenizer<'a> {
             _ => 1,
         };
 
-        let mut exponent = match self.bump() {
-            c @ '0'..='9' => (c as u8 - b'0') as i16,
+        let mut exponent = match self.peek() {
+            c @ '0'..='9' => {
+                self.bump();
+                (c as u8 - b'0') as i16
+            }
             _ => {
                 return Err(Error::S0201SyntaxError(
                     self.start_char_index,
@@ -718,8 +762,9 @@ impl<'a> Tokenizer<'a> {
                 break;
             }
 
-            match self.bump() {
+            match self.peek() {
                 c @ '0'..='9' => {
+                    self.bump();
                     exponent = exponent
                         .saturating_mul(10)
                         .saturating_add((c as u8 - b'0') as i16);
@@ -728,7 +773,32 @@ impl<'a> Tokenizer<'a> {
             }
         }
 
-        finalize_number(*mantissa, original_exponent.saturating_add(exponent * sign))
+        self.finalize_number(*mantissa, original_exponent.saturating_add(exponent * sign))
+    }
+
+    /// Final checks on a number for out of range conditions
+    fn finalize_number(&self, mantissa: u64, exponent: i16) -> Result<Number> {
+        let result = unsafe { Number::from_parts_unchecked(true, mantissa, exponent) };
+        match f64::try_from(result) {
+            Ok(f) => match f.classify() {
+                std::num::FpCategory::Infinite
+                | std::num::FpCategory::Nan
+                | std::num::FpCategory::Subnormal => {
+                    return Err(Error::S0102LexedNumberOutOfRange(
+                        self.start_byte_index,
+                        self.token_string(),
+                    ))
+                }
+                _ => {}
+            },
+            _ => {
+                return Err(Error::S0102LexedNumberOutOfRange(
+                    self.start_byte_index,
+                    self.token_string(),
+                ))
+            }
+        }
+        Ok(result)
     }
 }
 
@@ -747,10 +817,11 @@ mod tests {
     fn drive() {
         let mut t = Tokenizer::new(
             //            "!= := : = @ # *   -   +  or in and Product ( ) { } [  ]  .. Account 'hello \\uD83D\\uDE02 \\n world' `b` /*   */ !=",
-            "-1.1234",
+            "[1]",
         );
         loop {
             let token = t.next_token().unwrap();
+
             if token.kind == TokenKind::End {
                 break;
             }

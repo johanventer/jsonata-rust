@@ -14,10 +14,6 @@ pub fn s0202_unexpected_token(p: Position, e: &TokenKind, a: &TokenKind) -> Erro
     Error::S0202UnexpectedToken(p, e.to_string(), a.to_string())
 }
 
-pub fn s0203_expected_token_before_end(p: Position, k: &TokenKind) -> Error {
-    Error::S0203ExpectedTokenBeforeEnd(p, k.to_string())
-}
-
 pub fn s0211_invalid_unary(p: Position, k: &TokenKind) -> Error {
     Error::S0211InvalidUnary(p, k.to_string())
 }

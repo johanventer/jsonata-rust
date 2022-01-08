@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::convert::TryFrom;
 use std::ops::Deref;
 use std::{collections::HashMap, fmt};
 
@@ -55,8 +54,21 @@ impl Value {
     }
 
     #[inline]
-    pub fn is_usize(&self) -> bool {
-        matches!(self.pool.get(self.index), ValueKind::Number(n) if usize::try_from(*n).is_ok())
+    pub fn is_integer(&self) -> bool {
+        if let ValueKind::Number(ref n) = self.pool.get(self.index) {
+            let n = f64::from(*n);
+            match n.classify() {
+                std::num::FpCategory::Nan
+                | std::num::FpCategory::Infinite
+                | std::num::FpCategory::Subnormal => false,
+                _ => {
+                    let mantissa = n.trunc();
+                    n - mantissa == 0.0
+                }
+            }
+        } else {
+            false
+        }
     }
 
     #[inline]
@@ -159,18 +171,14 @@ impl Value {
 
     pub fn as_usize(&self) -> usize {
         match self.pool.get(self.index) {
-            ValueKind::Number(n) => {
-                usize::try_from(*n).unwrap_or_else(|_| panic!("Number is not a valid usize"))
-            }
+            ValueKind::Number(ref n) => f64::from(*n) as usize,
             _ => panic!("Not a number"),
         }
     }
 
     pub fn as_isize(&self) -> isize {
         match self.pool.get(self.index) {
-            ValueKind::Number(n) => {
-                isize::try_from(*n).unwrap_or_else(|_| panic!("Number is not a valid isize"))
-            }
+            ValueKind::Number(ref n) => f64::from(*n) as isize,
             _ => panic!("Not a number"),
         }
     }

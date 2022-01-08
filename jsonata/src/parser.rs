@@ -31,9 +31,9 @@ impl<'a> Parser<'a> {
 
     pub fn expect(&mut self, expected: TokenKind) -> Result<()> {
         if self.token.kind == TokenKind::End {
-            return Err(s0203_expected_token_before_end(
-                self.token.position,
-                &expected,
+            return Err(Error::S0203ExpectedTokenBeforeEnd(
+                self.token.byte_index,
+                expected.to_string(),
             ));
         }
 
