@@ -140,7 +140,8 @@ pub struct Token {
 /// * Function signatures, e.g. `function($x)<s> { $x }`
 /// * Regular expressions, e.g. `/some regex/`
 ///
-/// There's some odd flags in here to accomodate that.
+/// The tokenizer can work out when a signature is expected, but not when a regular expression
+/// is, which is why the `infix` parameter to `next_token()` exists.
 #[derive(Debug)]
 pub struct Tokenizer<'a> {
     input: &'a str,
@@ -260,15 +261,6 @@ impl<'a> Tokenizer<'a> {
     fn eat_while(&mut self, mut predicate: impl FnMut(char) -> bool) {
         while predicate(self.peek()) && !self.eof() {
             self.bump();
-        }
-    }
-
-    // TODO: remove
-    fn pos(&self) -> Position {
-        Position {
-            line: 0,
-            column: 0,
-            source_pos: 0,
         }
     }
 
@@ -650,7 +642,11 @@ impl<'a> Tokenizer<'a> {
 
         let token = Token {
             kind,
-            position: self.pos(),
+            position: Position {
+                source_pos: self.start_char_index,
+                line: 0,
+                column: 0,
+            },
             char_index: self.start_char_index,
             byte_index: self.start_byte_index,
             len: self.byte_index - self.start_byte_index,
@@ -868,17 +864,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn drive() {
-        let mut t = Tokenizer::new("function($x)<s>{$x}");
-        loop {
-            let token = t.next_token().unwrap();
-            if let TokenKind::End = token.kind {
-                break;
-            }
-        }
-    }
-
-    #[test]
     fn comment() {
         let mut t = Tokenizer::new("/* This is a comment */");
         assert!(matches!(t.next_token().unwrap().kind, TokenKind::End));
@@ -1048,5 +1033,28 @@ mod tests {
             t.next_token().unwrap().kind,
             TokenKind::Num(n) if (f64::from(n) - 2.234E-2_f64).abs() < f64::EPSILON
         ));
+    }
+
+    #[test]
+    fn signature() {
+        let mut t = Tokenizer::new("function($x)<s>{$x}");
+        assert!(matches!(
+            t.next_token().unwrap().kind,
+            TokenKind::Name(s) if s == "function"
+        ));
+        assert!(matches!(t.next_token().unwrap().kind, TokenKind::LeftParen));
+        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Var(s) if s == "x"));
+        assert!(matches!(
+            t.next_token().unwrap().kind,
+            TokenKind::RightParen
+        ));
+        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Signature(s) if s == "<s>"));
+        assert!(matches!(t.next_token().unwrap().kind, TokenKind::LeftBrace));
+        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Var(s) if s == "x"));
+        assert!(matches!(
+            t.next_token().unwrap().kind,
+            TokenKind::RightBrace
+        ));
+        assert!(matches!(t.next_token().unwrap().kind, TokenKind::End));
     }
 }
