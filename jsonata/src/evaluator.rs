@@ -1,10 +1,8 @@
 use std::collections::{hash_map, HashMap};
 
 use jsonata_errors::{Error, Result};
-use jsonata_shared::Position;
 
 use super::ast::*;
-use super::error::*;
 use super::frame::Frame;
 use super::functions::*;
 use super::value::{ArrayFlags, Value, ValueKind, ValuePool};
@@ -22,13 +20,13 @@ impl Evaluator {
     fn fn_context<'a>(
         &'a self,
         name: &'a str,
-        position: &Position,
+        char_index: usize,
         input: &'a Value,
         frame: &'a Frame,
     ) -> FunctionContext<'a> {
         FunctionContext {
             name,
-            position: *position,
+            char_index,
             pool: self.pool.clone(),
             evaluator: self,
             input: input.clone(),
@@ -55,7 +53,7 @@ impl Evaluator {
             } => self.evaluate_ternary(cond, truthy, falsy.as_deref(), input, frame)?,
             AstKind::Path(ref steps) => self.evaluate_path(node, steps, input, frame)?,
             AstKind::Name(ref name) => fn_lookup_internal(
-                &self.fn_context("lookup", &node.position, input, frame),
+                &self.fn_context("lookup", node.char_index, input, frame),
                 input,
                 name,
             ),
@@ -137,7 +135,10 @@ impl Evaluator {
                 match *result {
                     ValueKind::Undefined => Ok(self.pool.undefined()),
                     ValueKind::Number(num) if !num.is_nan() => Ok(self.pool.number(-num)),
-                    _ => Err(d1002_negating_non_numeric(node.position, &result)),
+                    _ => Err(Error::D1002NegatingNonNumeric(
+                        node.char_index,
+                        result.to_string(),
+                    )),
                 }
             }
             UnaryOp::ArrayConstructor(ref array) => {
@@ -152,7 +153,7 @@ impl Evaluator {
                         result.push_index(value.index);
                     } else {
                         result = fn_append(
-                            &self.fn_context("append", &node.position, input, frame),
+                            &self.fn_context("append", node.char_index, input, frame),
                             &result,
                             &value,
                         )?;
@@ -161,14 +162,14 @@ impl Evaluator {
                 Ok(result)
             }
             UnaryOp::ObjectConstructor(ref object) => {
-                self.evaluate_group_expression(node.position, object, input, frame)
+                self.evaluate_group_expression(node.char_index, object, input, frame)
             }
         }
     }
 
     fn evaluate_group_expression(
         &self,
-        position: Position,
+        char_index: usize,
         object: &[(Ast, Ast)],
         input: &Value,
         frame: &Frame,
@@ -189,7 +190,7 @@ impl Evaluator {
             for (index, pair) in object.iter().enumerate() {
                 let key = self.evaluate(&pair.0, &item, frame)?;
                 if !key.is_string() {
-                    return Err(t1003_non_string_key(position, &key));
+                    return Err(Error::T1003NonStringKey(char_index, key.to_string()));
                 }
 
                 let key = key.as_str();
@@ -198,10 +199,10 @@ impl Evaluator {
                     hash_map::Entry::Occupied(mut entry) => {
                         let group = entry.get_mut();
                         if group.index != index {
-                            return Err(d1009_multiple_keys(position, &key));
+                            return Err(Error::D1009MultipleKeys(char_index, key.to_string()));
                         }
                         group.data = fn_append(
-                            &self.fn_context("append", &position, &input, frame),
+                            &self.fn_context("append", char_index, &input, frame),
                             &group.data,
                             &item,
                         )?;
@@ -262,13 +263,23 @@ impl Evaluator {
                 let lhs = match *lhs {
                     ValueKind::Undefined => return Ok(self.pool.undefined()),
                     ValueKind::Number(n) if !n.is_nan() => f64::from(n),
-                    _ => return Err(t2001_left_side_not_number(node.position, op)),
+                    _ => {
+                        return Err(Error::T2001LeftSideNotNumber(
+                            node.char_index,
+                            op.to_string(),
+                        ))
+                    }
                 };
 
                 let rhs = match *rhs {
                     ValueKind::Undefined => return Ok(self.pool.undefined()),
                     ValueKind::Number(n) if !n.is_nan() => f64::from(n),
-                    _ => return Err(t2002_right_side_not_number(node.position, op)),
+                    _ => {
+                        return Err(Error::T2002RightSideNotNumber(
+                            node.char_index,
+                            op.to_string(),
+                        ))
+                    }
                 };
 
                 let result = match op {
@@ -298,7 +309,7 @@ impl Evaluator {
                 }
 
                 if !((lhs.is_number() || lhs.is_string()) && (rhs.is_number() || rhs.is_string())) {
-                    return Err(t2010_binary_op_types(node.position, op));
+                    return Err(Error::T2010BinaryOpTypes(node.char_index, op.to_string()));
                 }
 
                 if let (ValueKind::Number(ref lhs), ValueKind::Number(ref rhs)) = (&*lhs, &*rhs) {
@@ -323,7 +334,12 @@ impl Evaluator {
                     }));
                 }
 
-                Err(t2009_binary_op_mismatch(node.position, &lhs, &rhs, op))
+                Err(Error::T2009BinaryOpMismatch(
+                    node.char_index,
+                    lhs.to_string(),
+                    rhs.to_string(),
+                    op.to_string(),
+                ))
             }
 
             BinaryOp::Equal | BinaryOp::NotEqual => {
@@ -344,11 +360,11 @@ impl Evaluator {
                 let rhs = self.evaluate(rhs_ast, input, frame)?;
 
                 if !lhs.is_undefined() && !lhs.is_integer() {
-                    return Err(Error::T2003LeftSideNotInteger(node.position));
+                    return Err(Error::T2003LeftSideNotInteger(node.char_index));
                 };
 
                 if !rhs.is_undefined() && !rhs.is_integer() {
-                    return Err(Error::T2004RightSideNotInteger(node.position));
+                    return Err(Error::T2004RightSideNotInteger(node.char_index));
                 }
 
                 if lhs.is_undefined() || rhs.is_undefined() {
@@ -382,7 +398,7 @@ impl Evaluator {
                 if !lhs.is_undefined() {
                     result.push_str(
                         &fn_string(
-                            &self.fn_context("string", &node.position, input, frame),
+                            &self.fn_context("string", node.char_index, input, frame),
                             &lhs,
                         )?
                         .as_str(),
@@ -391,7 +407,7 @@ impl Evaluator {
                 if !rhs.is_undefined() {
                     result.push_str(
                         &fn_string(
-                            &self.fn_context("string", &node.position, input, frame),
+                            &self.fn_context("string", node.char_index, input, frame),
                             &rhs,
                         )?
                         .as_str(),
@@ -436,7 +452,7 @@ impl Evaluator {
                         args.push_index(rhs.index);
 
                         self.apply_function(
-                            lhs_ast.position,
+                            lhs_ast.char_index,
                             &self.pool.undefined(),
                             &chain,
                             &args,
@@ -446,7 +462,7 @@ impl Evaluator {
                         let mut args = self.pool.array_with_capacity(1, ArrayFlags::empty());
                         args.push_index(lhs.index);
                         self.apply_function(
-                            rhs_ast.position,
+                            rhs_ast.char_index,
                             &self.pool.undefined(),
                             &rhs,
                             &args,
@@ -536,8 +552,8 @@ impl Evaluator {
             result.set_flags(flags);
         }
 
-        if let Some((position, ref object)) = node.group_by {
-            result = self.evaluate_group_expression(position, object, &result, frame)?;
+        if let Some((char_index, ref object)) = node.group_by {
+            result = self.evaluate_group_expression(char_index, object, &result, frame)?;
         }
 
         Ok(result)
@@ -685,7 +701,7 @@ impl Evaluator {
                 if let AstKind::Name(ref name) = steps[0].kind {
                     if frame.lookup(name).is_some() {
                         return Err(Error::T1005InvokedNonFunctionSuggest(
-                            proc.position,
+                            proc.char_index,
                             name.clone(),
                         ));
                     }
@@ -705,7 +721,7 @@ impl Evaluator {
         }
 
         self.apply_function(
-            proc.position,
+            proc.char_index,
             input,
             &evaluated_proc,
             &evaluated_args,
@@ -715,7 +731,7 @@ impl Evaluator {
 
     pub fn apply_function(
         &self,
-        position: Position,
+        char_index: usize,
         input: &Value,
         evaluated_proc: &Value,
         evaluated_args: &Value,
@@ -746,12 +762,16 @@ impl Evaluator {
                 }
             }
             ValueKind::NativeFn0(ref name, ref func) => {
-                func(&self.fn_context(name, &position, input, frame))
+                func(&self.fn_context(name, char_index, input, frame))
             }
             ValueKind::NativeFn1(ref name, ref func) => {
-                let context = self.fn_context(name, &position, input, frame);
+                let context = self.fn_context(name, char_index, input, frame);
                 if evaluated_args.len() > 1 {
-                    Err(t0410_argument_not_valid(&context, 2))
+                    Err(Error::T0410ArgumentNotValid(
+                        context.char_index,
+                        2,
+                        context.name.to_string(),
+                    ))
                 } else if evaluated_args.is_empty() {
                     // Some functions take the input as the first argument if one was not provided
                     func(&context, input)
@@ -760,9 +780,13 @@ impl Evaluator {
                 }
             }
             ValueKind::NativeFn2(ref name, ref func) => {
-                let context = self.fn_context(name, &position, input, frame);
+                let context = self.fn_context(name, char_index, input, frame);
                 if evaluated_args.len() > 2 {
-                    Err(t0410_argument_not_valid(&context, 3))
+                    Err(Error::T0410ArgumentNotValid(
+                        context.char_index,
+                        3,
+                        context.name.to_string(),
+                    ))
                 } else {
                     func(
                         &context,
@@ -772,9 +796,13 @@ impl Evaluator {
                 }
             }
             ValueKind::NativeFn3(ref name, ref func) => {
-                let context = self.fn_context(name, &position, input, frame);
+                let context = self.fn_context(name, char_index, input, frame);
                 if evaluated_args.len() > 3 {
-                    Err(t0410_argument_not_valid(&context, 4))
+                    Err(Error::T0410ArgumentNotValid(
+                        context.char_index,
+                        4,
+                        context.name.to_string(),
+                    ))
                 } else {
                     func(
                         &context,
@@ -784,7 +812,7 @@ impl Evaluator {
                     )
                 }
             }
-            _ => Err(Error::T1006InvokedNonFunction(position)),
+            _ => Err(Error::T1006InvokedNonFunction(char_index)),
         }
     }
 }

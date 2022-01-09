@@ -3,7 +3,6 @@ use std::str::Chars;
 use std::{char, str};
 
 use jsonata_errors::{Error, Result};
-use jsonata_shared::Position;
 
 use super::json::Number;
 
@@ -129,7 +128,6 @@ pub struct Token {
     pub char_index: usize,
     pub byte_index: usize,
     pub len: usize,
-    pub position: Position,
 }
 
 /// Tokenizer for JSONata syntax.
@@ -642,11 +640,6 @@ impl<'a> Tokenizer<'a> {
 
         let token = Token {
             kind,
-            position: Position {
-                source_pos: self.start_char_index,
-                line: 0,
-                column: 0,
-            },
             char_index: self.start_char_index,
             byte_index: self.start_byte_index,
             len: self.byte_index - self.start_byte_index,

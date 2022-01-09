@@ -1,6 +1,5 @@
 mod process;
 
-use jsonata_shared::Position;
 use jsonata_signatures::Arg;
 
 use super::json::Number;
@@ -123,14 +122,16 @@ pub enum AstKind {
 #[derive(Debug, Clone)]
 pub struct Ast {
     pub kind: AstKind,
-    pub position: Position,
+
+    /// The index in the original source that introduced this node
+    pub char_index: usize,
 
     pub keep_array: bool,
     pub cons_array: bool,
     pub keep_singleton_array: bool,
 
     /// An optional group by expression, represented as an object.
-    pub group_by: Option<(Position, Object)>,
+    pub group_by: Option<(usize, Object)>,
 
     /// An optional list of predicates.
     pub predicates: Option<Vec<Ast>>,
@@ -147,10 +148,10 @@ impl Default for Ast {
 }
 
 impl Ast {
-    pub fn new(kind: AstKind, position: Position) -> Self {
+    pub fn new(kind: AstKind, char_index: usize) -> Self {
         Self {
             kind,
-            position,
+            char_index,
             keep_array: false,
             cons_array: false,
             keep_singleton_array: false,

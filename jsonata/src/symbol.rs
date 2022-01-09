@@ -2,7 +2,6 @@ use jsonata_errors::{Error, Result};
 use jsonata_signatures;
 
 use super::ast::*;
-use super::error::*;
 use super::parser::Parser;
 use super::tokenizer::{Token, TokenKind};
 
@@ -36,22 +35,25 @@ impl Symbol for Token {
 
     fn null_denotation(&self, parser: &mut Parser) -> Result<Ast> {
         match self.kind {
-            TokenKind::Null => Ok(Ast::new(AstKind::Null, self.position)),
-            TokenKind::Bool(ref v) => Ok(Ast::new(AstKind::Bool(*v), self.position)),
-            TokenKind::Str(ref v) => Ok(Ast::new(AstKind::String(v.clone()), self.position)),
-            TokenKind::Num(ref v) => Ok(Ast::new(AstKind::Number(*v), self.position)),
-            TokenKind::Name(ref v) => Ok(Ast::new(AstKind::Name(v.clone()), self.position)),
-            TokenKind::Var(ref v) => Ok(Ast::new(AstKind::Var(v.clone()), self.position)),
-            TokenKind::And => Ok(Ast::new(AstKind::Name(String::from("and")), self.position)),
-            TokenKind::Or => Ok(Ast::new(AstKind::Name(String::from("or")), self.position)),
-            TokenKind::In => Ok(Ast::new(AstKind::Name(String::from("in")), self.position)),
+            TokenKind::Null => Ok(Ast::new(AstKind::Null, self.char_index)),
+            TokenKind::Bool(ref v) => Ok(Ast::new(AstKind::Bool(*v), self.char_index)),
+            TokenKind::Str(ref v) => Ok(Ast::new(AstKind::String(v.clone()), self.char_index)),
+            TokenKind::Num(ref v) => Ok(Ast::new(AstKind::Number(*v), self.char_index)),
+            TokenKind::Name(ref v) => Ok(Ast::new(AstKind::Name(v.clone()), self.char_index)),
+            TokenKind::Var(ref v) => Ok(Ast::new(AstKind::Var(v.clone()), self.char_index)),
+            TokenKind::And => Ok(Ast::new(
+                AstKind::Name(String::from("and")),
+                self.char_index,
+            )),
+            TokenKind::Or => Ok(Ast::new(AstKind::Name(String::from("or")), self.char_index)),
+            TokenKind::In => Ok(Ast::new(AstKind::Name(String::from("in")), self.char_index)),
             TokenKind::Minus => Ok(Ast::new(
                 AstKind::Unary(UnaryOp::Minus(Box::new(parser.expression(70)?))),
-                self.position,
+                self.char_index,
             )),
-            TokenKind::Asterisk => Ok(Ast::new(AstKind::Wildcard, self.position)),
-            TokenKind::Descendent => Ok(Ast::new(AstKind::Descendent, self.position)),
-            TokenKind::PercentSign => Ok(Ast::new(AstKind::Parent, self.position)),
+            TokenKind::Asterisk => Ok(Ast::new(AstKind::Wildcard, self.char_index)),
+            TokenKind::Descendent => Ok(Ast::new(AstKind::Descendent, self.char_index)),
+            TokenKind::PercentSign => Ok(Ast::new(AstKind::Parent, self.char_index)),
 
             // Block of expressions
             TokenKind::LeftParen => {
@@ -66,7 +68,7 @@ impl Symbol for Token {
                 }
                 parser.expect(TokenKind::RightParen)?;
 
-                Ok(Ast::new(AstKind::Block(expressions), self.position))
+                Ok(Ast::new(AstKind::Block(expressions), self.char_index))
             }
 
             // Array constructor
@@ -85,7 +87,7 @@ impl Symbol for Token {
                                     Box::new(item),
                                     Box::new(parser.expression(0)?),
                                 ),
-                                self.position,
+                                self.char_index,
                             )
                         }
 
@@ -102,14 +104,14 @@ impl Symbol for Token {
 
                 Ok(Ast::new(
                     AstKind::Unary(UnaryOp::ArrayConstructor(expressions)),
-                    self.position,
+                    self.char_index,
                 ))
             }
 
             // Object constructor
             TokenKind::LeftBrace => Ok(Ast::new(
                 AstKind::Unary(UnaryOp::ObjectConstructor(parse_object(parser)?)),
-                self.position,
+                self.char_index,
             )),
 
             // Object transformer
@@ -135,11 +137,14 @@ impl Symbol for Token {
                         update,
                         delete,
                     },
-                    self.position,
+                    self.char_index,
                 ))
             }
 
-            _ => Err(s0211_invalid_unary(self.position, &self.kind)),
+            _ => Err(Error::S0211InvalidUnary(
+                self.char_index,
+                self.kind.to_string(),
+            )),
         }
     }
 
@@ -152,7 +157,7 @@ impl Symbol for Token {
                         Box::new(left),
                         Box::new(parser.expression(self.left_binding_power())?),
                     ),
-                    self.position,
+                    self.char_index,
                 ))
             };
         }
@@ -187,7 +192,7 @@ impl Symbol for Token {
                         match parser.token().kind {
                             TokenKind::QuestionMark => {
                                 is_partial = true;
-                                args.push(Ast::new(AstKind::PartialArg, parser.token().position));
+                                args.push(Ast::new(AstKind::PartialArg, parser.token().char_index));
                                 parser.expect(TokenKind::QuestionMark)?;
                             }
                             _ => {
@@ -211,9 +216,9 @@ impl Symbol for Token {
                             // All of the args must be Variable nodes
                             for arg in &args {
                                 if !matches!(arg.kind, AstKind::Var(..)) {
-                                    return Err(s0208_invalid_function_param(
-                                        arg.position,
-                                        &self.kind,
+                                    return Err(Error::S0208InvalidFunctionParam(
+                                        arg.char_index,
+                                        self.kind.to_string(),
                                     ));
                                 }
                             }
@@ -246,7 +251,7 @@ impl Symbol for Token {
                             body,
                             signature,
                         },
-                        self.position,
+                        self.char_index,
                     );
                     parser.expect(TokenKind::RightBrace)?;
                 } else {
@@ -257,7 +262,7 @@ impl Symbol for Token {
                             args,
                             is_partial,
                         },
-                        self.position,
+                        self.char_index,
                     );
                 }
 
@@ -267,7 +272,7 @@ impl Symbol for Token {
             // Variable assignment
             TokenKind::Bind => {
                 if !matches!(left.kind, AstKind::Var(..)) {
-                    return Err(Error::S0212ExpectedVarLeft(left.position));
+                    return Err(Error::S0212ExpectedVarLeft(left.char_index));
                 }
 
                 Ok(Ast::new(
@@ -276,7 +281,7 @@ impl Symbol for Token {
                         Box::new(left),
                         Box::new(parser.expression(self.left_binding_power() - 1)?),
                     ),
-                    self.position,
+                    self.char_index,
                 ))
             }
 
@@ -305,7 +310,7 @@ impl Symbol for Token {
 
                 Ok(Ast::new(
                     AstKind::OrderBy(Box::new(left), terms),
-                    self.position,
+                    self.char_index,
                 ))
             }
 
@@ -314,12 +319,15 @@ impl Symbol for Token {
                 let rhs = parser.expression(self.left_binding_power())?;
 
                 if !matches!(rhs.kind, AstKind::Var(..)) {
-                    return Err(s0214_expected_var_right(rhs.position, "@"));
+                    return Err(Error::S0214ExpectedVarRight(
+                        rhs.char_index,
+                        "@".to_string(),
+                    ));
                 }
 
                 Ok(Ast::new(
                     AstKind::Binary(BinaryOp::ContextBind, Box::new(left), Box::new(rhs)),
-                    self.position,
+                    self.char_index,
                 ))
             }
 
@@ -328,12 +336,15 @@ impl Symbol for Token {
                 let rhs = parser.expression(self.left_binding_power())?;
 
                 if !matches!(rhs.kind, AstKind::Var(..)) {
-                    return Err(s0214_expected_var_right(rhs.position, "#"));
+                    return Err(Error::S0214ExpectedVarRight(
+                        rhs.char_index,
+                        "#".to_string(),
+                    ));
                 }
 
                 Ok(Ast::new(
                     AstKind::Binary(BinaryOp::PositionalBind, Box::new(left), Box::new(rhs)),
-                    self.position,
+                    self.char_index,
                 ))
             }
 
@@ -354,14 +365,14 @@ impl Symbol for Token {
                         truthy,
                         falsy,
                     },
-                    self.position,
+                    self.char_index,
                 ))
             }
 
             // Object group by
             TokenKind::LeftBrace => Ok(Ast::new(
                 AstKind::GroupBy(Box::new(left), parse_object(parser)?),
-                self.position,
+                self.char_index,
             )),
 
             // Array predicate or index
@@ -387,7 +398,7 @@ impl Symbol for Token {
                     parser.expect(TokenKind::RightBracket)?;
                     Ok(Ast::new(
                         AstKind::Binary(BinaryOp::Predicate, Box::new(left), Box::new(rhs)),
-                        self.position,
+                        self.char_index,
                     ))
                 }
             }

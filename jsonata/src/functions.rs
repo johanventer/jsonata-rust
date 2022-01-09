@@ -1,10 +1,8 @@
 use lazy_static;
 
-use jsonata_errors::Result;
-use jsonata_shared::Position;
+use jsonata_errors::{Error, Result};
 use jsonata_signature_macro::signature;
 
-use super::error::*;
 use super::evaluator::Evaluator;
 use super::frame::Frame;
 use super::value::{ArrayFlags, Value, ValueKind, ValuePool};
@@ -12,7 +10,7 @@ use super::value::{ArrayFlags, Value, ValueKind, ValuePool};
 #[derive(Clone)]
 pub struct FunctionContext<'a> {
     pub name: &'a str,
-    pub position: Position,
+    pub char_index: usize,
     pub pool: ValuePool,
     pub input: Value,
     pub frame: Frame,
@@ -22,7 +20,7 @@ pub struct FunctionContext<'a> {
 impl<'a> FunctionContext<'a> {
     pub fn evaluate_function(&self, proc: &Value, args: &Value) -> Result<Value> {
         self.evaluator
-            .apply_function(self.position, &self.input, proc, args, &self.frame)
+            .apply_function(self.char_index, &self.input, proc, args, &self.frame)
     }
 }
 
@@ -52,7 +50,11 @@ pub fn fn_lookup_internal(context: &FunctionContext, input: &Value, key: &str) -
 #[signature("<x-s:x>")]
 pub fn fn_lookup(context: &FunctionContext, input: &Value, key: &Value) -> Result<Value> {
     if !key.is_string() {
-        Err(t0410_argument_not_valid(context, 1))
+        Err(Error::T0410ArgumentNotValid(
+            context.char_index,
+            1,
+            context.name.to_string(),
+        ))
     } else {
         Ok(fn_lookup_internal(context, input, &key.as_str()))
     }
@@ -114,7 +116,11 @@ pub fn fn_filter(context: &FunctionContext, arr: &Value, func: &Value) -> Result
     let arr = arr.wrap_in_array_if_needed(ArrayFlags::empty());
 
     if !func.is_function() {
-        return Err(t0410_argument_not_valid(context, 2));
+        return Err(Error::T0410ArgumentNotValid(
+            context.char_index,
+            2,
+            context.name.to_string(),
+        ));
     }
 
     let mut result = context.pool.array(ArrayFlags::SEQUENCE);
@@ -213,11 +219,19 @@ pub fn fn_substring(
     }
 
     if !string.is_string() {
-        return Err(t0410_argument_not_valid(context, 1));
+        return Err(Error::T0410ArgumentNotValid(
+            context.char_index,
+            1,
+            context.name.to_string(),
+        ));
     }
 
     if !start.is_number() {
-        return Err(t0410_argument_not_valid(context, 2));
+        return Err(Error::T0410ArgumentNotValid(
+            context.char_index,
+            2,
+            context.name.to_string(),
+        ));
     }
 
     let string = string.as_str();
@@ -241,7 +255,11 @@ pub fn fn_substring(
         Ok(context.pool.string(string[start as usize..].to_string()))
     } else {
         if !length.is_number() {
-            return Err(t0410_argument_not_valid(context, 3));
+            return Err(Error::T0410ArgumentNotValid(
+                context.char_index,
+                3,
+                context.name.to_string(),
+            ));
         }
 
         let length = length.as_isize();
@@ -270,7 +288,11 @@ pub fn fn_abs(context: &FunctionContext, arg: &Value) -> Result<Value> {
     if arg.is_undefined() {
         Ok(context.pool.undefined())
     } else if !arg.is_number() {
-        Err(t0410_argument_not_valid(context, 1))
+        Err(Error::T0410ArgumentNotValid(
+            context.char_index,
+            1,
+            context.name.to_string(),
+        ))
     } else {
         Ok(context.pool.number(arg.as_f64().abs()))
     }
@@ -281,7 +303,11 @@ pub fn fn_floor(context: &FunctionContext, arg: &Value) -> Result<Value> {
     if arg.is_undefined() {
         Ok(context.pool.undefined())
     } else if !arg.is_number() {
-        Err(t0410_argument_not_valid(context, 1))
+        Err(Error::T0410ArgumentNotValid(
+            context.char_index,
+            1,
+            context.name.to_string(),
+        ))
     } else {
         Ok(context.pool.number(arg.as_f64().floor()))
     }
@@ -292,7 +318,11 @@ pub fn fn_ceil(context: &FunctionContext, arg: &Value) -> Result<Value> {
     if arg.is_undefined() {
         Ok(context.pool.undefined())
     } else if !arg.is_number() {
-        Err(t0410_argument_not_valid(context, 1))
+        Err(Error::T0410ArgumentNotValid(
+            context.char_index,
+            1,
+            context.name.to_string(),
+        ))
     } else {
         Ok(context.pool.number(arg.as_f64().ceil()))
     }
@@ -307,7 +337,12 @@ pub fn fn_max(context: &FunctionContext, args: &Value) -> Result<Value> {
     let mut max = f64::MIN;
     for arg in args.members() {
         if !arg.is_number() {
-            return Err(t0412_argument_must_be_array_of_type(context, 2, "number"));
+            return Err(Error::T0412ArgumentMustBeArrayOfType(
+                context.char_index,
+                2,
+                context.name.to_string(),
+                "number".to_string(),
+            ));
         }
         max = f64::max(max, arg.as_f64());
     }
@@ -323,7 +358,12 @@ pub fn fn_min(context: &FunctionContext, args: &Value) -> Result<Value> {
     let mut min = f64::MAX;
     for arg in args.members() {
         if !arg.is_number() {
-            return Err(t0412_argument_must_be_array_of_type(context, 2, "number"));
+            return Err(Error::T0412ArgumentMustBeArrayOfType(
+                context.char_index,
+                2,
+                context.name.to_string(),
+                "number".to_string(),
+            ));
         }
         min = f64::min(min, arg.as_f64());
     }
@@ -339,7 +379,12 @@ pub fn fn_sum(context: &FunctionContext, args: &Value) -> Result<Value> {
     let mut sum = 0.0;
     for arg in args.members() {
         if !arg.is_number() {
-            return Err(t0412_argument_must_be_array_of_type(context, 2, "number"));
+            return Err(Error::T0412ArgumentMustBeArrayOfType(
+                context.char_index,
+                2,
+                context.name.to_string(),
+                "number".to_string(),
+            ));
         }
         sum += arg.as_f64();
     }

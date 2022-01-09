@@ -1,8 +1,6 @@
 use jsonata_errors::{Error, Result};
-use jsonata_shared::Position;
 
 use super::*;
-use crate::error::*;
 
 impl Ast {
     pub fn process(self) -> Result<Ast> {
@@ -19,8 +17,8 @@ pub fn process_ast(node: Ast) -> Result<Ast> {
         AstKind::Block(..) => process_block(node)?,
         AstKind::Unary(..) => process_unary(node)?,
         AstKind::Binary(..) => process_binary(node)?,
-        AstKind::GroupBy(ref mut lhs, ref mut rhs) => process_group_by(node.position, lhs, rhs)?,
-        AstKind::OrderBy(ref mut lhs, ref mut rhs) => process_order_by(node.position, lhs, rhs)?,
+        AstKind::GroupBy(ref mut lhs, ref mut rhs) => process_group_by(node.char_index, lhs, rhs)?,
+        AstKind::OrderBy(ref mut lhs, ref mut rhs) => process_order_by(node.char_index, lhs, rhs)?,
         AstKind::Function {
             ref mut proc,
             ref mut args,
@@ -48,9 +46,9 @@ pub fn process_ast(node: Ast) -> Result<Ast> {
 
 // Turn a Name into a Path with a single step
 fn process_name(node: Ast) -> Result<Ast> {
-    let position = node.position;
+    let char_index = node.char_index;
     let keep_singleton_array = node.keep_array;
-    let mut result = Ast::new(AstKind::Path(vec![node]), position);
+    let mut result = Ast::new(AstKind::Path(vec![node]), char_index);
     result.keep_singleton_array = keep_singleton_array;
     Ok(result)
 }
@@ -117,7 +115,7 @@ fn process_unary(node: Ast) -> Result<Ast> {
             } else {
                 Ok(Ast::new(
                     AstKind::Unary(UnaryOp::Minus(Box::new(result))),
-                    node.position,
+                    node.char_index,
                 ))
             }
         }
@@ -149,10 +147,10 @@ fn process_binary(node: Ast) -> Result<Ast> {
 
     match node.kind {
         AstKind::Binary(BinaryOp::Map, ref mut lhs, ref mut rhs) => {
-            process_path(node.position, lhs, rhs)
+            process_path(node.char_index, lhs, rhs)
         }
         AstKind::Binary(BinaryOp::Predicate, ref mut lhs, ref mut rhs) => {
-            process_predicate(node.position, lhs, rhs)
+            process_predicate(node.char_index, lhs, rhs)
         }
         AstKind::Binary(BinaryOp::ContextBind, ref mut _lhs, ref mut _rhs) => {
             unimplemented!("ContextBind not yet implemented")
@@ -169,7 +167,7 @@ fn process_binary(node: Ast) -> Result<Ast> {
     }
 }
 
-fn process_path(position: Position, lhs: &mut Box<Ast>, rhs: &mut Box<Ast>) -> Result<Ast> {
+fn process_path(char_index: usize, lhs: &mut Box<Ast>, rhs: &mut Box<Ast>) -> Result<Ast> {
     let left_step = process_ast(std::mem::take(lhs))?;
     let mut rest = process_ast(std::mem::take(rhs))?;
 
@@ -177,7 +175,7 @@ fn process_path(position: Position, lhs: &mut Box<Ast>, rhs: &mut Box<Ast>) -> R
     let mut result = if matches!(left_step.kind, AstKind::Path(_)) {
         left_step
     } else {
-        Ast::new(AstKind::Path(vec![left_step]), position)
+        Ast::new(AstKind::Path(vec![left_step]), char_index)
     };
 
     // TODO: If the lhs is a Parent (parser.js:997)
@@ -200,7 +198,7 @@ fn process_path(position: Position, lhs: &mut Box<Ast>, rhs: &mut Box<Ast>) -> R
             match step.kind {
                 // Steps can't be literal values other than strings
                 AstKind::Number(..) | AstKind::Bool(..) | AstKind::Null => {
-                    return Err(s0213_invalid_step(step.position, "TODO"));
+                    return Err(Error::S0213InvalidStep(step.char_index, "TODO".to_string()));
                 }
 
                 // Steps that are string literals should become Names
@@ -228,7 +226,7 @@ fn process_path(position: Position, lhs: &mut Box<Ast>, rhs: &mut Box<Ast>) -> R
     Ok(result)
 }
 
-fn process_predicate(position: Position, lhs: &mut Box<Ast>, rhs: &mut Box<Ast>) -> Result<Ast> {
+fn process_predicate(char_index: usize, lhs: &mut Box<Ast>, rhs: &mut Box<Ast>) -> Result<Ast> {
     let mut result = process_ast(std::mem::take(lhs))?;
     let mut in_path = false;
 
@@ -242,12 +240,12 @@ fn process_predicate(position: Position, lhs: &mut Box<Ast>, rhs: &mut Box<Ast>)
 
     // Predicates can't follow group-by
     if node.group_by.is_some() {
-        return Err(Error::S0209InvalidPredicate(position));
+        return Err(Error::S0209InvalidPredicate(char_index));
     }
 
     let filter = Ast::new(
         AstKind::Filter(Box::new(process_ast(std::mem::take(rhs))?)),
-        position,
+        char_index,
     );
 
     // TODO: seekingParent (parser.js:1074)
@@ -272,12 +270,12 @@ fn process_predicate(position: Position, lhs: &mut Box<Ast>, rhs: &mut Box<Ast>)
     Ok(result)
 }
 
-fn process_group_by(position: Position, lhs: &mut Box<Ast>, rhs: &mut Object) -> Result<Ast> {
+fn process_group_by(char_index: usize, lhs: &mut Box<Ast>, rhs: &mut Object) -> Result<Ast> {
     let mut result = process_ast(std::mem::take(lhs))?;
 
     // Can only have a single grouping expression
     if result.group_by.is_some() {
-        return Err(Error::S0210MultipleGroupBy(position));
+        return Err(Error::S0210MultipleGroupBy(char_index));
     }
 
     // Process all the key, value pairs
@@ -287,19 +285,19 @@ fn process_group_by(position: Position, lhs: &mut Box<Ast>, rhs: &mut Object) ->
         *pair = (process_ast(key)?, process_ast(value)?);
     }
 
-    result.group_by = Some((position, std::mem::take(rhs)));
+    result.group_by = Some((char_index, std::mem::take(rhs)));
 
     Ok(result)
 }
 
-fn process_order_by(position: Position, lhs: &mut Box<Ast>, rhs: &mut SortTerms) -> Result<Ast> {
+fn process_order_by(char_index: usize, lhs: &mut Box<Ast>, rhs: &mut SortTerms) -> Result<Ast> {
     let lhs = process_ast(std::mem::take(lhs))?;
 
     // If the left hand side is not a path, make it one
     let mut result = if matches!(lhs.kind, AstKind::Path(_)) {
         lhs
     } else {
-        Ast::new(AstKind::Path(vec![lhs]), position)
+        Ast::new(AstKind::Path(vec![lhs]), char_index)
     };
 
     // Process all the sort terms
@@ -308,7 +306,7 @@ fn process_order_by(position: Position, lhs: &mut Box<Ast>, rhs: &mut SortTerms)
     }
 
     if let AstKind::Path(ref mut steps) = result.kind {
-        steps.push(Ast::new(AstKind::Sort(std::mem::take(rhs)), position));
+        steps.push(Ast::new(AstKind::Sort(std::mem::take(rhs)), char_index));
     }
 
     Ok(result)
@@ -331,7 +329,7 @@ fn process_lambda(body: &mut Box<Ast>) -> Result<()> {
 // fn tail_call_optimize(mut node: Box<Node>) -> Result<Box<Node>> {
 //     match node.kind {
 //         NodeKind::Function { .. } if node.predicates.is_none() => {
-//             let position = node.position;
+//             let position = node.char_index;
 //             Ok(Box::new(Node::new(
 //                 NodeKind::Lambda {
 //                     args: Rc::new(Vec::new()),

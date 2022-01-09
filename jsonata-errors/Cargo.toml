@@ -5,4 +5,3 @@ authors = ["Johan Venter <johan.venter@gmail.com>"]
 edition = "2021"
 
 [dependencies]
-jsonata-shared = { path = "../jsonata-shared" }

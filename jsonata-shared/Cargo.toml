@@ -1,7 +1,0 @@
-[package]
-name = "jsonata-shared"
-version = "0.1.0"
-authors = ["Johan Venter <johan.venter@gmail.com>"]
-edition = "2021"
-
-[dependencies]

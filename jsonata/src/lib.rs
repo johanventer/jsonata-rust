@@ -1,6 +1,5 @@
 // TODO: Fix visibility of all these modules, they're all pub for now
 pub mod ast;
-pub mod error;
 pub mod evaluator;
 pub mod frame;
 pub mod functions;

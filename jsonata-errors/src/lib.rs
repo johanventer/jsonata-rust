@@ -1,7 +1,5 @@
 use std::{char, error, fmt};
 
-use jsonata_shared::Position;
-
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, PartialEq)]
@@ -44,31 +42,31 @@ pub enum Error {
     S0202UnexpectedToken(usize, String, String),
     S0204UnknownOperator(usize, String),
     S0203ExpectedTokenBeforeEnd(usize, String),
-    S0208InvalidFunctionParam(Position, String),
-    S0209InvalidPredicate(Position),
-    S0210MultipleGroupBy(Position),
-    S0211InvalidUnary(Position, String),
-    S0212ExpectedVarLeft(Position),
-    S0213InvalidStep(Position, String),
-    S0214ExpectedVarRight(Position, String),
+    S0208InvalidFunctionParam(usize, String),
+    S0209InvalidPredicate(usize),
+    S0210MultipleGroupBy(usize),
+    S0211InvalidUnary(usize, String),
+    S0212ExpectedVarLeft(usize),
+    S0213InvalidStep(usize, String),
+    S0214ExpectedVarRight(usize, String),
 
     // Runtime errors
     D1001NumberOfOutRange(f64),
-    D1002NegatingNonNumeric(Position, String),
-    D1009MultipleKeys(Position, String),
+    D1002NegatingNonNumeric(usize, String),
+    D1009MultipleKeys(usize, String),
 
     // Type errors
-    T0410ArgumentNotValid(Position, usize, String),
-    T0412ArgumentMustBeArrayOfType(Position, usize, String, String),
-    T1003NonStringKey(Position, String),
-    T1005InvokedNonFunctionSuggest(Position, String),
-    T1006InvokedNonFunction(Position),
-    T2001LeftSideNotNumber(Position, String),
-    T2002RightSideNotNumber(Position, String),
-    T2003LeftSideNotInteger(Position),
-    T2004RightSideNotInteger(Position),
-    T2009BinaryOpMismatch(Position, String, String, String),
-    T2010BinaryOpTypes(Position, String),
+    T0410ArgumentNotValid(usize, usize, String),
+    T0412ArgumentMustBeArrayOfType(usize, usize, String, String),
+    T1003NonStringKey(usize, String),
+    T1005InvokedNonFunctionSuggest(usize, String),
+    T1006InvokedNonFunction(usize),
+    T2001LeftSideNotNumber(usize, String),
+    T2002RightSideNotNumber(usize, String),
+    T2003LeftSideNotInteger(usize),
+    T2004RightSideNotInteger(usize),
+    T2009BinaryOpMismatch(usize, String, String, String),
+    T2010BinaryOpTypes(usize, String),
 }
 
 impl error::Error for Error {}

@@ -6,7 +6,6 @@ edition = "2021"
 
 [dependencies]
 jsonata-errors = { path = "../jsonata-errors" }
-jsonata-shared = { path = "../jsonata-shared" }
 jsonata-signatures = { path = "../jsonata-signatures" }
 jsonata-signature-macro = { path = "../jsonata-signature-macro" }
 
