@@ -10,10 +10,6 @@ pub fn i0205_wrong_type(expected: &str) -> Error {
     Error::I0205WrongType(expected.into())
 }
 
-pub fn s0202_unexpected_token(p: Position, e: &TokenKind, a: &TokenKind) -> Error {
-    Error::S0202UnexpectedToken(p, e.to_string(), a.to_string())
-}
-
 pub fn s0211_invalid_unary(p: Position, k: &TokenKind) -> Error {
     Error::S0211InvalidUnary(p, k.to_string())
 }

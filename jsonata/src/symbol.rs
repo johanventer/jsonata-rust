@@ -139,14 +139,6 @@ impl Symbol for Token {
                 ))
             }
 
-            TokenKind::LeftAngleBracket => {
-                if let TokenKind::Signature(ref s) = parser.token().kind {
-                    Ok(Ast::new(AstKind::String(s.clone()), self.position))
-                } else {
-                    Err(s0211_invalid_unary(self.position, &self.kind))
-                }
-            }
-
             _ => Err(s0211_invalid_unary(self.position, &self.kind)),
         }
     }
@@ -235,23 +227,15 @@ impl Symbol for Token {
                 let func: Ast;
 
                 if is_lambda {
-                    let signature = if parser.token().kind == TokenKind::LeftAngleBracket {
-                        Some(parser.expression(0)?)
+                    let signature = if let TokenKind::Signature(ref sig) = parser.token().kind {
+                        Some(jsonata_signatures::parse(sig)?)
                     } else {
                         None
                     };
 
-                    let signature = match signature {
-                        None => None,
-                        Some(Ast {
-                            kind: AstKind::String(ref s),
-                            ..
-                        }) => {
-                            parser.next_token()?;
-                            Some(jsonata_signatures::parse(s)?)
-                        }
-                        _ => None,
-                    };
+                    if signature.is_some() {
+                        parser.next_token()?;
+                    }
 
                     parser.expect(TokenKind::LeftBrace)?;
                     let body = Box::new(parser.expression(0)?);

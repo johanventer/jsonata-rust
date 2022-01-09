@@ -1,7 +1,6 @@
 use jsonata_errors::{Error, Result};
 
 use super::ast::*;
-use super::error::*;
 use super::symbol::Symbol;
 use super::tokenizer::*;
 
@@ -38,10 +37,10 @@ impl<'a> Parser<'a> {
         }
 
         if self.token.kind != expected {
-            return Err(s0202_unexpected_token(
-                self.token.position,
-                &expected,
-                &self.token.kind,
+            return Err(Error::S0202UnexpectedToken(
+                self.token.char_index,
+                expected.to_string(),
+                self.token.kind.to_string(),
             ));
         }
 

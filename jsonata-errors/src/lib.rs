@@ -41,7 +41,7 @@ pub enum Error {
     S0105UnterminatedQuoteProp(usize),
     S0106UnterminatedComment(usize),
     S0201SyntaxError(usize, String),
-    S0202UnexpectedToken(Position, String, String),
+    S0202UnexpectedToken(usize, String, String),
     S0204UnknownOperator(usize, String),
     S0203ExpectedTokenBeforeEnd(usize, String),
     S0208InvalidFunctionParam(Position, String),

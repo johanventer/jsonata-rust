@@ -4,7 +4,7 @@ use std::cmp;
 use jsonata_errors::{Error, Result};
 
 bitflags! {
-    pub struct Flags: u32 {
+    pub struct Flags: u8 {
         const ONE_OR_MORE = 0b00000001;
         const OPTIONAL = 0b00000010;
         const ACCEPT_CONTEXT = 0b00000100;
