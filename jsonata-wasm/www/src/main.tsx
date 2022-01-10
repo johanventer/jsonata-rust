@@ -8,93 +8,19 @@ import { atomWithStorage, useAtomValue, useUpdateAtom } from "jotai/utils";
 import jsonata, { JsonataError } from "jsonata";
 
 import init, { evaluate } from "jsonata-wasm";
-import "flexlayout-react/style/dark.css";
-import "@picocss/pico/css/pico.css";
-import "./style.css";
 import demo from "./demo.json";
+import defaultLayout from "./defaultLayout";
 import jsonataMode from "./jsonataMonaco";
+
+import "flexlayout-react/style/dark.css";
+import "./style.css";
 
 const defaultExpr = "$sum(Account.Order.Product.(Price * Quantity))";
 
-await init();
-
-const layoutModelAtom = atom<Model>(
-  Model.fromJson({
-    global: {
-      tabEnableClose: false,
-      tabEnableDrag: false,
-      tabSetEnableDeleteWhenEmpty: false,
-    },
-    borders: [],
-    layout: {
-      type: "row",
-      weight: 100,
-      children: [
-        {
-          type: "row",
-          weight: 60,
-          children: [
-            {
-              type: "tabset",
-              id: "expressions",
-              children: [
-                {
-                  type: "tab",
-                  name: "Untitled",
-                  enableClose: true,
-                  component: "expression",
-                },
-              ],
-            },
-            {
-              type: "tabset",
-              children: [
-                {
-                  type: "tab",
-                  name: "Input",
-                  component: "input",
-                },
-              ],
-            },
-          ],
-        },
-        {
-          type: "row",
-          weight: 40,
-          children: [
-            {
-              type: "tabset",
-              children: [
-                {
-                  type: "tab",
-                  name: "jsonata-rust",
-                  component: "outputRust",
-                },
-              ],
-            },
-            {
-              type: "tabset",
-              children: [
-                {
-                  type: "tab",
-                  name: "jsonata",
-                  component: "outputJs",
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    },
-  })
-);
-
-const inputAtom = atom(JSON.stringify(demo, null, 2));
-
+const inputAtom = atomWithStorage("input", JSON.stringify(demo, null, 2));
 const outputRustAtom = atom(
   "Run an expression with Ctrl/Cmd+Enter to see output..."
 );
-
 const outputJsAtom = atom(
   "Run an expression with Ctrl/Cmd+Enter to see output..."
 );
@@ -103,13 +29,22 @@ const Container: React.FC = (props) => {
   return <div className="main-container">{props.children}</div>;
 };
 
-const Header: React.FC<{ newExpression: () => void }> = (props) => {
+const Toolbar: React.FC<{ newExpression: () => void }> = (props) => {
+  const setInput = useUpdateAtom(inputAtom);
+
   return (
-    <div className="header">
-      <a href="#" onClick={props.newExpression}>
-        New Expression
-      </a>
-    </div>
+    <ul className="toolbar">
+      <li>
+        <a href="#" onClick={props.newExpression}>
+          New Expression
+        </a>
+      </li>
+      <li>
+        <a href="#" onClick={() => setInput(JSON.stringify(demo, null, 2))}>
+          Default Input
+        </a>
+      </li>
+    </ul>
   );
 };
 
@@ -142,7 +77,10 @@ const ExpressionEditor: React.FC<{
       // Rust result
       //
       try {
-        setRustOutput(evaluate(expr, inputRef.current));
+        const start = performance.now();
+        const result = evaluate(expr, inputRef.current);
+        const ms = Math.round((performance.now() - start) * 100) / 100;
+        setRustOutput(`Execution time: ${ms}ms\n\nResult:\n\n${result}`);
       } catch (e) {
         setRustOutput("Failed: " + e);
       }
@@ -151,11 +89,16 @@ const ExpressionEditor: React.FC<{
       // Js result
       //
       try {
+        const start = performance.now();
+        // NOTE: Include the JSON parsing of the input as the Rust side has to do that as well.
         const input = JSON.parse(inputRef.current);
         try {
           const j = jsonata(expr);
-          const result = j.evaluate(JSON.parse(inputRef.current));
-          setJsOutput(JSON.stringify(result));
+          const result = j.evaluate(input);
+          const ms = Math.round((performance.now() - start) * 100) / 100;
+          setJsOutput(
+            `Execution time: ${ms}ms\n\nResult:\n\n${JSON.stringify(result)}`
+          );
         } catch (e) {
           const err = e as JsonataError;
           setJsOutput(`${err.code} @ ${err.position}: ${err.message}`);
@@ -224,7 +167,6 @@ const OutputJs: React.FC = (props) => {
 };
 
 function App() {
-  const [layoutModel, setLayoutModel] = useAtom(layoutModelAtom);
   const layoutRef = useRef<Layout | null>(null);
 
   function handleRun(expr: string | undefined) {}
@@ -255,13 +197,19 @@ function App() {
 
   return (
     <Container>
-      <Header newExpression={newExpression} />
+      <Toolbar newExpression={newExpression} />
       <div className="layout">
-        <Layout ref={layoutRef} model={layoutModel} factory={layoutFactory} />
+        <Layout
+          ref={layoutRef}
+          model={Model.fromJson(defaultLayout)}
+          factory={layoutFactory}
+        />
       </div>
     </Container>
   );
 }
+
+await init();
 
 ReactDOM.render(
   <React.StrictMode>
