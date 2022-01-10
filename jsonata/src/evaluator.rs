@@ -8,13 +8,13 @@ use super::functions::*;
 use super::value::{ArrayFlags, Value, ValueArena, ValueKind};
 
 pub struct Evaluator {
-    pool: ValueArena,
+    arena: ValueArena,
     chain_ast: Ast,
 }
 
 impl Evaluator {
-    pub fn new(pool: ValueArena, chain_ast: Ast) -> Self {
-        Evaluator { pool, chain_ast }
+    pub fn new(arena: ValueArena, chain_ast: Ast) -> Self {
+        Evaluator { arena, chain_ast }
     }
 
     fn fn_context<'a>(
@@ -27,7 +27,7 @@ impl Evaluator {
         FunctionContext {
             name,
             char_index,
-            pool: self.pool.clone(),
+            arena: self.arena.clone(),
             evaluator: self,
             input: input.clone(),
             frame: frame.clone(),
@@ -36,10 +36,10 @@ impl Evaluator {
 
     pub fn evaluate(&self, node: &Ast, input: &Value, frame: &Frame) -> Result<Value> {
         let mut result = match node.kind {
-            AstKind::Null => self.pool.null(),
-            AstKind::Bool(b) => self.pool.bool(b),
-            AstKind::String(ref s) => self.pool.string(String::from(s)),
-            AstKind::Number(n) => self.pool.number(n),
+            AstKind::Null => self.arena.null(),
+            AstKind::Bool(b) => self.arena.bool(b),
+            AstKind::String(ref s) => self.arena.string(String::from(s)),
+            AstKind::Number(n) => self.arena.number(n),
             AstKind::Block(ref exprs) => self.evaluate_block(exprs, input, frame)?,
             AstKind::Unary(ref op) => self.evaluate_unary_op(node, op, input, frame)?,
             AstKind::Binary(ref op, ref lhs, ref rhs) => {
@@ -57,7 +57,7 @@ impl Evaluator {
                 input,
                 name,
             ),
-            AstKind::Lambda { ref name, .. } => self.pool.lambda(name, node.clone()),
+            AstKind::Lambda { ref name, .. } => self.arena.lambda(name, node.clone()),
             AstKind::Function {
                 ref proc,
                 ref args,
@@ -79,7 +79,7 @@ impl Evaluator {
                 result.add_flags(ArrayFlags::SINGLETON);
             }
             if result.is_empty() {
-                self.pool.undefined()
+                self.arena.undefined()
             } else if result.len() == 1 {
                 if result.has_flags(ArrayFlags::SINGLETON) {
                     result
@@ -97,10 +97,10 @@ impl Evaluator {
     fn evaluate_block(&self, exprs: &[Ast], input: &Value, frame: &Frame) -> Result<Value> {
         let frame = Frame::new_with_parent(frame);
         if exprs.is_empty() {
-            return Ok(self.pool.undefined());
+            return Ok(self.arena.undefined());
         }
 
-        let mut result = self.pool.undefined();
+        let mut result = self.arena.undefined();
         for expr in exprs {
             result = self.evaluate(expr, input, &frame)?;
         }
@@ -118,7 +118,7 @@ impl Evaluator {
         } else if let Some(value) = frame.lookup(name) {
             value
         } else {
-            self.pool.undefined()
+            self.arena.undefined()
         })
     }
 
@@ -133,8 +133,8 @@ impl Evaluator {
             UnaryOp::Minus(ref value) => {
                 let result = self.evaluate(value, input, frame)?;
                 match *result {
-                    ValueKind::Undefined => Ok(self.pool.undefined()),
-                    ValueKind::Number(num) if !num.is_nan() => Ok(self.pool.number(-num)),
+                    ValueKind::Undefined => Ok(self.arena.undefined()),
+                    ValueKind::Number(num) if !num.is_nan() => Ok(self.arena.number(-num)),
                     _ => Err(Error::D1002NegatingNonNumeric(
                         node.char_index,
                         result.to_string(),
@@ -142,7 +142,7 @@ impl Evaluator {
                 }
             }
             UnaryOp::ArrayConstructor(ref array) => {
-                let mut result = self.pool.array(if node.cons_array {
+                let mut result = self.arena.array(if node.cons_array {
                     ArrayFlags::CONS
                 } else {
                     ArrayFlags::empty()
@@ -217,7 +217,7 @@ impl Evaluator {
             }
         }
 
-        let mut result = self.pool.object();
+        let mut result = self.arena.object();
 
         for key in groups.keys() {
             let group = groups.get(key).unwrap();
@@ -242,7 +242,7 @@ impl Evaluator {
         if *op == BinaryOp::Bind {
             if let AstKind::Var(ref name) = lhs_ast.kind {
                 let rhs = self.evaluate(rhs_ast, input, frame)?;
-                frame.bind(name, self.pool.clone(), &rhs);
+                frame.bind(name, self.arena.clone(), &rhs);
                 return Ok(rhs);
             }
             unreachable!()
@@ -261,7 +261,7 @@ impl Evaluator {
                 let rhs = self.evaluate(rhs_ast, input, frame)?;
 
                 let lhs = match *lhs {
-                    ValueKind::Undefined => return Ok(self.pool.undefined()),
+                    ValueKind::Undefined => return Ok(self.arena.undefined()),
                     ValueKind::Number(n) if !n.is_nan() => f64::from(n),
                     _ => {
                         return Err(Error::T2001LeftSideNotNumber(
@@ -272,7 +272,7 @@ impl Evaluator {
                 };
 
                 let rhs = match *rhs {
-                    ValueKind::Undefined => return Ok(self.pool.undefined()),
+                    ValueKind::Undefined => return Ok(self.arena.undefined()),
                     ValueKind::Number(n) if !n.is_nan() => f64::from(n),
                     _ => {
                         return Err(Error::T2002RightSideNotNumber(
@@ -294,7 +294,7 @@ impl Evaluator {
                 if result.is_infinite() {
                     Err(Error::D1001NumberOfOutRange(result))
                 } else {
-                    Ok(self.pool.number(result))
+                    Ok(self.arena.number(result))
                 }
             }
 
@@ -305,7 +305,7 @@ impl Evaluator {
                 let rhs = self.evaluate(rhs_ast, input, frame)?;
 
                 if lhs.is_undefined() || rhs.is_undefined() {
-                    return Ok(self.pool.undefined());
+                    return Ok(self.arena.undefined());
                 }
 
                 if !((lhs.is_number() || lhs.is_string()) && (rhs.is_number() || rhs.is_string())) {
@@ -315,7 +315,7 @@ impl Evaluator {
                 if let (ValueKind::Number(ref lhs), ValueKind::Number(ref rhs)) = (&*lhs, &*rhs) {
                     let lhs = f64::from(*lhs);
                     let rhs = f64::from(*rhs);
-                    return Ok(self.pool.bool(match op {
+                    return Ok(self.arena.bool(match op {
                         BinaryOp::LessThan => lhs < rhs,
                         BinaryOp::LessThanEqual => lhs <= rhs,
                         BinaryOp::GreaterThan => lhs > rhs,
@@ -325,7 +325,7 @@ impl Evaluator {
                 }
 
                 if let (ValueKind::String(ref lhs), ValueKind::String(ref rhs)) = (&*lhs, &*rhs) {
-                    return Ok(self.pool.bool(match op {
+                    return Ok(self.arena.bool(match op {
                         BinaryOp::LessThan => lhs < rhs,
                         BinaryOp::LessThanEqual => lhs <= rhs,
                         BinaryOp::GreaterThan => lhs > rhs,
@@ -346,10 +346,10 @@ impl Evaluator {
                 let rhs = self.evaluate(rhs_ast, input, frame)?;
 
                 if lhs.is_undefined() || rhs.is_undefined() {
-                    return Ok(self.pool.bool(false));
+                    return Ok(self.arena.bool(false));
                 }
 
-                Ok(self.pool.bool(match op {
+                Ok(self.arena.bool(match op {
                     BinaryOp::Equal => lhs == rhs,
                     BinaryOp::NotEqual => lhs != rhs,
                     _ => unreachable!(),
@@ -368,14 +368,14 @@ impl Evaluator {
                 }
 
                 if lhs.is_undefined() || rhs.is_undefined() {
-                    return Ok(self.pool.undefined());
+                    return Ok(self.arena.undefined());
                 }
 
                 let lhs = lhs.as_usize();
                 let rhs = rhs.as_usize();
 
                 if lhs > rhs {
-                    return Ok(self.pool.undefined());
+                    return Ok(self.arena.undefined());
                 }
 
                 let size = rhs - lhs + 1;
@@ -384,7 +384,7 @@ impl Evaluator {
                     unreachable!()
                 }
 
-                let mut result = self.pool.array_with_capacity(size, ArrayFlags::SEQUENCE);
+                let mut result = self.arena.array_with_capacity(size, ArrayFlags::SEQUENCE);
                 for index in lhs..rhs + 1 {
                     result.push_new(ValueKind::Number(index.into()));
                 }
@@ -413,15 +413,15 @@ impl Evaluator {
                         .as_str(),
                     );
                 }
-                Ok(self.pool.string(result))
+                Ok(self.arena.string(result))
             }
 
             BinaryOp::And => Ok(self
-                .pool
+                .arena
                 .bool(lhs.is_truthy() && self.evaluate(rhs_ast, input, frame)?.is_truthy())),
 
             BinaryOp::Or => Ok(self
-                .pool
+                .arena
                 .bool(lhs.is_truthy() || self.evaluate(rhs_ast, input, frame)?.is_truthy())),
 
             BinaryOp::Apply => {
@@ -445,25 +445,25 @@ impl Evaluator {
                     if lhs.is_function() {
                         // Apply function chaining
                         let chain =
-                            self.evaluate(&self.chain_ast, &self.pool.undefined(), frame)?;
+                            self.evaluate(&self.chain_ast, &self.arena.undefined(), frame)?;
 
-                        let mut args = self.pool.array_with_capacity(2, ArrayFlags::empty());
+                        let mut args = self.arena.array_with_capacity(2, ArrayFlags::empty());
                         args.push(&lhs);
                         args.push(&rhs);
 
                         self.apply_function(
                             lhs_ast.char_index,
-                            &self.pool.undefined(),
+                            &self.arena.undefined(),
                             &chain,
                             &args,
                             frame,
                         )
                     } else {
-                        let mut args = self.pool.array_with_capacity(1, ArrayFlags::empty());
+                        let mut args = self.arena.array_with_capacity(1, ArrayFlags::empty());
                         args.push(&lhs);
                         self.apply_function(
                             rhs_ast.char_index,
-                            &self.pool.undefined(),
+                            &self.arena.undefined(),
                             &rhs,
                             &args,
                             frame,
@@ -476,18 +476,18 @@ impl Evaluator {
                 let rhs = self.evaluate(rhs_ast, input, frame)?;
 
                 if lhs.is_undefined() || rhs.is_undefined() {
-                    return Ok(self.pool.bool(false));
+                    return Ok(self.arena.bool(false));
                 }
 
                 let rhs = rhs.wrap_in_array_if_needed(ArrayFlags::empty());
 
                 for item in rhs.members() {
                     if item == lhs {
-                        return Ok(self.pool.bool(true));
+                        return Ok(self.arena.bool(true));
                     }
                 }
 
-                Ok(self.pool.bool(false))
+                Ok(self.arena.bool(false))
             }
 
             _ => unimplemented!("TODO: binary op not supported yet: {:#?}", *op),
@@ -508,7 +508,7 @@ impl Evaluator {
         } else if let Some(falsy) = falsy {
             self.evaluate(falsy, input, frame)
         } else {
-            Ok(self.pool.undefined())
+            Ok(self.arena.undefined())
         }
     }
 
@@ -525,7 +525,7 @@ impl Evaluator {
             input.wrap_in_array(ArrayFlags::empty())
         };
 
-        let mut result = self.pool.undefined();
+        let mut result = self.arena.undefined();
 
         for (index, step) in steps.iter().enumerate() {
             result = if index == 0 && step.cons_array {
@@ -566,7 +566,7 @@ impl Evaluator {
         frame: &Frame,
         last_step: bool,
     ) -> Result<Value> {
-        let mut result = self.pool.array(ArrayFlags::SEQUENCE);
+        let mut result = self.arena.array(ArrayFlags::SEQUENCE);
 
         if let AstKind::Sort(ref sorts) = step.kind {
             result = self.evaluate_sorts(sorts, input, frame)?;
@@ -598,7 +598,7 @@ impl Evaluator {
             {
                 result.get_member(0)
             } else {
-                let mut result_sequence = self.pool.array(ArrayFlags::SEQUENCE);
+                let mut result_sequence = self.arena.array(ArrayFlags::SEQUENCE);
 
                 for result_item in result.members() {
                     if !result_item.is_array() || result_item.has_flags(ArrayFlags::CONS) {
@@ -628,7 +628,7 @@ impl Evaluator {
     }
 
     fn evaluate_filter(&self, node: &Ast, input: Value, frame: &Frame) -> Result<Value> {
-        let mut result = self.pool.array(ArrayFlags::SEQUENCE);
+        let mut result = self.arena.array(ArrayFlags::SEQUENCE);
         let input = input.wrap_in_array_if_needed(ArrayFlags::empty());
 
         let get_index = |n: f64| {
@@ -709,7 +709,7 @@ impl Evaluator {
             }
         }
 
-        let mut evaluated_args = self.pool.array(ArrayFlags::empty());
+        let mut evaluated_args = self.arena.array(ArrayFlags::empty());
 
         if let Some(context) = context {
             evaluated_args.push(context);
@@ -749,7 +749,7 @@ impl Evaluator {
                     // Bind the arguments to their respective names
                     for (index, arg) in args.iter().enumerate() {
                         if let AstKind::Var(ref name) = arg.kind {
-                            frame.bind(name, self.pool.clone(), &evaluated_args.get_member(index));
+                            frame.bind(name, self.arena.clone(), &evaluated_args.get_member(index));
                         } else {
                             unreachable!()
                         }

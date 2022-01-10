@@ -19,7 +19,7 @@ use value::{ArrayFlags, Value, ValueArena};
 
 pub struct JsonAta {
     ast: Ast,
-    pool: ValueArena,
+    arena: ValueArena,
     frame: Frame,
 }
 
@@ -27,15 +27,15 @@ impl JsonAta {
     pub fn new(expr: &str) -> Result<JsonAta> {
         Ok(Self {
             ast: parser::parse(expr)?,
-            pool: ValueArena::new(),
+            arena: ValueArena::new(),
             frame: Frame::new(),
         })
     }
 
-    pub fn new_with_pool(expr: &str, pool: ValueArena) -> Result<JsonAta> {
+    pub fn new_with_arena(expr: &str, arena: ValueArena) -> Result<JsonAta> {
         Ok(Self {
             ast: parser::parse(expr)?,
-            pool,
+            arena,
             frame: Frame::new(),
         })
     }
@@ -45,13 +45,13 @@ impl JsonAta {
     }
 
     pub fn assign_var(&self, name: &str, value: &Value) {
-        self.frame.bind(name, self.pool.clone(), value)
+        self.frame.bind(name, self.arena.clone(), value)
     }
 
     pub fn evaluate(&self, input: Option<&str>) -> Result<Value> {
         let input = match input {
-            Some(input) => json::parse_with_pool(input, self.pool.clone()).unwrap(),
-            None => self.pool.undefined(),
+            Some(input) => json::parse_with_arena(input, self.arena.clone()).unwrap(),
+            None => self.arena.undefined(),
         };
 
         self.evaluate_with_value(input)
@@ -79,11 +79,11 @@ impl JsonAta {
         macro_rules! bind {
             ($name:literal, $new:ident, $fn:ident) => {
                 self.frame
-                    .bind($name, self.pool.clone(), &self.pool.$new($name, $fn));
+                    .bind($name, self.arena.clone(), &self.arena.$new($name, $fn));
             };
         }
 
-        self.frame.bind("$", self.pool.clone(), &input);
+        self.frame.bind("$", self.arena.clone(), &input);
         bind!("lookup", nativefn2, fn_lookup);
         bind!("append", nativefn2, fn_append);
         bind!("boolean", nativefn1, fn_boolean);
@@ -103,7 +103,7 @@ impl JsonAta {
 
         let chain_ast = parser::parse("function($f, $g) { function($x){ $g($f($x)) } }")?;
 
-        let evaluator = Evaluator::new(self.pool.clone(), chain_ast);
+        let evaluator = Evaluator::new(self.arena.clone(), chain_ast);
         evaluator.evaluate(&self.ast, &input, &self.frame)
     }
 }

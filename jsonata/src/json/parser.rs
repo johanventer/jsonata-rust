@@ -51,7 +51,7 @@ struct Parser<'a> {
     // Length of the source
     length: usize,
 
-    pool: ValueArena,
+    arena: ValueArena,
 }
 
 // Read a byte from the source.
@@ -357,14 +357,14 @@ macro_rules! expect_fraction {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(source: &'a str, pool: ValueArena) -> Self {
+    pub fn new(source: &'a str, arena: ValueArena) -> Self {
         Parser {
             buffer: Vec::with_capacity(30),
             source,
             byte_ptr: source.as_ptr(),
             index: 0,
             length: source.len(),
-            pool,
+            arena,
         }
     }
 
@@ -631,13 +631,13 @@ impl<'a> Parser<'a> {
                         }
 
                         stack.push(StackBlock(
-                            self.pool.array_with_capacity(2, ArrayFlags::empty()),
+                            self.arena.array_with_capacity(2, ArrayFlags::empty()),
                             None,
                         ));
                         continue 'parsing;
                     }
 
-                    self.pool.array(ArrayFlags::empty())
+                    self.arena.array(ArrayFlags::empty())
                 }
                 b'{' => {
                     ch = expect_byte_ignore_whitespace!(self);
@@ -647,7 +647,7 @@ impl<'a> Parser<'a> {
                             return Err(Error::I0203ExceededDepthLimit);
                         }
 
-                        let object = self.pool.object_with_capacity(3);
+                        let object = self.arena.object_with_capacity(3);
 
                         if ch != b'"' {
                             return self.unexpected_character();
@@ -663,14 +663,17 @@ impl<'a> Parser<'a> {
                         continue 'parsing;
                     }
 
-                    self.pool.object()
+                    self.arena.object()
                 }
-                b'"' => self.pool.clone().string(String::from(expect_string!(self))),
-                b'0' => self.pool.clone().number(allow_number_extensions!(self)),
-                b'1'..=b'9' => self.pool.clone().number(expect_number!(self, ch)),
+                b'"' => self
+                    .arena
+                    .clone()
+                    .string(String::from(expect_string!(self))),
+                b'0' => self.arena.clone().number(allow_number_extensions!(self)),
+                b'1'..=b'9' => self.arena.clone().number(expect_number!(self, ch)),
                 b'-' => {
                     let ch = expect_byte!(self);
-                    self.pool.clone().number(-match ch {
+                    self.arena.clone().number(-match ch {
                         b'0' => allow_number_extensions!(self),
                         b'1'..=b'9' => expect_number!(self, ch),
                         _ => return self.unexpected_character(),
@@ -678,15 +681,15 @@ impl<'a> Parser<'a> {
                 }
                 b't' => {
                     expect_sequence!(self, b'r', b'u', b'e');
-                    self.pool.bool(true)
+                    self.arena.bool(true)
                 }
                 b'f' => {
                     expect_sequence!(self, b'a', b'l', b's', b'e');
-                    self.pool.bool(false)
+                    self.arena.bool(false)
                 }
                 b'n' => {
                     expect_sequence!(self, b'u', b'l', b'l');
-                    self.pool.null()
+                    self.arena.null()
                 }
                 _ => return self.unexpected_character(),
             };
@@ -752,11 +755,11 @@ struct StackBlock<'a>(Value, Option<&'a str>);
 // All that hard work, and in the end it's just a single function in the API.
 #[inline]
 pub fn parse(source: &str) -> Result<Value> {
-    let pool = ValueArena::new();
-    Parser::new(source, pool).parse()
+    let arena = ValueArena::new();
+    Parser::new(source, arena).parse()
 }
 
 #[inline]
-pub fn parse_with_pool(source: &str, pool: ValueArena) -> Result<Value> {
-    Parser::new(source, pool).parse()
+pub fn parse_with_arena(source: &str, arena: ValueArena) -> Result<Value> {
+    Parser::new(source, arena).parse()
 }

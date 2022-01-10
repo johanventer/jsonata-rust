@@ -2,11 +2,11 @@ use std::borrow::Cow;
 use std::ops::Deref;
 use std::{collections::HashMap, fmt};
 
+mod arena;
 mod kind;
-mod pool;
 
+pub use arena::ValueArena;
 pub use kind::{ArrayFlags, ValueKind};
-pub use pool::ValueArena;
 
 use crate::ast::{Ast, AstKind};
 use crate::json::codegen::{DumpGenerator, Generator, PrettyGenerator};
@@ -15,14 +15,14 @@ use crate::json::codegen::{DumpGenerator, Generator, PrettyGenerator};
 ///
 /// `Value`s are intended to be created and dropped as needed without having any
 /// effect on the underlying data stored in the `ValueArena`. They are essentially
-/// pointers to nodes in the pool, that contain a reference to the pool and the
-/// index of a node in the pool.
+/// pointers to nodes in the arena, that contain a reference to the arena and the
+/// index of a node in the arena.
 ///
 /// As a `Value` is just an `Rc` and a `usize`, it has a Clone implementation which
 /// makes it very cheap to copy.
 #[derive(Clone)]
 pub struct Value {
-    pool: ValueArena,
+    arena: ValueArena,
     index: usize,
 }
 
@@ -40,27 +40,27 @@ impl Value {
 
     #[inline]
     pub fn is_undefined(&self) -> bool {
-        matches!(self.pool.get(self.index), ValueKind::Undefined)
+        matches!(self.arena.get(self.index), ValueKind::Undefined)
     }
 
     #[inline]
     pub fn is_null(&self) -> bool {
-        matches!(self.pool.get(self.index), ValueKind::Null)
+        matches!(self.arena.get(self.index), ValueKind::Null)
     }
 
     #[inline]
     pub fn is_bool(&self) -> bool {
-        matches!(self.pool.get(self.index), ValueKind::Bool(..))
+        matches!(self.arena.get(self.index), ValueKind::Bool(..))
     }
 
     #[inline]
     pub fn is_number(&self) -> bool {
-        matches!(self.pool.get(self.index), ValueKind::Number(..))
+        matches!(self.arena.get(self.index), ValueKind::Number(..))
     }
 
     #[inline]
     pub fn is_integer(&self) -> bool {
-        if let ValueKind::Number(ref n) = self.pool.get(self.index) {
+        if let ValueKind::Number(ref n) = self.arena.get(self.index) {
             let n = f64::from(*n);
             match n.classify() {
                 std::num::FpCategory::Nan
@@ -78,28 +78,28 @@ impl Value {
 
     #[inline]
     pub fn is_nan(&self) -> bool {
-        matches!(self.pool.get(self.index), ValueKind::Number(n) if n.is_nan())
+        matches!(self.arena.get(self.index), ValueKind::Number(n) if n.is_nan())
     }
 
     #[inline]
     pub fn is_string(&self) -> bool {
-        matches!(self.pool.get(self.index), ValueKind::String(..))
+        matches!(self.arena.get(self.index), ValueKind::String(..))
     }
 
     #[inline]
     pub fn is_array(&self) -> bool {
-        matches!(self.pool.get(self.index), ValueKind::Array(..))
+        matches!(self.arena.get(self.index), ValueKind::Array(..))
     }
 
     #[inline]
     pub fn is_object(&self) -> bool {
-        matches!(self.pool.get(self.index), ValueKind::Object(..))
+        matches!(self.arena.get(self.index), ValueKind::Object(..))
     }
 
     #[inline]
     pub fn is_function(&self) -> bool {
         matches!(
-            self.pool.get(self.index),
+            self.arena.get(self.index),
             ValueKind::Lambda { .. }
                 | ValueKind::NativeFn0(..)
                 | ValueKind::NativeFn1(..)
@@ -109,7 +109,7 @@ impl Value {
     }
 
     pub fn is_truthy(&self) -> bool {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::Undefined => false,
             ValueKind::Null => false,
             ValueKind::Number(n) => *n != 0.0,
@@ -137,7 +137,7 @@ impl Value {
     }
 
     pub fn arity(&self) -> usize {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::Lambda(
                 _,
                 Ast {
@@ -154,82 +154,82 @@ impl Value {
     }
 
     pub fn as_bool(&self) -> bool {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::Bool(b) => *b,
             _ => panic!("Not a bool"),
         }
     }
 
     pub fn as_f32(&self) -> f32 {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::Number(n) => f32::from(*n),
             _ => panic!("Not a number"),
         }
     }
 
     pub fn as_f64(&self) -> f64 {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::Number(n) => f64::from(*n),
             _ => panic!("Not a number"),
         }
     }
 
     pub fn as_usize(&self) -> usize {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::Number(ref n) => f64::from(*n) as usize,
             _ => panic!("Not a number"),
         }
     }
 
     pub fn as_isize(&self) -> isize {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::Number(ref n) => f64::from(*n) as isize,
             _ => panic!("Not a number"),
         }
     }
 
     pub fn as_str(&self) -> Cow<'_, str> {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::String(ref s) => Cow::from(s),
             _ => panic!("Not a string"),
         }
     }
 
     pub fn len(&self) -> usize {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::Array(array, _) => array.len(),
             _ => panic!("Not an array"),
         }
     }
 
     pub fn is_empty(&self) -> bool {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::Array(array, _) => array.is_empty(),
             _ => panic!("Not an array"),
         }
     }
 
     pub fn get_member(&self, index: usize) -> Value {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::Array(ref array, _) => match array.get(index) {
                 Some(index) => Value {
-                    pool: self.pool.clone(),
+                    arena: self.arena.clone(),
                     index: *index,
                 },
-                None => self.pool.undefined(),
+                None => self.arena.undefined(),
             },
             _ => panic!("Not an array"),
         }
     }
 
     pub fn get_entry(&self, key: &str) -> Value {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::Object(ref map) => match map.get(key) {
                 Some(index) => Value {
-                    pool: self.pool.clone(),
+                    arena: self.arena.clone(),
                     index: *index,
                 },
-                None => self.pool.undefined(),
+                None => self.arena.undefined(),
             },
             _ => panic!("Not an object"),
         }
@@ -237,12 +237,12 @@ impl Value {
 
     #[inline]
     pub fn insert_new(&mut self, key: &str, kind: ValueKind) {
-        self.pool.object_insert(self.index, key, kind);
+        self.arena.object_insert(self.index, key, kind);
     }
 
     #[inline]
     pub fn insert(&mut self, key: &str, value: &Value) {
-        self.pool
+        self.arena
             .object_insert_index(self.index, key, value.index());
     }
 
@@ -253,10 +253,10 @@ impl Value {
     /// If the `ValueKind` wrapped by this `Value` is anot a `ValueKind::Array`.
     #[inline]
     pub fn push_new(&mut self, kind: ValueKind) {
-        self.pool.array_push(self.index, kind);
+        self.arena.array_push(self.index, kind);
     }
 
-    /// Pushes a pool index into the `ValueKind::Array` wrapped by this `Value`.
+    /// Pushes an arena index into the `ValueKind::Array` wrapped by this `Value`.
     ///
     /// Use this if you have constructed a Value separately and now want it to be an item
     /// in an existing `ValueKind::Array`.
@@ -270,12 +270,12 @@ impl Value {
     /// If the `ValueKind` wrapped by this `Value` is not a `ValueKind::Array`.
     #[inline]
     pub fn push(&mut self, value: &Value) {
-        self.pool.array_push_index(self.index, value.index());
+        self.arena.array_push_index(self.index, value.index());
     }
 
     /// Wraps an existing value in an array.
     pub fn wrap_in_array(&self, flags: ArrayFlags) -> Value {
-        let mut array = self.pool.array_with_capacity(1, flags);
+        let mut array = self.arena.array_with_capacity(1, flags);
         array.push(self);
         array
     }
@@ -295,8 +295,8 @@ impl Value {
     ///
     /// If the `ValueKind` wrapped by this `Value` is not a `ValueKind::Array`.
     pub fn members(&self) -> Members {
-        match self.pool.get(self.index) {
-            ValueKind::Array(ref array, _) => Members::new(&self.pool, array),
+        match self.arena.get(self.index) {
+            ValueKind::Array(ref array, _) => Members::new(&self.arena, array),
             _ => panic!("Not an array"),
         }
     }
@@ -307,14 +307,14 @@ impl Value {
     ///
     /// If the `ValueKind` wrapped by this `Value` is not a `ValueKind::Object`.
     pub fn entries(&self) -> Entries {
-        match self.pool.get(self.index) {
-            ValueKind::Object(ref map) => Entries::new(&self.pool, map),
+        match self.arena.get(self.index) {
+            ValueKind::Object(ref map) => Entries::new(&self.arena, map),
             _ => panic!("Not an object"),
         }
     }
 
     pub fn get_flags(&self) -> ArrayFlags {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::Array(_, flags) => *flags,
             _ => panic!("Not an array"),
         }
@@ -322,16 +322,16 @@ impl Value {
 
     #[inline]
     pub fn set_flags(&mut self, new_flags: ArrayFlags) {
-        self.pool.array_set_flags(self.index, new_flags);
+        self.arena.array_set_flags(self.index, new_flags);
     }
 
     #[inline]
     pub fn add_flags(&mut self, flags_to_add: ArrayFlags) {
-        self.pool.array_add_flags(self.index, flags_to_add);
+        self.arena.array_add_flags(self.index, flags_to_add);
     }
 
     pub fn has_flags(&self, check_flags: ArrayFlags) -> bool {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::Array(_, flags) => flags.contains(check_flags),
             _ => false,
         }
@@ -357,17 +357,17 @@ impl Deref for Value {
     type Target = ValueKind;
 
     fn deref(&self) -> &Self::Target {
-        self.pool.get(self.index)
+        self.arena.get(self.index)
     }
 }
 
 /// Compares two `Value`s for equality by comparing their underlying `ValueKind`s.
 ///
-/// Delegates comparison to the ValueKind instance in the pool, so you can
+/// Delegates comparison to the ValueKind instance in the arena, so you can
 /// directly compare `Value`s to determine if their underlying `ValueKind`s are equal.
 impl PartialEq<Value> for Value {
     fn eq(&self, other: &Value) -> bool {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::Array(..) => {
                 if other.is_array() && other.len() == self.len() {
                     self.members().zip(other.members()).all(|(l, r)| l == r)
@@ -382,20 +382,20 @@ impl PartialEq<Value> for Value {
                     false
                 }
             }
-            _ => self.pool.get(self.index) == self.pool.get(other.index),
+            _ => self.arena.get(self.index) == self.arena.get(other.index),
         }
     }
 }
 
 impl PartialEq<ValueKind> for Value {
     fn eq(&self, other: &ValueKind) -> bool {
-        self.pool.get(self.index) == other
+        self.arena.get(self.index) == other
     }
 }
 
 impl PartialEq<bool> for Value {
     fn eq(&self, other: &bool) -> bool {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::Bool(ref b) => *b == *other,
             _ => false,
         }
@@ -404,7 +404,7 @@ impl PartialEq<bool> for Value {
 
 impl PartialEq<i32> for Value {
     fn eq(&self, other: &i32) -> bool {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::Number(ref n) => *n == *other,
             _ => false,
         }
@@ -413,7 +413,7 @@ impl PartialEq<i32> for Value {
 
 impl PartialEq<i64> for Value {
     fn eq(&self, other: &i64) -> bool {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::Number(ref n) => *n == *other,
             _ => false,
         }
@@ -422,7 +422,7 @@ impl PartialEq<i64> for Value {
 
 impl PartialEq<f32> for Value {
     fn eq(&self, other: &f32) -> bool {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::Number(ref n) => *n == *other,
             _ => false,
         }
@@ -431,7 +431,7 @@ impl PartialEq<f32> for Value {
 
 impl PartialEq<f64> for Value {
     fn eq(&self, other: &f64) -> bool {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::Number(n) => *n == *other,
             _ => false,
         }
@@ -440,7 +440,7 @@ impl PartialEq<f64> for Value {
 
 impl PartialEq<&str> for Value {
     fn eq(&self, other: &&str) -> bool {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::String(s) => *s == **other,
             _ => false,
         }
@@ -449,7 +449,7 @@ impl PartialEq<&str> for Value {
 
 impl PartialEq<String> for Value {
     fn eq(&self, other: &String) -> bool {
-        match self.pool.get(self.index) {
+        match self.arena.get(self.index) {
             ValueKind::String(s) => *s == *other,
             _ => false,
         }
@@ -457,14 +457,14 @@ impl PartialEq<String> for Value {
 }
 
 pub struct Members<'a> {
-    pool: &'a ValueArena,
+    arena: &'a ValueArena,
     inner: std::slice::Iter<'a, usize>,
 }
 
 impl<'a> Members<'a> {
-    pub fn new(pool: &'a ValueArena, array: &'a [usize]) -> Self {
+    pub fn new(arena: &'a ValueArena, array: &'a [usize]) -> Self {
         Self {
-            pool,
+            arena,
             inner: array.iter(),
         }
     }
@@ -476,21 +476,21 @@ impl<'a> Iterator for Members<'a> {
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next().map(|index| Value {
-            pool: self.pool.clone(),
+            arena: self.arena.clone(),
             index: *index,
         })
     }
 }
 
 pub struct Entries<'a> {
-    pool: &'a ValueArena,
+    arena: &'a ValueArena,
     inner: std::collections::hash_map::Iter<'a, String, usize>,
 }
 
 impl<'a> Entries<'a> {
-    pub fn new(pool: &'a ValueArena, map: &'a HashMap<String, usize>) -> Self {
+    pub fn new(arena: &'a ValueArena, map: &'a HashMap<String, usize>) -> Self {
         Self {
-            pool,
+            arena,
             inner: map.iter(),
         }
     }
@@ -505,7 +505,7 @@ impl<'a> Iterator for Entries<'a> {
             (
                 key,
                 Value {
-                    pool: self.pool.clone(),
+                    arena: self.arena.clone(),
                     index: *index,
                 },
             )
@@ -518,7 +518,7 @@ impl fmt::Display for Value {
         if f.alternate() {
             f.write_str(&self.pretty(4))
         } else {
-            match self.pool.get(self.index) {
+            match self.arena.get(self.index) {
                 ValueKind::String(ref value) => value.fmt(f),
                 ValueKind::Number(ref value) => value.fmt(f),
                 ValueKind::Bool(ref value) => value.fmt(f),
@@ -535,8 +535,8 @@ mod tests {
 
     #[test]
     fn members_iter() {
-        let pool = ValueArena::new();
-        let mut a = pool.array(ArrayFlags::empty());
+        let arena = ValueArena::new();
+        let mut a = arena.array(ArrayFlags::empty());
         a.push_new(ValueKind::Number(5.into()));
         a.push_new(ValueKind::Number(4.into()));
         a.push_new(ValueKind::Number(3.into()));
@@ -554,8 +554,8 @@ mod tests {
     #[test]
     fn entries_iter() {
         let map = HashMap::from([("a", "1"), ("b", "2"), ("c", "3"), ("d", "4"), ("e", "5")]);
-        let pool = ValueArena::new();
-        let mut o = pool.object();
+        let arena = ValueArena::new();
+        let mut o = arena.object();
         map.iter().for_each(|(k, v)| o.insert_new(*k, (*v).into()));
         let entries: Vec<(String, String)> = o
             .entries()
@@ -570,8 +570,8 @@ mod tests {
 
     #[test]
     fn wrap_in_array() {
-        let pool = ValueArena::new();
-        let v = pool.string(String::from("hello world"));
+        let arena = ValueArena::new();
+        let v = arena.string(String::from("hello world"));
         let v = v.wrap_in_array(ArrayFlags::empty());
         assert!(v.is_array());
         assert_eq!(v.get_member(0).as_str(), "hello world");

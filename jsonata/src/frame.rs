@@ -19,11 +19,11 @@ impl Frame {
         })))
     }
 
-    pub fn bind(&self, name: &str, pool: ValueArena, value: &Value) {
+    pub fn bind(&self, name: &str, arena: ValueArena, value: &Value) {
         // Values in the frame need to be complete clones, otherwise modifying them would change their value.
         // Arrays and object will still point at the same members, and this replicates the reference semantics
         // in Javascript.
-        let v = pool.value((**value).clone());
+        let v = arena.value((**value).clone());
         self.0.borrow_mut().bindings.insert(name.to_string(), v);
     }
 
@@ -63,8 +63,8 @@ mod tests {
     #[test]
     fn bind() {
         let frame = Frame::new();
-        let pool = ValueArena::new();
-        frame.bind("a", pool.clone(), &pool.number(1));
+        let arena = ValueArena::new();
+        frame.bind("a", arena.clone(), &arena.number(1));
         let a = frame.lookup("a");
         assert!(a.is_some());
         assert_eq!(a.unwrap(), 1);
@@ -73,8 +73,8 @@ mod tests {
     #[test]
     fn lookup_through_parent() {
         let parent = Frame::new();
-        let pool = ValueArena::new();
-        parent.bind("a", pool.clone(), &pool.number(1));
+        let arena = ValueArena::new();
+        parent.bind("a", arena.clone(), &arena.number(1));
         let frame = Frame::new_with_parent(&parent);
         let a = frame.lookup("a");
         assert!(a.is_some());
@@ -84,10 +84,10 @@ mod tests {
     #[test]
     fn lookup_overriding_parent() {
         let parent = Frame::new();
-        let pool = ValueArena::new();
-        parent.bind("a", pool.clone(), &pool.number(1));
+        let arena = ValueArena::new();
+        parent.bind("a", arena.clone(), &arena.number(1));
         let frame = Frame::new_with_parent(&parent);
-        frame.bind("a", pool.clone(), &pool.number(2));
+        frame.bind("a", arena.clone(), &arena.number(2));
         let a = frame.lookup("a");
         assert!(a.is_some());
         assert_eq!(a.unwrap(), 2);

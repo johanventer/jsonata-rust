@@ -17,12 +17,12 @@ fn t(resource: &str) {
         .unwrap();
     std::env::set_current_dir(working_dir).unwrap();
 
-    let pool = ValueArena::new();
+    let arena = ValueArena::new();
 
     let test = fs::read_to_string(resource)
         .unwrap_or_else(|_| panic!("Failed to read test case: {}", resource));
 
-    let test = json::parse_with_pool(&test, pool.clone())
+    let test = json::parse_with_arena(&test, arena.clone())
         .unwrap()
         .wrap_in_array_if_needed(ArrayFlags::empty());
 
@@ -51,12 +51,12 @@ fn t(resource: &str) {
             let dataset = format!("jsonata/tests/testsuite/datasets/{}.json", dataset.as_str());
             let dataset = fs::read_to_string(&dataset)
                 .unwrap_or_else(|_e| panic!("Could not read dataset file: {}", dataset));
-            json::parse_with_pool(&dataset, pool.clone()).unwrap()
+            json::parse_with_arena(&dataset, arena.clone()).unwrap()
         } else {
             data
         };
 
-        let jsonata = JsonAta::new_with_pool(&expr, pool.clone());
+        let jsonata = JsonAta::new_with_arena(&expr, arena.clone());
 
         match jsonata {
             Ok(jsonata) => {
