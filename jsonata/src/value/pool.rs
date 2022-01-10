@@ -13,18 +13,18 @@ use crate::Result;
 /// type which wraps the index and a reference to the pool.
 ///
 /// The tree structure of both JSON input and evaluation results is represented
-/// in the pool as a flat list of `ValueKind` where children are referenced by index.
+/// in the arena as a flat list of `ValueKind` where children are referenced by index.
 ///
 /// # Safety
 ///
 /// Items in the pool can never be removed, so deferencing pointers to them is always safe.
-pub struct ValuePool(Rc<RefCell<Vec<ValueKind>>>);
+pub struct ValueArena(Rc<RefCell<Vec<ValueKind>>>);
 
-impl ValuePool {
-    pub fn new() -> ValuePool {
-        let pool = ValuePool(Rc::new(RefCell::new(Vec::with_capacity(16))));
+impl ValueArena {
+    pub fn new() -> ValueArena {
+        let pool = ValueArena(Rc::new(RefCell::new(Vec::with_capacity(16))));
 
-        // The first index in any ValuePool is undefined, it's very commonly used
+        // The first index in any ValueArena is undefined, it's very commonly used
         pool.insert(ValueKind::Undefined);
 
         pool
@@ -221,24 +221,24 @@ impl ValuePool {
     }
 }
 
-impl Default for ValuePool {
+impl Default for ValueArena {
     fn default() -> Self {
         Self::new()
     }
 }
 
 /// Returns a new `ValuPool` with the reference count of the contained Rc bumped.
-impl Clone for ValuePool {
+impl Clone for ValueArena {
     fn clone(&self) -> Self {
         Self(self.0.clone())
     }
 }
 
-impl Debug for ValuePool {
+impl Debug for ValueArena {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (i, _) in self.0.borrow().iter().enumerate() {
+        for (i, kind) in self.0.borrow().iter().enumerate() {
             write!(f, "[{}] ", i)?;
-            match self.get(i) {
+            match kind {
                 ValueKind::Undefined => write!(f, "undefined")?,
                 ValueKind::Null => write!(f, "null")?,
                 ValueKind::Number(value) => write!(f, "{}", value)?,

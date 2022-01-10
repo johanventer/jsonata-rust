@@ -6,15 +6,15 @@ mod kind;
 mod pool;
 
 pub use kind::{ArrayFlags, ValueKind};
-pub use pool::ValuePool;
+pub use pool::ValueArena;
 
 use crate::ast::{Ast, AstKind};
 use crate::json::codegen::{DumpGenerator, Generator, PrettyGenerator};
 
-/// A thin wrapper around the index to a `ValueKind` within a `ValuePool`.
+/// A thin wrapper around the index to a `ValueKind` within a `ValueArena`.
 ///
 /// `Value`s are intended to be created and dropped as needed without having any
-/// effect on the underlying data stored in the `ValuePool`. They are essentially
+/// effect on the underlying data stored in the `ValueArena`. They are essentially
 /// pointers to nodes in the pool, that contain a reference to the pool and the
 /// index of a node in the pool.
 ///
@@ -22,7 +22,7 @@ use crate::json::codegen::{DumpGenerator, Generator, PrettyGenerator};
 /// makes it very cheap to copy.
 #[derive(Clone)]
 pub struct Value {
-    pool: ValuePool,
+    pool: ValueArena,
     index: usize,
 }
 
@@ -262,7 +262,7 @@ impl Value {
     /// in an existing `ValueKind::Array`.
     ///
     /// Note: This makes absolutely no attempt to a) verify the the index is valid, b)
-    /// that it even came from the same `ValuePool`, or c) that this does not create a circular
+    /// that it even came from the same `ValueArena`, or c) that this does not create a circular
     /// reference.
     ///
     /// # Panics
@@ -457,12 +457,12 @@ impl PartialEq<String> for Value {
 }
 
 pub struct Members<'a> {
-    pool: &'a ValuePool,
+    pool: &'a ValueArena,
     inner: std::slice::Iter<'a, usize>,
 }
 
 impl<'a> Members<'a> {
-    pub fn new(pool: &'a ValuePool, array: &'a [usize]) -> Self {
+    pub fn new(pool: &'a ValueArena, array: &'a [usize]) -> Self {
         Self {
             pool,
             inner: array.iter(),
@@ -483,12 +483,12 @@ impl<'a> Iterator for Members<'a> {
 }
 
 pub struct Entries<'a> {
-    pool: &'a ValuePool,
+    pool: &'a ValueArena,
     inner: std::collections::hash_map::Iter<'a, String, usize>,
 }
 
 impl<'a> Entries<'a> {
-    pub fn new(pool: &'a ValuePool, map: &'a HashMap<String, usize>) -> Self {
+    pub fn new(pool: &'a ValueArena, map: &'a HashMap<String, usize>) -> Self {
         Self {
             pool,
             inner: map.iter(),
@@ -535,7 +535,7 @@ mod tests {
 
     #[test]
     fn members_iter() {
-        let pool = ValuePool::new();
+        let pool = ValueArena::new();
         let mut a = pool.array(ArrayFlags::empty());
         a.push_new(ValueKind::Number(5.into()));
         a.push_new(ValueKind::Number(4.into()));
@@ -554,7 +554,7 @@ mod tests {
     #[test]
     fn entries_iter() {
         let map = HashMap::from([("a", "1"), ("b", "2"), ("c", "3"), ("d", "4"), ("e", "5")]);
-        let pool = ValuePool::new();
+        let pool = ValueArena::new();
         let mut o = pool.object();
         map.iter().for_each(|(k, v)| o.insert_new(*k, (*v).into()));
         let entries: Vec<(String, String)> = o
@@ -570,7 +570,7 @@ mod tests {
 
     #[test]
     fn wrap_in_array() {
-        let pool = ValuePool::new();
+        let pool = ValueArena::new();
         let v = pool.string(String::from("hello world"));
         let v = v.wrap_in_array(ArrayFlags::empty());
         assert!(v.is_array());

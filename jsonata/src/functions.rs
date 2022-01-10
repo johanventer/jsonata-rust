@@ -5,13 +5,13 @@ use jsonata_signature_macro::signature;
 
 use super::evaluator::Evaluator;
 use super::frame::Frame;
-use super::value::{ArrayFlags, Value, ValueKind, ValuePool};
+use super::value::{ArrayFlags, Value, ValueArena, ValueKind};
 
 #[derive(Clone)]
 pub struct FunctionContext<'a> {
     pub name: &'a str,
     pub char_index: usize,
-    pub pool: ValuePool,
+    pub pool: ValueArena,
     pub input: Value,
     pub frame: Frame,
     pub evaluator: &'a Evaluator,

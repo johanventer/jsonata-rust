@@ -15,11 +15,11 @@ use ast::Ast;
 use evaluator::Evaluator;
 use frame::Frame;
 use functions::*;
-use value::{ArrayFlags, Value, ValuePool};
+use value::{ArrayFlags, Value, ValueArena};
 
 pub struct JsonAta {
     ast: Ast,
-    pool: ValuePool,
+    pool: ValueArena,
     frame: Frame,
 }
 
@@ -27,12 +27,12 @@ impl JsonAta {
     pub fn new(expr: &str) -> Result<JsonAta> {
         Ok(Self {
             ast: parser::parse(expr)?,
-            pool: ValuePool::new(),
+            pool: ValueArena::new(),
             frame: Frame::new(),
         })
     }
 
-    pub fn new_with_pool(expr: &str, pool: ValuePool) -> Result<JsonAta> {
+    pub fn new_with_pool(expr: &str, pool: ValueArena) -> Result<JsonAta> {
         Ok(Self {
             ast: parser::parse(expr)?,
             pool,

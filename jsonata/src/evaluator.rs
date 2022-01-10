@@ -5,15 +5,15 @@ use jsonata_errors::{Error, Result};
 use super::ast::*;
 use super::frame::Frame;
 use super::functions::*;
-use super::value::{ArrayFlags, Value, ValueKind, ValuePool};
+use super::value::{ArrayFlags, Value, ValueArena, ValueKind};
 
 pub struct Evaluator {
-    pool: ValuePool,
+    pool: ValueArena,
     chain_ast: Ast,
 }
 
 impl Evaluator {
-    pub fn new(pool: ValuePool, chain_ast: Ast) -> Self {
+    pub fn new(pool: ValueArena, chain_ast: Ast) -> Self {
         Evaluator { pool, chain_ast }
     }
 

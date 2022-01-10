@@ -6,7 +6,7 @@ use std::path;
 use test_generator::test_resources;
 
 use jsonata::json;
-use jsonata::value::{ArrayFlags, ValuePool};
+use jsonata::value::{ArrayFlags, ValueArena};
 use jsonata::JsonAta;
 
 // TODO: timelimit, depth
@@ -17,7 +17,7 @@ fn t(resource: &str) {
         .unwrap();
     std::env::set_current_dir(working_dir).unwrap();
 
-    let pool = ValuePool::new();
+    let pool = ValueArena::new();
 
     let test = fs::read_to_string(resource)
         .unwrap_or_else(|_| panic!("Failed to read test case: {}", resource));

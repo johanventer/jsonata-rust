@@ -18,7 +18,7 @@
 // with MIR support the compiler will get smarter about this.
 
 use super::number::Number;
-use crate::value::{ArrayFlags, ValuePool};
+use crate::value::{ArrayFlags, ValueArena};
 use crate::{Error, Result, Value};
 use std::char::decode_utf16;
 use std::convert::TryFrom;
@@ -51,7 +51,7 @@ struct Parser<'a> {
     // Length of the source
     length: usize,
 
-    pool: ValuePool,
+    pool: ValueArena,
 }
 
 // Read a byte from the source.
@@ -357,7 +357,7 @@ macro_rules! expect_fraction {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(source: &'a str, pool: ValuePool) -> Self {
+    pub fn new(source: &'a str, pool: ValueArena) -> Self {
         Parser {
             buffer: Vec::with_capacity(30),
             source,
@@ -752,11 +752,11 @@ struct StackBlock<'a>(Value, Option<&'a str>);
 // All that hard work, and in the end it's just a single function in the API.
 #[inline]
 pub fn parse(source: &str) -> Result<Value> {
-    let pool = ValuePool::new();
+    let pool = ValueArena::new();
     Parser::new(source, pool).parse()
 }
 
 #[inline]
-pub fn parse_with_pool(source: &str, pool: ValuePool) -> Result<Value> {
+pub fn parse_with_pool(source: &str, pool: ValueArena) -> Result<Value> {
     Parser::new(source, pool).parse()
 }

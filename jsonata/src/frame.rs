@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use super::value::{Value, ValuePool};
+use super::value::{Value, ValueArena};
 
 pub struct Frame(Rc<RefCell<FrameData>>);
 
@@ -19,7 +19,7 @@ impl Frame {
         })))
     }
 
-    pub fn bind(&self, name: &str, pool: ValuePool, value: &Value) {
+    pub fn bind(&self, name: &str, pool: ValueArena, value: &Value) {
         // Values in the frame need to be complete clones, otherwise modifying them would change their value.
         // Arrays and object will still point at the same members, and this replicates the reference semantics
         // in Javascript.
@@ -58,12 +58,12 @@ pub struct FrameData {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::value::ValuePool;
+    use crate::value::ValueArena;
 
     #[test]
     fn bind() {
         let frame = Frame::new();
-        let pool = ValuePool::new();
+        let pool = ValueArena::new();
         frame.bind("a", pool.clone(), &pool.number(1));
         let a = frame.lookup("a");
         assert!(a.is_some());
@@ -73,7 +73,7 @@ mod tests {
     #[test]
     fn lookup_through_parent() {
         let parent = Frame::new();
-        let pool = ValuePool::new();
+        let pool = ValueArena::new();
         parent.bind("a", pool.clone(), &pool.number(1));
         let frame = Frame::new_with_parent(&parent);
         let a = frame.lookup("a");
@@ -84,7 +84,7 @@ mod tests {
     #[test]
     fn lookup_overriding_parent() {
         let parent = Frame::new();
-        let pool = ValuePool::new();
+        let pool = ValueArena::new();
         parent.bind("a", pool.clone(), &pool.number(1));
         let frame = Frame::new_with_parent(&parent);
         frame.bind("a", pool.clone(), &pool.number(2));
