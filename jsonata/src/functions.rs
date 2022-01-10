@@ -34,9 +34,9 @@ pub fn fn_lookup_internal(context: &FunctionContext, input: &Value, key: &str) -
                 match *res {
                     ValueKind::Undefined => {}
                     ValueKind::Array { .. } => {
-                        res.members().for_each(|item| result.push_index(item.index));
+                        res.members().for_each(|item| result.push(&item));
                     }
-                    _ => result.push_index(res.index),
+                    _ => result.push(&res),
                 };
             }
 
@@ -73,7 +73,7 @@ pub fn fn_append(context: &FunctionContext, arg1: &Value, arg2: &Value) -> Resul
     let result = context.pool.value((**arg1).clone());
     let mut result = result.wrap_in_array_if_needed(ArrayFlags::SEQUENCE);
     let arg2 = arg2.wrap_in_array_if_needed(ArrayFlags::empty());
-    arg2.members().for_each(|m| result.push_index(m.index));
+    arg2.members().for_each(|m| result.push(&m));
 
     Ok(result)
 }
@@ -129,18 +129,18 @@ pub fn fn_filter(context: &FunctionContext, arr: &Value, func: &Value) -> Result
         let mut args = context.pool.array(ArrayFlags::empty());
         let arity = func.arity();
 
-        args.push_index(item.index);
+        args.push(&item);
         if arity >= 2 {
-            args.push(ValueKind::Number(index.into()));
+            args.push_new(ValueKind::Number(index.into()));
         }
         if arity >= 3 {
-            args.push_index(arr.index);
+            args.push(&arr);
         }
 
         let include = context.evaluate_function(func, &args)?;
 
         if include.is_truthy() {
-            result.push_index(item.index);
+            result.push(&item);
         }
     }
 

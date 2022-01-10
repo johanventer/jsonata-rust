@@ -22,8 +22,8 @@ use crate::json::codegen::{DumpGenerator, Generator, PrettyGenerator};
 /// makes it very cheap to copy.
 #[derive(Clone)]
 pub struct Value {
-    pub pool: ValuePool,
-    pub index: usize,
+    pool: ValuePool,
+    index: usize,
 }
 
 impl std::fmt::Debug for Value {
@@ -33,6 +33,11 @@ impl std::fmt::Debug for Value {
 }
 
 impl Value {
+    #[inline]
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
     #[inline]
     pub fn is_undefined(&self) -> bool {
         matches!(self.pool.get(self.index), ValueKind::Undefined)
@@ -231,13 +236,14 @@ impl Value {
     }
 
     #[inline]
-    pub fn insert(&mut self, key: &str, kind: ValueKind) {
+    pub fn insert_new(&mut self, key: &str, kind: ValueKind) {
         self.pool.object_insert(self.index, key, kind);
     }
 
     #[inline]
-    pub fn insert_index(&mut self, key: &str, index: usize) {
-        self.pool.object_insert_index(self.index, key, index);
+    pub fn insert(&mut self, key: &str, value: &Value) {
+        self.pool
+            .object_insert_index(self.index, key, value.index());
     }
 
     /// Pushes a new `ValueKind` into the `ValueKind::Array` wrapped by this `Value`.
@@ -246,7 +252,7 @@ impl Value {
     ///
     /// If the `ValueKind` wrapped by this `Value` is anot a `ValueKind::Array`.
     #[inline]
-    pub fn push(&mut self, kind: ValueKind) {
+    pub fn push_new(&mut self, kind: ValueKind) {
         self.pool.array_push(self.index, kind);
     }
 
@@ -263,14 +269,14 @@ impl Value {
     ///
     /// If the `ValueKind` wrapped by this `Value` is not a `ValueKind::Array`.
     #[inline]
-    pub fn push_index(&mut self, index: usize) {
-        self.pool.array_push_index(self.index, index);
+    pub fn push(&mut self, value: &Value) {
+        self.pool.array_push_index(self.index, value.index());
     }
 
     /// Wraps an existing value in an array.
     pub fn wrap_in_array(&self, flags: ArrayFlags) -> Value {
         let mut array = self.pool.array_with_capacity(1, flags);
-        array.push_index(self.index);
+        array.push(self);
         array
     }
 
@@ -531,11 +537,11 @@ mod tests {
     fn members_iter() {
         let pool = ValuePool::new();
         let mut a = pool.array(ArrayFlags::empty());
-        a.push(ValueKind::Number(5.into()));
-        a.push(ValueKind::Number(4.into()));
-        a.push(ValueKind::Number(3.into()));
-        a.push(ValueKind::Number(2.into()));
-        a.push(ValueKind::Number(1.into()));
+        a.push_new(ValueKind::Number(5.into()));
+        a.push_new(ValueKind::Number(4.into()));
+        a.push_new(ValueKind::Number(3.into()));
+        a.push_new(ValueKind::Number(2.into()));
+        a.push_new(ValueKind::Number(1.into()));
         let mut iter = a.members();
         assert!((5.0 - iter.next().unwrap().as_f64()).abs() < f64::EPSILON);
         assert!((4.0 - iter.next().unwrap().as_f64()).abs() < f64::EPSILON);
@@ -550,7 +556,7 @@ mod tests {
         let map = HashMap::from([("a", "1"), ("b", "2"), ("c", "3"), ("d", "4"), ("e", "5")]);
         let pool = ValuePool::new();
         let mut o = pool.object();
-        map.iter().for_each(|(k, v)| o.insert(*k, (*v).into()));
+        map.iter().for_each(|(k, v)| o.insert_new(*k, (*v).into()));
         let entries: Vec<(String, String)> = o
             .entries()
             .map(|(k, v)| (k.clone(), v.as_str().to_string()))

@@ -45,7 +45,7 @@ impl JsonAta {
     }
 
     pub fn assign_var(&self, name: &str, value: &Value) {
-        self.frame.bind(name, value)
+        self.frame.bind(name, self.pool.clone(), value)
     }
 
     pub fn evaluate(&self, input: Option<&str>) -> Result<Value> {
@@ -78,11 +78,12 @@ impl JsonAta {
 
         macro_rules! bind {
             ($name:literal, $new:ident, $fn:ident) => {
-                self.frame.bind($name, &self.pool.$new($name, $fn));
+                self.frame
+                    .bind($name, self.pool.clone(), &self.pool.$new($name, $fn));
             };
         }
 
-        self.frame.bind("$", &input);
+        self.frame.bind("$", self.pool.clone(), &input);
         bind!("lookup", nativefn2, fn_lookup);
         bind!("append", nativefn2, fn_append);
         bind!("boolean", nativefn1, fn_boolean);

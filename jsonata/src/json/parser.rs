@@ -701,7 +701,7 @@ impl<'a> Parser<'a> {
 
                     Some(StackBlock(ref mut stack_value, ref mut key)) => {
                         if stack_value.is_array() {
-                            stack_value.push_index(value.index);
+                            stack_value.push(&value);
 
                             ch = expect_byte_ignore_whitespace!(self);
 
@@ -715,7 +715,7 @@ impl<'a> Parser<'a> {
                                 _ => return self.unexpected_character(),
                             }
                         } else if stack_value.is_object() {
-                            stack_value.insert_index(key.unwrap(), value.index);
+                            stack_value.insert(key.unwrap(), &value);
 
                             ch = expect_byte_ignore_whitespace!(self);
 

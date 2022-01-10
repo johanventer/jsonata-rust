@@ -150,7 +150,7 @@ impl Evaluator {
                 for item in array.iter() {
                     let value = self.evaluate(item, input, frame)?;
                     if let AstKind::Unary(UnaryOp::ArrayConstructor(..)) = item.kind {
-                        result.push_index(value.index);
+                        result.push(&value);
                     } else {
                         result = fn_append(
                             &self.fn_context("append", node.char_index, input, frame),
@@ -183,7 +183,7 @@ impl Evaluator {
         let mut input = input.wrap_in_array_if_needed(ArrayFlags::empty());
 
         if input.is_empty() {
-            input.push(ValueKind::Undefined);
+            input.push_new(ValueKind::Undefined);
         }
 
         for item in input.members() {
@@ -223,7 +223,7 @@ impl Evaluator {
             let group = groups.get(key).unwrap();
             let value = self.evaluate(&object[group.index].1, &group.data, frame)?;
             if !value.is_undefined() {
-                result.insert_index(key, value.index);
+                result.insert(key, &value);
             }
         }
 
@@ -242,7 +242,7 @@ impl Evaluator {
         if *op == BinaryOp::Bind {
             if let AstKind::Var(ref name) = lhs_ast.kind {
                 let rhs = self.evaluate(rhs_ast, input, frame)?;
-                frame.bind(name, &rhs);
+                frame.bind(name, self.pool.clone(), &rhs);
                 return Ok(rhs);
             }
             unreachable!()
@@ -386,7 +386,7 @@ impl Evaluator {
 
                 let mut result = self.pool.array_with_capacity(size, ArrayFlags::SEQUENCE);
                 for index in lhs..rhs + 1 {
-                    result.push(ValueKind::Number(index.into()));
+                    result.push_new(ValueKind::Number(index.into()));
                 }
 
                 Ok(result)
@@ -448,8 +448,8 @@ impl Evaluator {
                             self.evaluate(&self.chain_ast, &self.pool.undefined(), frame)?;
 
                         let mut args = self.pool.array_with_capacity(2, ArrayFlags::empty());
-                        args.push_index(lhs.index);
-                        args.push_index(rhs.index);
+                        args.push(&lhs);
+                        args.push(&rhs);
 
                         self.apply_function(
                             lhs_ast.char_index,
@@ -460,7 +460,7 @@ impl Evaluator {
                         )
                     } else {
                         let mut args = self.pool.array_with_capacity(1, ArrayFlags::empty());
-                        args.push_index(lhs.index);
+                        args.push(&lhs);
                         self.apply_function(
                             rhs_ast.char_index,
                             &self.pool.undefined(),
@@ -586,7 +586,7 @@ impl Evaluator {
             }
 
             if !item_result.is_undefined() {
-                result.push_index(item_result.index);
+                result.push(&item_result);
             }
         }
 
@@ -602,10 +602,10 @@ impl Evaluator {
 
                 for result_item in result.members() {
                     if !result_item.is_array() || result_item.has_flags(ArrayFlags::CONS) {
-                        result_sequence.push_index(result_item.index);
+                        result_sequence.push(&result_item);
                     } else {
                         for item in result_item.members() {
-                            result_sequence.push_index(item.index);
+                            result_sequence.push(&item);
                         }
                     }
                 }
@@ -654,7 +654,7 @@ impl Evaluator {
                         if item.is_array() {
                             result = item;
                         } else {
-                            result.push_index(item.index);
+                            result.push(&item);
                         }
                     }
                 }
@@ -669,11 +669,11 @@ impl Evaluator {
                             index.members().for_each(|v| {
                                 let index = get_index(v.as_f64());
                                 if index == i {
-                                    result.push_index(item.index);
+                                    result.push(&item);
                                 }
                             });
                         } else if index.is_truthy() {
-                            result.push_index(item.index);
+                            result.push(&item);
                         }
                     }
                 }
@@ -712,12 +712,12 @@ impl Evaluator {
         let mut evaluated_args = self.pool.array(ArrayFlags::empty());
 
         if let Some(context) = context {
-            evaluated_args.push_index(context.index);
+            evaluated_args.push(context);
         }
 
         for arg in args {
             let arg = self.evaluate(arg, input, frame)?;
-            evaluated_args.push_index(arg.index);
+            evaluated_args.push(&arg);
         }
 
         self.apply_function(
@@ -749,7 +749,7 @@ impl Evaluator {
                     // Bind the arguments to their respective names
                     for (index, arg) in args.iter().enumerate() {
                         if let AstKind::Var(ref name) = arg.kind {
-                            frame.bind(name, &evaluated_args.get_member(index));
+                            frame.bind(name, self.pool.clone(), &evaluated_args.get_member(index));
                         } else {
                             unreachable!()
                         }
