@@ -9,13 +9,14 @@ pub mod symbol;
 pub mod tokenizer;
 pub mod value;
 
-use jsonata_errors::{Error, Result};
+pub use jsonata_errors::{Error, Result};
+pub use value::{Value, ValueKind};
 
 use ast::Ast;
 use evaluator::Evaluator;
 use frame::Frame;
 use functions::*;
-use value::{ArrayFlags, Value, ValueArena};
+use value::{ArrayFlags, ValueArena};
 
 pub struct JsonAta {
     ast: Ast,

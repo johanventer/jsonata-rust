@@ -645,11 +645,6 @@ impl<'a> Tokenizer<'a> {
             len: self.byte_index - self.start_byte_index,
         };
 
-        eprintln!(
-            "{:?}, index: {}, len: {}",
-            token, token.byte_index, token.len
-        );
-
         Ok(token)
     }
 

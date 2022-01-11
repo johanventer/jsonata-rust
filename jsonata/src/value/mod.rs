@@ -28,7 +28,7 @@ pub struct Value {
 
 impl std::fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{}", self.dump())
     }
 }
 
@@ -510,22 +510,6 @@ impl<'a> Iterator for Entries<'a> {
                 },
             )
         })
-    }
-}
-
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if f.alternate() {
-            f.write_str(&self.pretty(4))
-        } else {
-            match self.arena.get(self.index) {
-                ValueKind::String(ref value) => value.fmt(f),
-                ValueKind::Number(ref value) => value.fmt(f),
-                ValueKind::Bool(ref value) => value.fmt(f),
-                ValueKind::Null => f.write_str("null"),
-                _ => f.write_str(&self.dump()),
-            }
-        }
     }
 }
 

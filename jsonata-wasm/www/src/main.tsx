@@ -82,16 +82,16 @@ const ExpressionEditor: React.FC<{
         const ms = Math.round((performance.now() - start) * 100) / 100;
         setRustOutput(`Execution time: ${ms}ms\n\nResult:\n\n${result}`);
       } catch (e) {
-        setRustOutput("Failed: " + e);
+        setRustOutput(e as string);
       }
 
       //
       // Js result
       //
       try {
-        const start = performance.now();
-        // NOTE: Include the JSON parsing of the input as the Rust side has to do that as well.
+        // TODO: Think about whether JSON parsing of the input be included in the execution time
         const input = JSON.parse(inputRef.current);
+        const start = performance.now();
         try {
           const j = jsonata(expr);
           const result = j.evaluate(input);

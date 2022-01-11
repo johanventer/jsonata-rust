@@ -137,7 +137,7 @@ impl Evaluator {
                     ValueKind::Number(num) if !num.is_nan() => Ok(self.arena.number(-num)),
                     _ => Err(Error::D1002NegatingNonNumeric(
                         node.char_index,
-                        result.to_string(),
+                        result.dump(),
                     )),
                 }
             }
@@ -190,7 +190,7 @@ impl Evaluator {
             for (index, pair) in object.iter().enumerate() {
                 let key = self.evaluate(&pair.0, &item, frame)?;
                 if !key.is_string() {
-                    return Err(Error::T1003NonStringKey(char_index, key.to_string()));
+                    return Err(Error::T1003NonStringKey(char_index, key.dump()));
                 }
 
                 let key = key.as_str();
@@ -336,8 +336,8 @@ impl Evaluator {
 
                 Err(Error::T2009BinaryOpMismatch(
                     node.char_index,
-                    lhs.to_string(),
-                    rhs.to_string(),
+                    lhs.dump(),
+                    rhs.dump(),
                     op.to_string(),
                 ))
             }

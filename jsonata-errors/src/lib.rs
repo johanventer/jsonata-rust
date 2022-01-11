@@ -205,7 +205,7 @@ impl fmt::Display for Error {
                 
             // Compile time errors
             S0101UnterminatedStringLiteral(ref p) =>
-                write!(f, "{}: Unterminated string literal", p),
+                write!(f, "{}: String literal must be terminated by a matching quote", p),
             S0102LexedNumberOutOfRange(ref p, ref n) =>
                 write!(f, "{}: Number out of range: {}", p, n),
             S0103UnsupportedEscape(ref p, ref c) =>
