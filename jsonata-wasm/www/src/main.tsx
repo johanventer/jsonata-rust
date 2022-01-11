@@ -1,22 +1,27 @@
-import React, { useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import ReactDOM from "react-dom";
 import Editor, { Monaco } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import { Layout, Model, TabNode } from "flexlayout-react";
 import { atom, useAtom } from "jotai";
 import { atomWithStorage, useAtomValue, useUpdateAtom } from "jotai/utils";
-import jsonata, { JsonataError } from "jsonata";
 
-import init, { evaluate } from "jsonata-wasm";
 import demo from "./demo.json";
 import defaultLayout from "./defaultLayout";
 import jsonataMode from "./jsonataMonaco";
+import RustWorker from "./rustWorker?worker";
+import JsWorker from "./jsWorker?worker";
 
 import "flexlayout-react/style/dark.css";
 import "./style.css";
 
-const defaultExpr = "$sum(Account.Order.Product.(Price * Quantity))";
+type WorkerResult =
+  | { type: "success"; ms: number; result: string }
+  | { type: "failed"; error: string };
 
+const rustWorker = new RustWorker();
+const jsWorker = new JsWorker();
+const defaultExpr = "$sum(Account.Order.Product.(Price * Quantity))";
 const inputAtom = atomWithStorage("input", JSON.stringify(demo, null, 2));
 const outputRustAtom = atom(
   "Run an expression with Ctrl/Cmd+Enter to see output..."
@@ -48,9 +53,7 @@ const Toolbar: React.FC<{ newExpression: () => void }> = (props) => {
   );
 };
 
-const ExpressionEditor: React.FC<{
-  handleRun: (expr: string | undefined) => void;
-}> = (props) => {
+const ExpressionEditor: React.FC = (props) => {
   const input = useAtomValue(inputAtom);
   const inputRef = useRef(input);
   const setRustOutput = useUpdateAtom(outputRustAtom);
@@ -72,40 +75,8 @@ const ExpressionEditor: React.FC<{
       setJsOutput("Evaluating...");
 
       const expr = editor.getValue();
-
-      //
-      // Rust result
-      //
-      try {
-        const start = performance.now();
-        const result = evaluate(expr, inputRef.current);
-        const ms = Math.round((performance.now() - start) * 100) / 100;
-        setRustOutput(`Execution time: ${ms}ms\n\nResult:\n\n${result}`);
-      } catch (e) {
-        setRustOutput(e as string);
-      }
-
-      //
-      // Js result
-      //
-      try {
-        // TODO: Think about whether JSON parsing of the input be included in the execution time
-        const input = JSON.parse(inputRef.current);
-        const start = performance.now();
-        try {
-          const j = jsonata(expr);
-          const result = j.evaluate(input);
-          const ms = Math.round((performance.now() - start) * 100) / 100;
-          setJsOutput(
-            `Execution time: ${ms}ms\n\nResult:\n\n${JSON.stringify(result)}`
-          );
-        } catch (e) {
-          const err = e as JsonataError;
-          setJsOutput(`${err.code} @ ${err.position}: ${err.message}`);
-        }
-      } catch (e) {
-        setJsOutput("Failed to parse input: " + (e as Error).message);
-      }
+      rustWorker.postMessage([expr, inputRef.current]);
+      jsWorker.postMessage([expr, inputRef.current]);
     });
   }
 
@@ -168,13 +139,43 @@ const OutputJs: React.FC = (props) => {
 
 function App() {
   const layoutRef = useRef<Layout | null>(null);
+  const setRustOutput = useUpdateAtom(outputRustAtom);
+  const setJsOutput = useUpdateAtom(outputJsAtom);
 
-  function handleRun(expr: string | undefined) {}
+  useEffect(() => {
+    function handleRustWorkerMessage(e: MessageEvent<WorkerResult>) {
+      if (e.data.type == "success") {
+        setRustOutput(
+          `Execution time: ${e.data.ms}ms\n\nResult:\n\n${e.data.result}`
+        );
+      } else {
+        setRustOutput(e.data.error);
+      }
+    }
+
+    function handleJsWorkerMessage(e: MessageEvent<WorkerResult>) {
+      if (e.data.type == "success") {
+        setJsOutput(
+          `Execution time: ${e.data.ms}ms\n\nResult:\n\n${e.data.result}`
+        );
+      } else {
+        setJsOutput(e.data.error);
+      }
+    }
+
+    rustWorker.addEventListener("message", handleRustWorkerMessage);
+    jsWorker.addEventListener("message", handleJsWorkerMessage);
+
+    () => {
+      rustWorker.removeEventListener("message", handleRustWorkerMessage);
+      rustWorker.removeEventListener("message", handleJsWorkerMessage);
+    };
+  }, []);
 
   function layoutFactory(node: TabNode) {
     switch (node.getComponent()) {
       case "expression":
-        return <ExpressionEditor handleRun={handleRun} />;
+        return <ExpressionEditor />;
       case "input":
         return <InputEditor />;
       case "outputRust":
@@ -208,8 +209,6 @@ function App() {
     </Container>
   );
 }
-
-await init();
 
 ReactDOM.render(
   <React.StrictMode>
