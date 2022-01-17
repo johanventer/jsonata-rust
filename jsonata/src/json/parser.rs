@@ -18,7 +18,7 @@
 // with MIR support the compiler will get smarter about this.
 
 use super::number::Number;
-use crate::value::{ArrayFlags, ValueArena};
+use crate::value::ArrayFlags;
 use crate::{Error, Result, Value};
 use std::char::decode_utf16;
 use std::convert::TryFrom;
@@ -50,8 +50,6 @@ struct Parser<'a> {
 
     // Length of the source
     length: usize,
-
-    arena: ValueArena,
 }
 
 // Read a byte from the source.
@@ -357,14 +355,13 @@ macro_rules! expect_fraction {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(source: &'a str, arena: ValueArena) -> Self {
+    pub fn new(source: &'a str) -> Self {
         Parser {
             buffer: Vec::with_capacity(30),
             source,
             byte_ptr: source.as_ptr(),
             index: 0,
             length: source.len(),
-            arena,
         }
     }
 
@@ -631,13 +628,13 @@ impl<'a> Parser<'a> {
                         }
 
                         stack.push(StackBlock(
-                            self.arena.array_with_capacity(2, ArrayFlags::empty()),
+                            Value::array_with_capacity(2, ArrayFlags::empty()),
                             None,
                         ));
                         continue 'parsing;
                     }
 
-                    self.arena.array(ArrayFlags::empty())
+                    Value::array(ArrayFlags::empty())
                 }
                 b'{' => {
                     ch = expect_byte_ignore_whitespace!(self);
@@ -647,7 +644,7 @@ impl<'a> Parser<'a> {
                             return Err(Error::I0203ExceededDepthLimit);
                         }
 
-                        let object = self.arena.object_with_capacity(3);
+                        let object = Value::object_with_capacity(3);
 
                         if ch != b'"' {
                             return self.unexpected_character();
@@ -663,17 +660,14 @@ impl<'a> Parser<'a> {
                         continue 'parsing;
                     }
 
-                    self.arena.object()
+                    Value::object()
                 }
-                b'"' => self
-                    .arena
-                    .clone()
-                    .string(String::from(expect_string!(self))),
-                b'0' => self.arena.clone().number(allow_number_extensions!(self)),
-                b'1'..=b'9' => self.arena.clone().number(expect_number!(self, ch)),
+                b'"' => Value::string(String::from(expect_string!(self))),
+                b'0' => Value::number(allow_number_extensions!(self)),
+                b'1'..=b'9' => Value::number(expect_number!(self, ch)),
                 b'-' => {
                     let ch = expect_byte!(self);
-                    self.arena.clone().number(-match ch {
+                    Value::number(-match ch {
                         b'0' => allow_number_extensions!(self),
                         b'1'..=b'9' => expect_number!(self, ch),
                         _ => return self.unexpected_character(),
@@ -681,15 +675,15 @@ impl<'a> Parser<'a> {
                 }
                 b't' => {
                     expect_sequence!(self, b'r', b'u', b'e');
-                    self.arena.bool(true)
+                    Value::bool(true)
                 }
                 b'f' => {
                     expect_sequence!(self, b'a', b'l', b's', b'e');
-                    self.arena.bool(false)
+                    Value::bool(false)
                 }
                 b'n' => {
                     expect_sequence!(self, b'u', b'l', b'l');
-                    self.arena.null()
+                    Value::null()
                 }
                 _ => return self.unexpected_character(),
             };
@@ -704,7 +698,7 @@ impl<'a> Parser<'a> {
 
                     Some(StackBlock(ref mut stack_value, ref mut key)) => {
                         if stack_value.is_array() {
-                            stack_value.push(&value);
+                            stack_value.push(value);
 
                             ch = expect_byte_ignore_whitespace!(self);
 
@@ -718,7 +712,7 @@ impl<'a> Parser<'a> {
                                 _ => return self.unexpected_character(),
                             }
                         } else if stack_value.is_object() {
-                            stack_value.insert(key.unwrap(), &value);
+                            stack_value.insert(key.unwrap(), value);
 
                             ch = expect_byte_ignore_whitespace!(self);
 
@@ -755,11 +749,5 @@ struct StackBlock<'a>(Value, Option<&'a str>);
 // All that hard work, and in the end it's just a single function in the API.
 #[inline]
 pub fn parse(source: &str) -> Result<Value> {
-    let arena = ValueArena::new();
-    Parser::new(source, arena).parse()
-}
-
-#[inline]
-pub fn parse_with_arena(source: &str, arena: ValueArena) -> Result<Value> {
-    Parser::new(source, arena).parse()
+    Parser::new(source).parse()
 }

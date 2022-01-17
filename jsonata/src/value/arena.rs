@@ -53,6 +53,8 @@ impl ValueArena {
 
         let item_ptr = &arena[index] as *const ValueKind;
 
+        // TODO: This is absolutely not safe, as arena could realloc :(
+
         // SAFETY: Items in the arena are never removed, so pointers to them will always be valid.
         //         The only kinds that can be mutated in any way are arrays and objects, and even
         //         then only to push new values or insert new keys, and the pointer here is to the
@@ -143,7 +145,6 @@ impl ValueArena {
     // Return a `Value` which points at the default `ValueKind::Undefined` in the arena.
     pub fn undefined(&self) -> Value {
         Value {
-            arena: self.clone(),
             index: 0,
         }
     }
@@ -151,7 +152,6 @@ impl ValueArena {
     // Inserts a new `ValueKind` into the arena, returning a `Value` which references it.
     pub fn value(&self, kind: ValueKind) -> Value {
         Value {
-            arena: self.clone(),
             index: self.insert(kind),
         }
     }
@@ -159,7 +159,6 @@ impl ValueArena {
     // Inserts a new `ValueKind:Null` into the arena, returning a `Value` which references it.
     pub fn null(&self) -> Value {
         Value {
-            arena: self.clone(),
             index: self.insert(ValueKind::Null),
         }
     }
@@ -167,7 +166,6 @@ impl ValueArena {
     // Inserts a new `ValueKind:Bool` into the arena, returning a `Value` which references it.
     pub fn bool(&self, value: bool) -> Value {
         Value {
-            arena: self.clone(),
             index: self.insert(ValueKind::Bool(value)),
         }
     }
@@ -175,7 +173,6 @@ impl ValueArena {
     // Inserts a new `ValueKind:Number` into the arena, returning a `Value` which references it.
     pub fn number<T: Into<Number>>(&self, value: T) -> Value {
         Value {
-            arena: self.clone(),
             index: self.insert(ValueKind::Number(value.into())),
         }
     }
@@ -183,7 +180,6 @@ impl ValueArena {
     // Inserts a new `ValueKind:String` into the arena, returning a `Value` which references it.
     pub fn string<T: Into<String>>(&self, value: T) -> Value {
         Value {
-            arena: self.clone(),
             index: self.insert(ValueKind::String(value.into())),
         }
     }
@@ -191,7 +187,6 @@ impl ValueArena {
     // Inserts a new `ValueKind:Array` into the arena, returning a `Value` which references it.
     pub fn array(&self, flags: ArrayFlags) -> Value {
         Value {
-            arena: self.clone(),
             index: self.insert(ValueKind::Array(Vec::new(), flags)),
         }
     }
@@ -200,7 +195,6 @@ impl ValueArena {
     // returning a `Value` which references it.
     pub fn array_with_capacity(&self, capacity: usize, flags: ArrayFlags) -> Value {
         Value {
-            arena: self.clone(),
             index: self.insert(ValueKind::Array(Vec::with_capacity(capacity), flags)),
         }
     }
@@ -208,7 +202,6 @@ impl ValueArena {
     // Inserts a new `ValueKind:Object` into the arena, returning a `Value` which references it.
     pub fn object(&self) -> Value {
         Value {
-            arena: self.clone(),
             index: self.insert(ValueKind::Object(HashMap::new())),
         }
     }
@@ -217,7 +210,6 @@ impl ValueArena {
     // returning a `Value` which references it.
     pub fn object_with_capacity(&self, capacity: usize) -> Value {
         Value {
-            arena: self.clone(),
             index: self.insert(ValueKind::Object(HashMap::with_capacity(capacity))),
         }
     }
@@ -225,7 +217,6 @@ impl ValueArena {
     // Inserts a new `ValueKind:Lambda` into the arena with the specified capacity,
     pub fn lambda(&self, name: &str, node: Ast) -> Value {
         Value {
-            arena: self.clone(),
             index: self.insert(ValueKind::Lambda(name.to_string(), node)),
         }
     }
@@ -233,7 +224,6 @@ impl ValueArena {
     // Inserts a new `ValueKind:NativeFn0` into the arena with the specified capacity,
     pub fn nativefn0(&self, name: &str, func: fn(&FunctionContext) -> Result<Value>) -> Value {
         Value {
-            arena: self.clone(),
             index: self.insert(ValueKind::NativeFn0(name.to_string(), func)),
         }
     }
@@ -245,7 +235,6 @@ impl ValueArena {
         func: fn(&FunctionContext, &Value) -> Result<Value>,
     ) -> Value {
         Value {
-            arena: self.clone(),
             index: self.insert(ValueKind::NativeFn1(name.to_string(), func)),
         }
     }
@@ -257,7 +246,6 @@ impl ValueArena {
         func: fn(&FunctionContext, &Value, &Value) -> Result<Value>,
     ) -> Value {
         Value {
-            arena: self.clone(),
             index: self.insert(ValueKind::NativeFn2(name.to_string(), func)),
         }
     }
@@ -269,7 +257,6 @@ impl ValueArena {
         func: fn(&FunctionContext, &Value, &Value, &Value) -> Result<Value>,
     ) -> Value {
         Value {
-            arena: self.clone(),
             index: self.insert(ValueKind::NativeFn3(name.to_string(), func)),
         }
     }

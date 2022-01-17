@@ -6,7 +6,7 @@ use std::path;
 use test_generator::test_resources;
 
 use jsonata::json;
-use jsonata::value::{ArrayFlags, ValueArena};
+use jsonata::value::ArrayFlags;
 use jsonata::JsonAta;
 
 // TODO: timelimit, depth
@@ -17,12 +17,10 @@ fn t(resource: &str) {
         .unwrap();
     std::env::set_current_dir(working_dir).unwrap();
 
-    let arena = ValueArena::new();
-
     let test = fs::read_to_string(resource)
         .unwrap_or_else(|_| panic!("Failed to read test case: {}", resource));
 
-    let test = json::parse_with_arena(&test, arena.clone())
+    let test = json::parse(&test)
         .unwrap()
         .wrap_in_array_if_needed(ArrayFlags::empty());
 
@@ -51,19 +49,19 @@ fn t(resource: &str) {
             let dataset = format!("jsonata/tests/testsuite/datasets/{}.json", dataset.as_str());
             let dataset = fs::read_to_string(&dataset)
                 .unwrap_or_else(|_e| panic!("Could not read dataset file: {}", dataset));
-            json::parse_with_arena(&dataset, arena.clone()).unwrap()
+            json::parse(&dataset).unwrap()
         } else {
             data
         };
 
-        let jsonata = JsonAta::new_with_arena(&expr, arena.clone());
+        let jsonata = JsonAta::new(&expr);
 
         match jsonata {
             Ok(jsonata) => {
                 let bindings = case.get_entry("bindings");
                 if bindings.is_object() {
                     for (key, value) in bindings.entries() {
-                        jsonata.assign_var(key, &value);
+                        jsonata.assign_var(key, *value);
                     }
                 }
 

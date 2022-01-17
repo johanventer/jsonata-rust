@@ -4,4 +4,4 @@ mod parser;
 mod util;
 
 pub use number::Number;
-pub use parser::{parse, parse_with_arena};
+pub use parser::parse;
