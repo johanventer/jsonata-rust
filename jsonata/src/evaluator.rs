@@ -57,7 +57,10 @@ impl Evaluator {
                 input,
                 name,
             ),
-            AstKind::Lambda { ref name, .. } => self.arena.lambda(name, node.clone()),
+            AstKind::Lambda { ref name, .. } => {
+                self.arena
+                    .lambda(name, node.clone(), input.clone(), frame.clone())
+            }
             AstKind::Function {
                 ref proc,
                 ref args,
@@ -709,7 +712,9 @@ impl Evaluator {
             }
         }
 
-        let mut evaluated_args = self.arena.array(ArrayFlags::empty());
+        let mut evaluated_args = self
+            .arena
+            .array_with_capacity(args.len(), ArrayFlags::empty());
 
         if let Some(context) = context {
             evaluated_args.push(context);
@@ -720,13 +725,55 @@ impl Evaluator {
             evaluated_args.push(&arg);
         }
 
-        self.apply_function(
+        let mut result = self.apply_function(
             proc.char_index,
             input,
             &evaluated_proc,
             &evaluated_args,
             frame,
-        )
+        )?;
+
+        // Trampoline loop for tail-call optimization
+        while let ValueKind::Lambda {
+            ast:
+                Ast {
+                    kind:
+                        AstKind::Lambda {
+                            ref body,
+                            thunk: true,
+                            ..
+                        },
+                    ..
+                },
+            input: ref lambda_input,
+            frame: ref lambda_frame,
+            ..
+        } = *result
+        {
+            if let AstKind::Function {
+                ref proc, ref args, ..
+            } = body.kind
+            {
+                let next = self.evaluate(proc, lambda_input, lambda_frame)?;
+                let mut evaluated_args = self
+                    .arena
+                    .array_with_capacity(args.len(), ArrayFlags::empty());
+
+                for arg in args {
+                    let arg = self.evaluate(arg, lambda_input, lambda_frame)?;
+                    evaluated_args.push(&arg);
+                }
+
+                result =
+                    self.apply_function(proc.char_index, input, &next, &evaluated_args, frame)?;
+
+                println!("TAIL CALL");
+            } else {
+                unreachable!()
+            }
+        }
+
+        Ok(result)
     }
 
     pub fn apply_function(
@@ -738,28 +785,31 @@ impl Evaluator {
         frame: &Frame,
     ) -> Result<Value> {
         match **evaluated_proc {
-            ValueKind::Lambda(_, ref lambda) => {
-                if let AstKind::Lambda {
-                    ref body, ref args, ..
-                } = lambda.kind
-                {
-                    // Create a new frame for use in the lambda, so it can have locals
-                    let frame = Frame::new_with_parent(frame);
+            ValueKind::Lambda {
+                ast:
+                    Ast {
+                        kind:
+                            AstKind::Lambda {
+                                ref body, ref args, ..
+                            },
+                        ..
+                    },
+                ..
+            } => {
+                // Create a new frame for use in the lambda, so it can have locals
+                let frame = Frame::new_with_parent(frame);
 
-                    // Bind the arguments to their respective names
-                    for (index, arg) in args.iter().enumerate() {
-                        if let AstKind::Var(ref name) = arg.kind {
-                            frame.bind(name, self.arena.clone(), &evaluated_args.get_member(index));
-                        } else {
-                            unreachable!()
-                        }
+                // Bind the arguments to their respective names
+                for (index, arg) in args.iter().enumerate() {
+                    if let AstKind::Var(ref name) = arg.kind {
+                        frame.bind(name, self.arena.clone(), &evaluated_args.get_member(index));
+                    } else {
+                        unreachable!()
                     }
-
-                    // Evaluate the lambda!
-                    self.evaluate(body, input, &frame)
-                } else {
-                    unreachable!()
                 }
+
+                // Evaluate the lambda!
+                self.evaluate(body, input, &frame)
             }
             ValueKind::NativeFn0(ref name, ref func) => {
                 func(&self.fn_context(name, char_index, input, frame))

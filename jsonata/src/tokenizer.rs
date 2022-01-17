@@ -430,23 +430,6 @@ impl<'a> Tokenizer<'a> {
                     }
                 },
 
-                // Minus or negative number
-                '-' => match self.peek() {
-                    '0' => {
-                        self.bump();
-                        let mut mantissa = 0;
-                        let mut exponent = 0;
-                        let num = self.number_extensions(&mut mantissa, &mut exponent)?;
-                        Num(-num)
-                    }
-                    c @ '1'..='9' => {
-                        self.bump();
-                        let num = self.number(c)?;
-                        Num(-num)
-                    }
-                    _ => Minus,
-                },
-
                 '[' => LeftBracket,
                 ']' => RightBracket,
                 '{' => {
@@ -462,6 +445,7 @@ impl<'a> Tokenizer<'a> {
                 ';' => SemiColon,
                 '?' => QuestionMark,
                 '+' => Plus,
+                '-' => Minus,
                 '%' => PercentSign,
                 '|' => Pipe,
                 '=' => Equal,

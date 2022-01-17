@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 use super::Value;
 use crate::ast::Ast;
+use crate::frame::Frame;
 use crate::functions::FunctionContext;
 use crate::json::Number;
 use crate::Result;
@@ -25,7 +26,12 @@ pub enum ValueKind {
     String(String),
     Array(Vec<usize>, ArrayFlags),
     Object(HashMap<String, usize>),
-    Lambda(String, Ast),
+    Lambda {
+        name: String,
+        ast: Ast,
+        input: Value,
+        frame: Frame,
+    },
     NativeFn0(String, fn(&FunctionContext) -> Result<Value>),
     NativeFn1(String, fn(&FunctionContext, &Value) -> Result<Value>),
     NativeFn2(
@@ -168,7 +174,7 @@ impl std::fmt::Debug for ValueKind {
                 "<object{{{}}}>",
                 o.keys().cloned().collect::<Vec<String>>().join(", ")
             ),
-            Self::Lambda(..) => write!(f, "<lambda>"),
+            Self::Lambda { .. } => write!(f, "<lambda>"),
             Self::NativeFn0(..)
             | Self::NativeFn1(..)
             | Self::NativeFn2(..)

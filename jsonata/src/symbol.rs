@@ -15,9 +15,6 @@ impl Symbol for Token {
     fn left_binding_power(&self) -> u32 {
         use TokenKind::*;
         match &self.kind {
-            End | Whitespace | Comment | Range | Colon | Comma | SemiColon | RightParen
-            | RightBracket | RightBrace | Pipe | ExclamationMark | Tilde | Null | Bool(..)
-            | Str(..) | Num(..) | Name(..) | Var(..) | Signature(..) => 0,
             Bind => 10,
             QuestionMark => 20,
             Or => 25,
@@ -30,6 +27,7 @@ impl Symbol for Token {
             Period => 75,
             LeftBracket | LeftParen => 80,
             At | Hash => 80,
+            _ => 0,
         }
     }
 
@@ -250,6 +248,7 @@ impl Symbol for Token {
                             args,
                             body,
                             signature,
+                            thunk: false,
                         },
                         self.char_index,
                     );

@@ -101,6 +101,7 @@ pub enum AstKind {
         args: Vec<Ast>,
         body: Box<Ast>,
         signature: Option<Vec<Arg>>,
+        thunk: bool,
     },
     Ternary {
         cond: Box<Ast>,

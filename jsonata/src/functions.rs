@@ -99,7 +99,7 @@ pub fn fn_boolean(context: &FunctionContext, arg: &Value) -> Result<Value> {
                 context.arena.bool(false)
             }
         },
-        ValueKind::Lambda(..)
+        ValueKind::Lambda { .. }
         | ValueKind::NativeFn0 { .. }
         | ValueKind::NativeFn1 { .. }
         | ValueKind::NativeFn2 { .. }

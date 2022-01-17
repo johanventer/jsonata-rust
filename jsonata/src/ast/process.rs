@@ -321,50 +321,48 @@ fn process_function(proc: &mut Box<Ast>, args: &mut Vec<Ast>) -> Result<()> {
 }
 
 fn process_lambda(body: &mut Box<Ast>) -> Result<()> {
-    *body = Box::new(process_ast(std::mem::take(&mut *body))?);
-    // TODO: Tail call optimize
+    let new_body = process_ast(std::mem::take(body))?;
+    let new_body = tail_call_optimize(new_body)?;
+    *body = Box::new(new_body);
     Ok(())
 }
 
-// fn tail_call_optimize(mut node: Box<Node>) -> Result<Box<Node>> {
-//     match node.kind {
-//         NodeKind::Function { .. } if node.predicates.is_none() => {
-//             let position = node.char_index;
-//             Ok(Box::new(Node::new(
-//                 NodeKind::Lambda {
-//                     args: Rc::new(Vec::new()),
-//                     body: node.into(),
-//                     thunk: true,
-//                 },
-//                 position,
-//             )))
-//         }
-//         NodeKind::Ternary {
-//             cond,
-//             truthy,
-//             falsy,
-//         } => {
-//             node.kind = NodeKind::Ternary {
-//                 cond,
-//                 truthy: tail_call_optimize(truthy)?,
-//                 falsy: match falsy {
-//                     None => None,
-//                     Some(falsy) => Some(tail_call_optimize(falsy)?),
-//                 },
-//             };
-//             Ok(node)
-//         }
-//         NodeKind::Block(ref mut exprs) => {
-//             let len = exprs.len();
-//             if len > 0 {
-//                 let last = tail_call_optimize(exprs.pop().unwrap())?;
-//                 exprs.push(last);
-//             }
-//             Ok(node)
-//         }
-//         _ => Ok(node),
-//     }
-// }
+fn tail_call_optimize(mut expr: Ast) -> Result<Ast> {
+    match &mut expr.kind {
+        AstKind::Function { .. } => {
+            let char_index = expr.char_index;
+            let thunk = Ast::new(
+                AstKind::Lambda {
+                    name: String::from("thunk"),
+                    args: vec![],
+                    thunk: true,
+                    body: Box::new(expr),
+                    signature: None,
+                },
+                char_index,
+            );
+
+            Ok(thunk)
+        }
+        AstKind::Ternary { truthy, falsy, .. } => {
+            *truthy = Box::new(tail_call_optimize(std::mem::take(truthy))?);
+            match falsy {
+                Some(inner) => *falsy = Some(Box::new(tail_call_optimize(std::mem::take(inner))?)),
+                None => {}
+            }
+            Ok(expr)
+        }
+        AstKind::Block(statements) => {
+            let length = statements.len();
+            if length > 0 {
+                statements[length - 1] =
+                    tail_call_optimize(std::mem::take(&mut statements[length - 1]))?;
+            }
+            Ok(expr)
+        }
+        _ => Ok(expr),
+    }
+}
 
 /*
     keep_array is used on individual nodes

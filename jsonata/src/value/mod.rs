@@ -28,7 +28,15 @@ pub struct Value {
 
 impl std::fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.dump())
+        match self.arena.get(self.index) {
+            ValueKind::Undefined => write!(f, "undefined"),
+            ValueKind::Lambda { .. } => write!(f, "<lambda>"),
+            ValueKind::NativeFn0(..) => write!(f, "<nativefn0>"),
+            ValueKind::NativeFn1(..) => write!(f, "<nativefn1>"),
+            ValueKind::NativeFn2(..) => write!(f, "<nativefn2>"),
+            ValueKind::NativeFn3(..) => write!(f, "<nativefn3>"),
+            _ => write!(f, "{}", self.dump()),
+        }
     }
 }
 
@@ -128,23 +136,24 @@ impl Value {
                 }
             },
             ValueKind::Object(o) => !o.is_empty(),
-            ValueKind::Lambda(_, _)
-            | ValueKind::NativeFn0(_, _)
-            | ValueKind::NativeFn1(_, _)
-            | ValueKind::NativeFn2(_, _)
-            | ValueKind::NativeFn3(_, _) => false,
+            ValueKind::Lambda { .. }
+            | ValueKind::NativeFn0(..)
+            | ValueKind::NativeFn1(..)
+            | ValueKind::NativeFn2(..)
+            | ValueKind::NativeFn3(..) => false,
         }
     }
 
     pub fn arity(&self) -> usize {
         match self.arena.get(self.index) {
-            ValueKind::Lambda(
-                _,
-                Ast {
-                    kind: AstKind::Lambda { ref args, .. },
-                    ..
-                },
-            ) => args.len(),
+            ValueKind::Lambda {
+                ast:
+                    Ast {
+                        kind: AstKind::Lambda { ref args, .. },
+                        ..
+                    },
+                ..
+            } => args.len(),
             ValueKind::NativeFn0(..) => 0,
             ValueKind::NativeFn1(..) => 1,
             ValueKind::NativeFn2(..) => 2,

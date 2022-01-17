@@ -2,6 +2,7 @@ use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
 
 use super::{ArrayFlags, Value, ValueKind};
 use crate::ast::Ast;
+use crate::frame::Frame;
 use crate::functions::FunctionContext;
 use crate::json::Number;
 use crate::Result;
@@ -223,10 +224,15 @@ impl ValueArena {
     }
 
     // Inserts a new `ValueKind:Lambda` into the arena with the specified capacity,
-    pub fn lambda(&self, name: &str, node: Ast) -> Value {
+    pub fn lambda(&self, name: &str, node: Ast, input: Value, frame: Frame) -> Value {
         Value {
             arena: self.clone(),
-            index: self.insert(ValueKind::Lambda(name.to_string(), node)),
+            index: self.insert(ValueKind::Lambda {
+                name: name.to_string(),
+                ast: node,
+                input,
+                frame,
+            }),
         }
     }
 
@@ -300,7 +306,7 @@ impl Debug for ValueArena {
                 ValueKind::String(value) => write!(f, "{}", value)?,
                 ValueKind::Array(array, _) => f.debug_list().entries(array.iter()).finish()?,
                 ValueKind::Object(object) => f.debug_map().entries(object.iter()).finish()?,
-                ValueKind::Lambda(..) => write!(f, "<lambda>")?,
+                ValueKind::Lambda { .. } => write!(f, "<lambda>")?,
                 ValueKind::NativeFn0(..)
                 | ValueKind::NativeFn1(..)
                 | ValueKind::NativeFn2(..)
