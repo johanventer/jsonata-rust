@@ -119,7 +119,7 @@ pub trait Generator {
             self.new_line()?;
             self.write_string(key)?;
             self.write_min(b": ", b':')?;
-            self.write_json(&value)?;
+            self.write_json(value)?;
         } else {
             self.write_char(b'}')?;
             return Ok(());
@@ -130,7 +130,7 @@ pub trait Generator {
             self.new_line()?;
             self.write_string(key)?;
             self.write_min(b": ", b':')?;
-            self.write_json(&value)?;
+            self.write_json(value)?;
         }
 
         self.dedent();
@@ -152,7 +152,7 @@ pub trait Generator {
                 if let Some(item) = iter.next() {
                     self.indent();
                     self.new_line()?;
-                    self.write_json(&item)?;
+                    self.write_json(item)?;
                 } else {
                     self.write_char(b']')?;
                     return Ok(());
@@ -161,7 +161,7 @@ pub trait Generator {
                 for item in iter {
                     self.write_char(b',')?;
                     self.new_line()?;
-                    self.write_json(&item)?;
+                    self.write_json(item)?;
                 }
 
                 self.dedent();
