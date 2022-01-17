@@ -409,7 +409,14 @@ impl Value {
 
 impl std::fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.dump())
+        match unsafe { &*self.0 } {
+            ValueKind::Lambda { ast, .. } => write!(f, "<lambda: {:#?}>", ast),
+            ValueKind::NativeFn0(..) => write!(f, "<nativefn0>"),
+            ValueKind::NativeFn1(..) => write!(f, "<nativefn1>"),
+            ValueKind::NativeFn2(..) => write!(f, "<nativefn2>"),
+            ValueKind::NativeFn3(..) => write!(f, "<nativefn3>"),
+            _ => write!(f, "{}", self.dump()),
+        }
     }
 }
 

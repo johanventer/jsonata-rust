@@ -777,6 +777,8 @@ impl Evaluator {
                             },
                         ..
                     },
+                ref frame,
+                ref input,
                 ..
             } => {
                 // Create a new frame for use in the lambda, so it can have locals
@@ -792,7 +794,7 @@ impl Evaluator {
                 }
 
                 // Evaluate the lambda!
-                self.evaluate(body, input, &frame)
+                self.evaluate(body, *input, &frame)
             }
             ValueKind::NativeFn0(ref name, ref func) => {
                 func(&self.fn_context(name, char_index, input, frame))

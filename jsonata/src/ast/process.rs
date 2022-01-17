@@ -329,7 +329,7 @@ fn process_lambda(body: &mut Box<Ast>) -> Result<()> {
 
 fn tail_call_optimize(mut expr: Ast) -> Result<Ast> {
     match &mut expr.kind {
-        AstKind::Function { .. } => {
+        AstKind::Function { .. } if expr.predicates.is_none() => {
             let char_index = expr.char_index;
             let thunk = Ast::new(
                 AstKind::Lambda {

@@ -2,6 +2,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use super::value::Value;
 
+#[derive(Debug)]
 pub struct Frame(Rc<RefCell<FrameData>>);
 
 impl Frame {
@@ -50,6 +51,7 @@ impl Clone for Frame {
     }
 }
 
+#[derive(Debug)]
 pub struct FrameData {
     bindings: HashMap<String, Value>,
     parent: Option<Frame>,
