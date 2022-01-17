@@ -58,8 +58,7 @@ impl Evaluator {
                 name,
             ),
             AstKind::Lambda { ref name, .. } => {
-                self.arena
-                    .lambda(name, node.clone(), input.clone(), frame.clone())
+                Value::lambda(name, node.clone(), input, frame.clone())
             }
             AstKind::Function {
                 ref proc,
@@ -702,9 +701,7 @@ impl Evaluator {
             }
         }
 
-        let mut evaluated_args = self
-            .arena
-            .array_with_capacity(args.len(), ArrayFlags::empty());
+        let evaluated_args = Value::array_with_capacity(args.len(), ArrayFlags::empty());
 
         if let Some(context) = context {
             evaluated_args.push(*context);
@@ -744,20 +741,16 @@ impl Evaluator {
                 ref proc, ref args, ..
             } = body.kind
             {
-                let next = self.evaluate(proc, lambda_input, lambda_frame)?;
-                let mut evaluated_args = self
-                    .arena
-                    .array_with_capacity(args.len(), ArrayFlags::empty());
+                let next = self.evaluate(proc, *lambda_input, lambda_frame)?;
+                let evaluated_args = Value::array_with_capacity(args.len(), ArrayFlags::empty());
 
                 for arg in args {
-                    let arg = self.evaluate(arg, lambda_input, lambda_frame)?;
-                    evaluated_args.push(&arg);
+                    let arg = self.evaluate(arg, *lambda_input, lambda_frame)?;
+                    evaluated_args.push(arg);
                 }
 
                 result =
-                    self.apply_function(proc.char_index, input, &next, &evaluated_args, frame)?;
-
-                println!("TAIL CALL");
+                    self.apply_function(proc.char_index, input, next, evaluated_args, frame)?;
             } else {
                 unreachable!()
             }
@@ -792,7 +785,7 @@ impl Evaluator {
                 // Bind the arguments to their respective names
                 for (index, arg) in args.iter().enumerate() {
                     if let AstKind::Var(ref name) = arg.kind {
-                        frame.bind(name, self.arena.clone(), &evaluated_args.get_member(index));
+                        frame.bind(name, evaluated_args.get_member(index));
                     } else {
                         unreachable!()
                     }

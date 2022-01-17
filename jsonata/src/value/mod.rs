@@ -9,6 +9,7 @@ use std::fmt;
 use std::ops::Deref;
 
 use crate::ast::{Ast, AstKind};
+use crate::frame::Frame;
 use crate::functions::FunctionContext;
 use crate::json::codegen::{DumpGenerator, Generator, PrettyGenerator};
 use crate::json::Number;
@@ -74,9 +75,14 @@ impl Value {
         }))
     }
 
-    pub fn lambda(name: &str, node: Ast) -> Value {
+    pub fn lambda(name: &str, node: Ast, input: Value, frame: Frame) -> Value {
         Value(ARENA.with(|arena| {
-            arena.alloc(ValueKind::Lambda(name.to_string(), node)) as *const ValueKind
+            arena.alloc(ValueKind::Lambda {
+                name: name.to_string(),
+                ast: node,
+                input,
+                frame,
+            }) as *const ValueKind
         }))
     }
 
