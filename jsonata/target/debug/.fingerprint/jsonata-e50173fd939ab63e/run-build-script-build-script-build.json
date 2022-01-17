@@ -1,0 +1,1 @@
+{"rustc":8698602393111030570,"features":"","target":0,"profile":0,"path":0,"deps":[[7523732018687788454,"build_script_build",false,8679760088295925142]],"local":[{"RerunIfChanged":{"output":"debug/build/jsonata-e50173fd939ab63e/output","paths":["tests/testsuite/groups/*/*.json","tests/testsuite/groups"]}}],"rustflags":[],"metadata":0,"config":0,"compile_kind":0}

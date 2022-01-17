@@ -1,0 +1,91 @@
+/*
+  Reset stuff
+*/
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  width: 100%;
+  margin: 0;
+}
+
+/*
+ Main layout
+*/
+
+:root {
+  --toolbar-height: 40px;
+  --font-family: system-ui, -apple-system, "Segoe UI", "Roboto", "Ubuntu";
+}
+
+html {
+  font-family: var(--font-family);
+}
+
+.main-container {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  position: absolute;
+}
+
+.toolbar {
+  height: var(--toolbar-height);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: #1e1e1e;
+  list-style: none;
+  margin: 0;
+  padding: 5px;
+}
+
+.toolbar li {
+  background: #569cd6;
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-size: 14px;
+}
+.toolbar li a {
+  text-decoration: none;
+}
+.toolbar li a:visited {
+  color: initial;
+}
+
+.layout {
+  height: calc(100% - var(--toolbar-height));
+  position: relative;
+  top: 0;
+}
+
+.editor-wrapper {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.output {
+  height: 100%;
+  width: 100%;
+  overflow: auto;
+  background: #1e1e1e;
+  font-family: Consolas, "Courier New", monospace;
+  font-weight: normal;
+  font-size: 14px;
+  padding: 2px 5px;
+  white-space: pre-wrap;
+}
+
+/*
+ Overrides to theme of FlexLayout
+*/
+
+/* Get rid of the ugly active tab gradient */
+.flexlayout__tabset_tabbar_outer.flexlayout__tabset_tabbar_outer_top.flexlayout__tabset-selected {
+  background-image: none;
+}

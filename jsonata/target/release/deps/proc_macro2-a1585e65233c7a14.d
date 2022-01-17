@@ -1,0 +1,12 @@
+/home/johan/dev/jsonata-rust/target/release/deps/proc_macro2-a1585e65233c7a14.rmeta: /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/lib.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/marker.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/parse.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/detection.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/fallback.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/wrapper.rs
+
+/home/johan/dev/jsonata-rust/target/release/deps/libproc_macro2-a1585e65233c7a14.rlib: /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/lib.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/marker.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/parse.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/detection.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/fallback.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/wrapper.rs
+
+/home/johan/dev/jsonata-rust/target/release/deps/proc_macro2-a1585e65233c7a14.d: /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/lib.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/marker.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/parse.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/detection.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/fallback.rs /home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/wrapper.rs
+
+/home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/lib.rs:
+/home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/marker.rs:
+/home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/parse.rs:
+/home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/detection.rs:
+/home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/fallback.rs:
+/home/johan/.cargo/registry/src/github.com-1ecc6299db9ec823/proc-macro2-1.0.34/src/wrapper.rs:
