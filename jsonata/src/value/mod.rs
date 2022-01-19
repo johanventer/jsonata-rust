@@ -75,10 +75,9 @@ impl Value {
         }))
     }
 
-    pub fn lambda(name: &str, node: Ast, input: Value, frame: Frame) -> Value {
+    pub fn lambda(node: &Ast, input: Value, frame: Frame) -> Value {
         Value(ARENA.with(|arena| {
             arena.alloc(ValueKind::Lambda {
-                name: name.to_string(),
                 ast: node,
                 input,
                 frame,
@@ -206,14 +205,13 @@ impl Value {
 
     pub fn arity(&self) -> usize {
         match unsafe { &*self.0 } {
-            ValueKind::Lambda {
-                ast:
-                    Ast {
-                        kind: AstKind::Lambda { ref args, .. },
-                        ..
-                    },
-                ..
-            } => args.len(),
+            ValueKind::Lambda { ast, .. } => {
+                if let AstKind::Lambda { args, .. } = unsafe { &(**ast).kind } {
+                    args.len()
+                } else {
+                    0
+                }
+            }
             ValueKind::NativeFn0(..) => 0,
             ValueKind::NativeFn1(..) => 1,
             ValueKind::NativeFn2(..) => 2,

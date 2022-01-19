@@ -27,8 +27,7 @@ pub enum ValueKind {
     Array(Vec<Value>, ArrayFlags),
     Object(HashMap<String, Value>),
     Lambda {
-        name: String,
-        ast: Ast,
+        ast: *const Ast,
         input: Value,
         frame: Frame,
     },
