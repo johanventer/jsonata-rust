@@ -1,6 +1,6 @@
 use wasm_bindgen::prelude::*;
 
-use jsonata::{JsonAta, ValueKind};
+use jsonata::{JsonAta, Value};
 
 #[wasm_bindgen]
 pub fn evaluate(expr: &str, input: &str) -> Result<JsValue, JsValue> {
@@ -8,7 +8,7 @@ pub fn evaluate(expr: &str, input: &str) -> Result<JsValue, JsValue> {
     jsonata
         .evaluate(Some(input))
         .map(|result| match *result {
-            ValueKind::Undefined => JsValue::UNDEFINED,
+            Value::Undefined => JsValue::UNDEFINED,
             _ => JsValue::from(result.dump()),
         })
         .map_err(|e| JsValue::from(e.to_string()))

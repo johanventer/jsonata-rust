@@ -1,7 +1,7 @@
 use bitflags::bitflags;
-use std::collections::HashMap;
+use hashbrown::HashMap;
 
-use super::Value;
+use super::ValuePtr;
 use crate::ast::Ast;
 use crate::frame::Frame;
 use crate::functions::FunctionContext;
@@ -18,30 +18,33 @@ bitflags! {
 }
 
 #[derive(Clone)]
-pub enum ValueKind {
+pub enum Value {
     Undefined,
     Null,
     Number(Number),
     Bool(bool),
     String(String),
-    Array(Vec<Value>, ArrayFlags),
-    Object(HashMap<String, Value>),
+    Array(Vec<ValuePtr>, ArrayFlags),
+    Object(HashMap<String, ValuePtr>),
     Lambda {
         ast: *const Ast,
-        input: Value,
+        input: ValuePtr,
         frame: Frame,
     },
-    NativeFn0(String, fn(&FunctionContext) -> Result<Value>),
-    NativeFn1(String, fn(&FunctionContext, Value) -> Result<Value>),
-    NativeFn2(String, fn(&FunctionContext, Value, Value) -> Result<Value>),
+    NativeFn0(String, fn(&FunctionContext) -> Result<ValuePtr>),
+    NativeFn1(String, fn(&FunctionContext, ValuePtr) -> Result<ValuePtr>),
+    NativeFn2(
+        String,
+        fn(&FunctionContext, ValuePtr, ValuePtr) -> Result<ValuePtr>,
+    ),
     NativeFn3(
         String,
-        fn(&FunctionContext, Value, Value, Value) -> Result<Value>,
+        fn(&FunctionContext, ValuePtr, ValuePtr, ValuePtr) -> Result<ValuePtr>,
     ),
 }
 
-impl PartialEq<ValueKind> for ValueKind {
-    fn eq(&self, other: &ValueKind) -> bool {
+impl PartialEq<Value> for Value {
+    fn eq(&self, other: &Value) -> bool {
         match (self, other) {
             (Self::Number(l0), Self::Number(r0)) => l0 == r0,
             (Self::Bool(l0), Self::Bool(r0)) => l0 == r0,
@@ -57,106 +60,106 @@ impl PartialEq<ValueKind> for ValueKind {
     }
 }
 
-impl PartialEq<i32> for ValueKind {
+impl PartialEq<i32> for Value {
     fn eq(&self, other: &i32) -> bool {
         match *self {
-            ValueKind::Number(ref n) => *n == *other,
+            Value::Number(ref n) => *n == *other,
             _ => false,
         }
     }
 }
 
-impl PartialEq<i64> for ValueKind {
+impl PartialEq<i64> for Value {
     fn eq(&self, other: &i64) -> bool {
         match *self {
-            ValueKind::Number(ref n) => *n == *other,
+            Value::Number(ref n) => *n == *other,
             _ => false,
         }
     }
 }
 
-impl PartialEq<f32> for ValueKind {
+impl PartialEq<f32> for Value {
     fn eq(&self, other: &f32) -> bool {
         match *self {
-            ValueKind::Number(ref n) => *n == *other,
+            Value::Number(ref n) => *n == *other,
             _ => false,
         }
     }
 }
 
-impl PartialEq<f64> for ValueKind {
+impl PartialEq<f64> for Value {
     fn eq(&self, other: &f64) -> bool {
         match *self {
-            ValueKind::Number(ref n) => *n == *other,
+            Value::Number(ref n) => *n == *other,
             _ => false,
         }
     }
 }
 
-impl PartialEq<bool> for ValueKind {
+impl PartialEq<bool> for Value {
     fn eq(&self, other: &bool) -> bool {
         match *self {
-            ValueKind::Bool(ref b) => *b == *other,
+            Value::Bool(ref b) => *b == *other,
             _ => false,
         }
     }
 }
 
-impl PartialEq<&str> for ValueKind {
+impl PartialEq<&str> for Value {
     fn eq(&self, other: &&str) -> bool {
         match *self {
-            ValueKind::String(ref s) => s == *other,
+            Value::String(ref s) => s == *other,
             _ => false,
         }
     }
 }
 
-impl PartialEq<String> for ValueKind {
+impl PartialEq<String> for Value {
     fn eq(&self, other: &String) -> bool {
         match *self {
-            ValueKind::String(ref s) => *s == *other,
+            Value::String(ref s) => *s == *other,
             _ => false,
         }
     }
 }
 
-impl From<i32> for ValueKind {
+impl From<i32> for Value {
     fn from(v: i32) -> Self {
-        ValueKind::Number(v.into())
+        Value::Number(v.into())
     }
 }
 
-impl From<i64> for ValueKind {
+impl From<i64> for Value {
     fn from(v: i64) -> Self {
-        ValueKind::Number(v.into())
+        Value::Number(v.into())
     }
 }
 
-impl From<f32> for ValueKind {
+impl From<f32> for Value {
     fn from(v: f32) -> Self {
-        ValueKind::Number(v.into())
+        Value::Number(v.into())
     }
 }
 
-impl From<f64> for ValueKind {
+impl From<f64> for Value {
     fn from(v: f64) -> Self {
-        ValueKind::Number(v.into())
+        Value::Number(v.into())
     }
 }
 
-impl From<bool> for ValueKind {
+impl From<bool> for Value {
     fn from(v: bool) -> Self {
-        ValueKind::Bool(v)
+        Value::Bool(v)
     }
 }
 
-impl From<&str> for ValueKind {
+impl From<&str> for Value {
     fn from(v: &str) -> Self {
-        ValueKind::String(v.into())
+        Value::String(v.into())
     }
 }
 
-impl std::fmt::Debug for ValueKind {
+impl std::fmt::Debug for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Undefined => write!(f, "undefined"),

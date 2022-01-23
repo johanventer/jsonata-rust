@@ -5,35 +5,35 @@ use jsonata_signature_macro::signature;
 
 use super::evaluator::Evaluator;
 use super::frame::Frame;
-use super::value::{ArrayFlags, Value, ValueKind};
+use super::value::{ArrayFlags, Value, ValuePtr};
 use crate::value;
 
 #[derive(Clone)]
 pub struct FunctionContext<'a> {
     pub name: &'a str,
     pub char_index: usize,
-    pub input: Value,
+    pub input: ValuePtr,
     pub frame: Frame,
     pub evaluator: &'a Evaluator,
 }
 
 impl<'a> FunctionContext<'a> {
-    pub fn evaluate_function(&self, proc: Value, args: Value) -> Result<Value> {
+    pub fn evaluate_function(&self, proc: ValuePtr, args: ValuePtr) -> Result<ValuePtr> {
         self.evaluator
             .apply_function(self.char_index, self.input, proc, args, &self.frame)
     }
 }
 
-pub fn fn_lookup_internal(context: &FunctionContext, input: Value, key: &str) -> Value {
+pub fn fn_lookup_internal(context: &FunctionContext, input: ValuePtr, key: &str) -> ValuePtr {
     match *input {
-        ValueKind::Array { .. } => {
-            let result = Value::array(ArrayFlags::SEQUENCE);
+        Value::Array { .. } => {
+            let result = ValuePtr::array(ArrayFlags::SEQUENCE);
 
             for input in input.members() {
                 let res = fn_lookup_internal(context, *input, key);
                 match *res {
-                    ValueKind::Undefined => {}
-                    ValueKind::Array { .. } => {
+                    Value::Undefined => {}
+                    Value::Array { .. } => {
                         res.members().for_each(|item| result.push(*item));
                     }
                     _ => result.push(res),
@@ -42,13 +42,13 @@ pub fn fn_lookup_internal(context: &FunctionContext, input: Value, key: &str) ->
 
             result
         }
-        ValueKind::Object(..) => input.get_entry(key),
+        Value::Object(..) => input.get_entry(key),
         _ => value::UNDEFINED,
     }
 }
 
 #[signature("<x-s:x>")]
-pub fn fn_lookup(context: &FunctionContext, input: Value, key: Value) -> Result<Value> {
+pub fn fn_lookup(context: &FunctionContext, input: ValuePtr, key: ValuePtr) -> Result<ValuePtr> {
     if !key.is_string() {
         Err(Error::T0410ArgumentNotValid(
             context.char_index,
@@ -61,7 +61,7 @@ pub fn fn_lookup(context: &FunctionContext, input: Value, key: Value) -> Result<
 }
 
 #[signature("<xx:a>")]
-pub fn fn_append(_context: &FunctionContext, arg1: Value, arg2: Value) -> Result<Value> {
+pub fn fn_append(_context: &FunctionContext, arg1: ValuePtr, arg2: ValuePtr) -> Result<ValuePtr> {
     if arg1.is_undefined() {
         return Ok(arg2);
     }
@@ -70,7 +70,7 @@ pub fn fn_append(_context: &FunctionContext, arg1: Value, arg2: Value) -> Result
         return Ok(arg1);
     }
 
-    let result = Value::new((*arg1).clone());
+    let result = ValuePtr::new((*arg1).clone());
     let result = result.wrap_in_array_if_needed(ArrayFlags::SEQUENCE);
     let arg2 = arg2.wrap_in_array_if_needed(ArrayFlags::empty());
     arg2.members().for_each(|m| result.push(*m));
@@ -79,36 +79,36 @@ pub fn fn_append(_context: &FunctionContext, arg1: Value, arg2: Value) -> Result
 }
 
 #[signature("<x-:b>")]
-pub fn fn_boolean(context: &FunctionContext, arg: Value) -> Result<Value> {
+pub fn fn_boolean(context: &FunctionContext, arg: ValuePtr) -> Result<ValuePtr> {
     Ok(match *arg {
-        ValueKind::Undefined => value::UNDEFINED,
-        ValueKind::Null => Value::bool(false),
-        ValueKind::Bool(b) => Value::bool(b),
-        ValueKind::Number(num) => Value::bool(num != 0.0),
-        ValueKind::String(ref str) => Value::bool(!str.is_empty()),
-        ValueKind::Object(ref obj) => Value::bool(!obj.is_empty()),
-        ValueKind::Array { .. } => match arg.len() {
-            0 => Value::bool(false),
+        Value::Undefined => value::UNDEFINED,
+        Value::Null => ValuePtr::bool(false),
+        Value::Bool(b) => ValuePtr::bool(b),
+        Value::Number(num) => ValuePtr::bool(num != 0.0),
+        Value::String(ref str) => ValuePtr::bool(!str.is_empty()),
+        Value::Object(ref obj) => ValuePtr::bool(!obj.is_empty()),
+        Value::Array { .. } => match arg.len() {
+            0 => ValuePtr::bool(false),
             1 => fn_boolean(context, arg.get_member(0))?,
             _ => {
                 for item in arg.members() {
                     if fn_boolean(context, *item)?.as_bool() {
-                        return Ok(Value::bool(true));
+                        return Ok(ValuePtr::bool(true));
                     }
                 }
-                Value::bool(false)
+                ValuePtr::bool(false)
             }
         },
-        ValueKind::Lambda { .. }
-        | ValueKind::NativeFn0 { .. }
-        | ValueKind::NativeFn1 { .. }
-        | ValueKind::NativeFn2 { .. }
-        | ValueKind::NativeFn3 { .. } => Value::bool(false),
+        Value::Lambda { .. }
+        | Value::NativeFn0 { .. }
+        | Value::NativeFn1 { .. }
+        | Value::NativeFn2 { .. }
+        | Value::NativeFn3 { .. } => ValuePtr::bool(false),
     })
 }
 
 #[signature("<af>")]
-pub fn fn_filter(context: &FunctionContext, arr: Value, func: Value) -> Result<Value> {
+pub fn fn_filter(context: &FunctionContext, arr: ValuePtr, func: ValuePtr) -> Result<ValuePtr> {
     if arr.is_undefined() {
         return Ok(value::UNDEFINED);
     }
@@ -123,15 +123,15 @@ pub fn fn_filter(context: &FunctionContext, arr: Value, func: Value) -> Result<V
         ));
     }
 
-    let result = Value::array(ArrayFlags::SEQUENCE);
+    let result = ValuePtr::array(ArrayFlags::SEQUENCE);
 
     for (index, item) in arr.members().enumerate() {
-        let args = Value::array(ArrayFlags::empty());
+        let args = ValuePtr::array(ArrayFlags::empty());
         let arity = func.arity();
 
         args.push(*item);
         if arity >= 2 {
-            args.push_new(ValueKind::Number(index.into()));
+            args.push_new(Value::Number(index.into()));
         }
         if arity >= 3 {
             args.push(arr);
@@ -148,7 +148,7 @@ pub fn fn_filter(context: &FunctionContext, arr: Value, func: Value) -> Result<V
 }
 
 #[signature("<x-b?:s>")]
-pub fn fn_string(_context: &FunctionContext, arg: Value) -> Result<Value> {
+pub fn fn_string(_context: &FunctionContext, arg: ValuePtr) -> Result<ValuePtr> {
     if arg.is_undefined() {
         return Ok(value::UNDEFINED);
     }
@@ -156,7 +156,7 @@ pub fn fn_string(_context: &FunctionContext, arg: Value) -> Result<Value> {
     if arg.is_string() {
         Ok(arg)
     } else if arg.is_function() {
-        Ok(Value::string(String::from("")))
+        Ok(ValuePtr::string(String::from("")))
 
     // TODO: Check for infinite numbers
     // } else if arg.is_number() && arg.is_infinite() {
@@ -165,13 +165,13 @@ pub fn fn_string(_context: &FunctionContext, arg: Value) -> Result<Value> {
 
     // TODO: pretty printing
     } else {
-        Ok(Value::string(arg.dump()))
+        Ok(ValuePtr::string(arg.dump()))
     }
 }
 
 #[signature("<a:n>")]
-pub fn fn_count(_context: &FunctionContext, arg: Value) -> Result<Value> {
-    Ok(Value::number(if arg.is_undefined() {
+pub fn fn_count(_context: &FunctionContext, arg: ValuePtr) -> Result<ValuePtr> {
+    Ok(ValuePtr::number(if arg.is_undefined() {
         0
     } else if arg.is_array() {
         arg.len()
@@ -181,39 +181,39 @@ pub fn fn_count(_context: &FunctionContext, arg: Value) -> Result<Value> {
 }
 
 #[signature("<x-:b>")]
-pub fn fn_not(_context: &FunctionContext, arg: Value) -> Result<Value> {
+pub fn fn_not(_context: &FunctionContext, arg: ValuePtr) -> Result<ValuePtr> {
     Ok(if arg.is_undefined() {
         value::UNDEFINED
     } else {
-        Value::bool(!arg.is_truthy())
+        ValuePtr::bool(!arg.is_truthy())
     })
 }
 
 #[signature("<s-:s>")]
-pub fn fn_lowercase(_context: &FunctionContext, arg: Value) -> Result<Value> {
+pub fn fn_lowercase(_context: &FunctionContext, arg: ValuePtr) -> Result<ValuePtr> {
     Ok(if !arg.is_string() {
         value::UNDEFINED
     } else {
-        Value::string(arg.as_str().to_lowercase())
+        ValuePtr::string(arg.as_str().to_lowercase())
     })
 }
 
 #[signature("<s-:s>")]
-pub fn fn_uppercase(_context: &FunctionContext, arg: Value) -> Result<Value> {
+pub fn fn_uppercase(_context: &FunctionContext, arg: ValuePtr) -> Result<ValuePtr> {
     if !arg.is_string() {
         Ok(value::UNDEFINED)
     } else {
-        Ok(Value::string(arg.as_str().to_uppercase()))
+        Ok(ValuePtr::string(arg.as_str().to_uppercase()))
     }
 }
 
 #[signature("<s-nn?:s>")]
 pub fn fn_substring(
     context: &FunctionContext,
-    string: Value,
-    start: Value,
-    length: Value,
-) -> Result<Value> {
+    string: ValuePtr,
+    start: ValuePtr,
+    length: ValuePtr,
+) -> Result<ValuePtr> {
     if string.is_undefined() {
         return Ok(value::UNDEFINED);
     }
@@ -252,7 +252,7 @@ pub fn fn_substring(
     let start = if start < 0 { len + start } else { start };
 
     if length.is_undefined() {
-        Ok(Value::string(string[start as usize..].to_string()))
+        Ok(ValuePtr::string(string[start as usize..].to_string()))
     } else {
         if !length.is_number() {
             return Err(Error::T0410ArgumentNotValid(
@@ -264,7 +264,7 @@ pub fn fn_substring(
 
         let length = length.as_isize();
         if length < 0 {
-            Ok(Value::string(String::from("")))
+            Ok(ValuePtr::string(String::from("")))
         } else {
             let end = if start >= 0 {
                 (start + length) as usize
@@ -278,13 +278,13 @@ pub fn fn_substring(
                 .take(end - start as usize)
                 .collect::<String>();
 
-            Ok(Value::string(substring))
+            Ok(ValuePtr::string(substring))
         }
     }
 }
 
 #[signature("<n-:n>")]
-pub fn fn_abs(context: &FunctionContext, arg: Value) -> Result<Value> {
+pub fn fn_abs(context: &FunctionContext, arg: ValuePtr) -> Result<ValuePtr> {
     if arg.is_undefined() {
         Ok(value::UNDEFINED)
     } else if !arg.is_number() {
@@ -294,12 +294,12 @@ pub fn fn_abs(context: &FunctionContext, arg: Value) -> Result<Value> {
             context.name.to_string(),
         ))
     } else {
-        Ok(Value::number(arg.as_f64().abs()))
+        Ok(ValuePtr::number(arg.as_f64().abs()))
     }
 }
 
 #[signature("<n-:n>")]
-pub fn fn_floor(context: &FunctionContext, arg: Value) -> Result<Value> {
+pub fn fn_floor(context: &FunctionContext, arg: ValuePtr) -> Result<ValuePtr> {
     if arg.is_undefined() {
         Ok(value::UNDEFINED)
     } else if !arg.is_number() {
@@ -309,12 +309,12 @@ pub fn fn_floor(context: &FunctionContext, arg: Value) -> Result<Value> {
             context.name.to_string(),
         ))
     } else {
-        Ok(Value::number(arg.as_f64().floor()))
+        Ok(ValuePtr::number(arg.as_f64().floor()))
     }
 }
 
 #[signature("<n-:n>")]
-pub fn fn_ceil(context: &FunctionContext, arg: Value) -> Result<Value> {
+pub fn fn_ceil(context: &FunctionContext, arg: ValuePtr) -> Result<ValuePtr> {
     if arg.is_undefined() {
         Ok(value::UNDEFINED)
     } else if !arg.is_number() {
@@ -324,12 +324,12 @@ pub fn fn_ceil(context: &FunctionContext, arg: Value) -> Result<Value> {
             context.name.to_string(),
         ))
     } else {
-        Ok(Value::number(arg.as_f64().ceil()))
+        Ok(ValuePtr::number(arg.as_f64().ceil()))
     }
 }
 
 #[signature("<a<n>:n>")]
-pub fn fn_max(context: &FunctionContext, args: Value) -> Result<Value> {
+pub fn fn_max(context: &FunctionContext, args: ValuePtr) -> Result<ValuePtr> {
     if args.is_undefined() || (args.is_array() && args.is_empty()) {
         return Ok(value::UNDEFINED);
     }
@@ -346,11 +346,11 @@ pub fn fn_max(context: &FunctionContext, args: Value) -> Result<Value> {
         }
         max = f64::max(max, arg.as_f64());
     }
-    Ok(Value::number(max))
+    Ok(ValuePtr::number(max))
 }
 
 #[signature("<a<n>:n>")]
-pub fn fn_min(context: &FunctionContext, args: Value) -> Result<Value> {
+pub fn fn_min(context: &FunctionContext, args: ValuePtr) -> Result<ValuePtr> {
     if args.is_undefined() || (args.is_array() && args.is_empty()) {
         return Ok(value::UNDEFINED);
     }
@@ -367,11 +367,11 @@ pub fn fn_min(context: &FunctionContext, args: Value) -> Result<Value> {
         }
         min = f64::min(min, arg.as_f64());
     }
-    Ok(Value::number(min))
+    Ok(ValuePtr::number(min))
 }
 
 #[signature("<a<n>:n>")]
-pub fn fn_sum(context: &FunctionContext, args: Value) -> Result<Value> {
+pub fn fn_sum(context: &FunctionContext, args: ValuePtr) -> Result<ValuePtr> {
     if args.is_undefined() || (args.is_array() && args.is_empty()) {
         return Ok(value::UNDEFINED);
     }
@@ -388,5 +388,5 @@ pub fn fn_sum(context: &FunctionContext, args: Value) -> Result<Value> {
         }
         sum += arg.as_f64();
     }
-    Ok(Value::number(sum))
+    Ok(ValuePtr::number(sum))
 }

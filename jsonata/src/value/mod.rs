@@ -1,10 +1,10 @@
 mod kind;
 
-pub use kind::{ArrayFlags, ValueKind};
+pub use kind::{ArrayFlags, Value};
 
 use bumpalo::Bump;
+use hashbrown::HashMap;
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::fmt;
 use std::ops::Deref;
 
@@ -15,124 +15,130 @@ use crate::json::codegen::{DumpGenerator, Generator, PrettyGenerator};
 use crate::json::Number;
 use crate::Result;
 
-const _UNDEFINED: ValueKind = ValueKind::Undefined;
-pub const UNDEFINED: Value = Value(&_UNDEFINED);
+const _UNDEFINED: Value = Value::Undefined;
+pub const UNDEFINED: ValuePtr = ValuePtr(&_UNDEFINED);
 
 thread_local! {
     static ARENA: Bump = Bump::new();
 }
 
 #[derive(Clone, Copy)]
-pub struct Value(*const ValueKind);
+pub struct ValuePtr(*const Value);
 
-impl Value {
+impl ValuePtr {
     // pub fn ptr(&self) -> *const ValueKind {
     //     self.0
     // }
 
-    pub fn new(kind: ValueKind) -> Value {
-        Value(ARENA.with(|arena| arena.alloc(kind) as *const ValueKind))
+    pub fn new(kind: Value) -> ValuePtr {
+        ValuePtr(ARENA.with(|arena| arena.alloc(kind) as *const Value))
     }
 
-    pub fn null() -> Value {
-        Value(ARENA.with(|arena| arena.alloc(ValueKind::Null) as *const ValueKind))
+    pub fn null() -> ValuePtr {
+        ValuePtr(ARENA.with(|arena| arena.alloc(Value::Null) as *const Value))
     }
 
-    pub fn bool(value: bool) -> Value {
-        Value(ARENA.with(|arena| arena.alloc(ValueKind::Bool(value)) as *const ValueKind))
+    pub fn bool(value: bool) -> ValuePtr {
+        ValuePtr(ARENA.with(|arena| arena.alloc(Value::Bool(value)) as *const Value))
     }
 
-    pub fn number<T: Into<Number>>(value: T) -> Value {
-        Value(ARENA.with(|arena| arena.alloc(ValueKind::Number(value.into())) as *const ValueKind))
+    pub fn number<T: Into<Number>>(value: T) -> ValuePtr {
+        ValuePtr(ARENA.with(|arena| arena.alloc(Value::Number(value.into())) as *const Value))
     }
 
-    pub fn string<T: Into<String>>(value: T) -> Value {
-        Value(ARENA.with(|arena| arena.alloc(ValueKind::String(value.into())) as *const ValueKind))
+    pub fn string<T: Into<String>>(value: T) -> ValuePtr {
+        ValuePtr(ARENA.with(|arena| arena.alloc(Value::String(value.into())) as *const Value))
     }
 
-    pub fn array(flags: ArrayFlags) -> Value {
-        Value(
-            ARENA
-                .with(|arena| arena.alloc(ValueKind::Array(Vec::new(), flags)) as *const ValueKind),
-        )
+    pub fn array(flags: ArrayFlags) -> ValuePtr {
+        ValuePtr(ARENA.with(|arena| arena.alloc(Value::Array(Vec::new(), flags)) as *const Value))
     }
 
-    pub fn array_with_capacity(capacity: usize, flags: ArrayFlags) -> Value {
-        Value(ARENA.with(|arena| {
-            arena.alloc(ValueKind::Array(Vec::with_capacity(capacity), flags)) as *const ValueKind
+    pub fn array_with_capacity(capacity: usize, flags: ArrayFlags) -> ValuePtr {
+        ValuePtr(ARENA.with(|arena| {
+            arena.alloc(Value::Array(Vec::with_capacity(capacity), flags)) as *const Value
         }))
     }
 
-    pub fn object() -> Value {
-        Value(
-            ARENA.with(|arena| arena.alloc(ValueKind::Object(HashMap::new())) as *const ValueKind),
-        )
+    pub fn object() -> ValuePtr {
+        ValuePtr(ARENA.with(|arena| arena.alloc(Value::Object(HashMap::new())) as *const Value))
     }
 
-    pub fn object_with_capacity(capacity: usize) -> Value {
-        Value(ARENA.with(|arena| {
-            arena.alloc(ValueKind::Object(HashMap::with_capacity(capacity))) as *const ValueKind
+    pub fn object_with_capacity(capacity: usize) -> ValuePtr {
+        ValuePtr(ARENA.with(|arena| {
+            arena.alloc(Value::Object(HashMap::with_capacity(capacity))) as *const Value
         }))
     }
 
-    pub fn lambda(node: &Ast, input: Value, frame: Frame) -> Value {
-        Value(ARENA.with(|arena| {
-            arena.alloc(ValueKind::Lambda {
+    pub fn lambda(node: &Ast, input: ValuePtr, frame: Frame) -> ValuePtr {
+        ValuePtr(ARENA.with(|arena| {
+            arena.alloc(Value::Lambda {
                 ast: node,
                 input,
                 frame,
-            }) as *const ValueKind
+            }) as *const Value
         }))
     }
 
-    pub fn nativefn0(name: &str, func: fn(&FunctionContext) -> Result<Value>) -> Value {
-        Value(ARENA.with(|arena| {
-            arena.alloc(ValueKind::NativeFn0(name.to_string(), func)) as *const ValueKind
-        }))
+    pub fn nativefn0(name: &str, func: fn(&FunctionContext) -> Result<ValuePtr>) -> ValuePtr {
+        ValuePtr(
+            ARENA.with(|arena| {
+                arena.alloc(Value::NativeFn0(name.to_string(), func)) as *const Value
+            }),
+        )
     }
 
-    pub fn nativefn1(name: &str, func: fn(&FunctionContext, Value) -> Result<Value>) -> Value {
-        Value(ARENA.with(|arena| {
-            arena.alloc(ValueKind::NativeFn1(name.to_string(), func)) as *const ValueKind
-        }))
+    pub fn nativefn1(
+        name: &str,
+        func: fn(&FunctionContext, ValuePtr) -> Result<ValuePtr>,
+    ) -> ValuePtr {
+        ValuePtr(
+            ARENA.with(|arena| {
+                arena.alloc(Value::NativeFn1(name.to_string(), func)) as *const Value
+            }),
+        )
     }
 
     pub fn nativefn2(
         name: &str,
-        func: fn(&FunctionContext, Value, Value) -> Result<Value>,
-    ) -> Value {
-        Value(ARENA.with(|arena| {
-            arena.alloc(ValueKind::NativeFn2(name.to_string(), func)) as *const ValueKind
-        }))
+        func: fn(&FunctionContext, ValuePtr, ValuePtr) -> Result<ValuePtr>,
+    ) -> ValuePtr {
+        ValuePtr(
+            ARENA.with(|arena| {
+                arena.alloc(Value::NativeFn2(name.to_string(), func)) as *const Value
+            }),
+        )
     }
 
     pub fn nativefn3(
         name: &str,
-        func: fn(&FunctionContext, Value, Value, Value) -> Result<Value>,
-    ) -> Value {
-        Value(ARENA.with(|arena| {
-            arena.alloc(ValueKind::NativeFn3(name.to_string(), func)) as *const ValueKind
-        }))
+        func: fn(&FunctionContext, ValuePtr, ValuePtr, ValuePtr) -> Result<ValuePtr>,
+    ) -> ValuePtr {
+        ValuePtr(
+            ARENA.with(|arena| {
+                arena.alloc(Value::NativeFn3(name.to_string(), func)) as *const Value
+            }),
+        )
     }
 
     pub fn is_undefined(&self) -> bool {
-        matches!(unsafe { &*self.0 }, ValueKind::Undefined)
+        matches!(unsafe { &*self.0 }, Value::Undefined)
     }
 
     pub fn is_null(&self) -> bool {
-        matches!(unsafe { &*self.0 }, ValueKind::Null)
+        matches!(unsafe { &*self.0 }, Value::Null)
     }
 
     pub fn is_bool(&self) -> bool {
-        matches!(unsafe { &*self.0 }, ValueKind::Bool(..))
+        matches!(unsafe { &*self.0 }, Value::Bool(..))
     }
 
     pub fn is_number(&self) -> bool {
-        matches!(unsafe { &*self.0 }, ValueKind::Number(..))
+        matches!(unsafe { &*self.0 }, Value::Number(..))
     }
 
     pub fn is_integer(&self) -> bool {
-        if let ValueKind::Number(ref n) = unsafe { &*self.0 } {
+        if let Value::Number(ref n) = unsafe { &*self.0 } {
             let n = f64::from(*n);
             match n.classify() {
                 std::num::FpCategory::Nan
@@ -149,40 +155,40 @@ impl Value {
     }
 
     pub fn is_nan(&self) -> bool {
-        matches!(unsafe { &*self.0 }, ValueKind::Number(n) if n.is_nan())
+        matches!(unsafe { &*self.0 }, Value::Number(n) if n.is_nan())
     }
 
     pub fn is_string(&self) -> bool {
-        matches!(unsafe { &*self.0 }, ValueKind::String(..))
+        matches!(unsafe { &*self.0 }, Value::String(..))
     }
 
     pub fn is_array(&self) -> bool {
-        matches!(unsafe { &*self.0 }, ValueKind::Array(..))
+        matches!(unsafe { &*self.0 }, Value::Array(..))
     }
 
     pub fn is_object(&self) -> bool {
-        matches!(unsafe { &*self.0 }, ValueKind::Object(..))
+        matches!(unsafe { &*self.0 }, Value::Object(..))
     }
 
     pub fn is_function(&self) -> bool {
         matches!(
             unsafe { &*self.0 },
-            ValueKind::Lambda { .. }
-                | ValueKind::NativeFn0(..)
-                | ValueKind::NativeFn1(..)
-                | ValueKind::NativeFn2(..)
-                | ValueKind::NativeFn3(..)
+            Value::Lambda { .. }
+                | Value::NativeFn0(..)
+                | Value::NativeFn1(..)
+                | Value::NativeFn2(..)
+                | Value::NativeFn3(..)
         )
     }
 
     pub fn is_truthy(&self) -> bool {
         match unsafe { &*self.0 } {
-            ValueKind::Undefined => false,
-            ValueKind::Null => false,
-            ValueKind::Number(n) => *n != 0.0,
-            ValueKind::Bool(b) => *b,
-            ValueKind::String(s) => !s.is_empty(),
-            ValueKind::Array(a, _) => match a.len() {
+            Value::Undefined => false,
+            Value::Null => false,
+            Value::Number(n) => *n != 0.0,
+            Value::Bool(b) => *b,
+            Value::String(s) => !s.is_empty(),
+            Value::Array(a, _) => match a.len() {
                 0 => false,
                 1 => self.get_member(0).is_truthy(),
                 _ => {
@@ -194,91 +200,91 @@ impl Value {
                     false
                 }
             },
-            ValueKind::Object(o) => !o.is_empty(),
-            ValueKind::Lambda { .. }
-            | ValueKind::NativeFn0(..)
-            | ValueKind::NativeFn1(..)
-            | ValueKind::NativeFn2(..)
-            | ValueKind::NativeFn3(..) => false,
+            Value::Object(o) => !o.is_empty(),
+            Value::Lambda { .. }
+            | Value::NativeFn0(..)
+            | Value::NativeFn1(..)
+            | Value::NativeFn2(..)
+            | Value::NativeFn3(..) => false,
         }
     }
 
     pub fn arity(&self) -> usize {
         match unsafe { &*self.0 } {
-            ValueKind::Lambda { ast, .. } => {
+            Value::Lambda { ast, .. } => {
                 if let AstKind::Lambda { args, .. } = unsafe { &(**ast).kind } {
                     args.len()
                 } else {
                     0
                 }
             }
-            ValueKind::NativeFn0(..) => 0,
-            ValueKind::NativeFn1(..) => 1,
-            ValueKind::NativeFn2(..) => 2,
-            ValueKind::NativeFn3(..) => 3,
+            Value::NativeFn0(..) => 0,
+            Value::NativeFn1(..) => 1,
+            Value::NativeFn2(..) => 2,
+            Value::NativeFn3(..) => 3,
             _ => panic!("Not a function"),
         }
     }
 
     pub fn as_bool(&self) -> bool {
         match unsafe { &*self.0 } {
-            ValueKind::Bool(b) => *b,
+            Value::Bool(b) => *b,
             _ => panic!("Not a bool"),
         }
     }
 
     pub fn as_f32(&self) -> f32 {
         match unsafe { &*self.0 } {
-            ValueKind::Number(n) => f32::from(*n),
+            Value::Number(n) => f32::from(*n),
             _ => panic!("Not a number"),
         }
     }
 
     pub fn as_f64(&self) -> f64 {
         match unsafe { &*self.0 } {
-            ValueKind::Number(n) => f64::from(*n),
+            Value::Number(n) => f64::from(*n),
             _ => panic!("Not a number"),
         }
     }
 
     pub fn as_usize(&self) -> usize {
         match unsafe { &*self.0 } {
-            ValueKind::Number(ref n) => f64::from(*n) as usize,
+            Value::Number(ref n) => f64::from(*n) as usize,
             _ => panic!("Not a number"),
         }
     }
 
     pub fn as_isize(&self) -> isize {
         match unsafe { &*self.0 } {
-            ValueKind::Number(ref n) => f64::from(*n) as isize,
+            Value::Number(ref n) => f64::from(*n) as isize,
             _ => panic!("Not a number"),
         }
     }
 
     pub fn as_str(&self) -> Cow<'_, str> {
         match unsafe { &*self.0 } {
-            ValueKind::String(ref s) => Cow::from(s),
+            Value::String(ref s) => Cow::from(s),
             _ => panic!("Not a string"),
         }
     }
 
     pub fn len(&self) -> usize {
         match unsafe { &*self.0 } {
-            ValueKind::Array(array, _) => array.len(),
+            Value::Array(array, _) => array.len(),
             _ => panic!("Not an array"),
         }
     }
 
     pub fn is_empty(&self) -> bool {
         match unsafe { &*self.0 } {
-            ValueKind::Array(array, _) => array.is_empty(),
+            Value::Array(array, _) => array.is_empty(),
             _ => panic!("Not an array"),
         }
     }
 
-    pub fn get_member(&self, index: usize) -> Value {
+    pub fn get_member(&self, index: usize) -> ValuePtr {
         match unsafe { &*self.0 } {
-            ValueKind::Array(ref array, _) => match array.get(index) {
+            Value::Array(ref array, _) => match array.get(index) {
                 Some(value) => *value,
                 None => UNDEFINED,
             },
@@ -286,9 +292,9 @@ impl Value {
         }
     }
 
-    pub fn get_entry(&self, key: &str) -> Value {
+    pub fn get_entry(&self, key: &str) -> ValuePtr {
         match unsafe { &*self.0 } {
-            ValueKind::Object(ref map) => match map.get(key) {
+            Value::Object(ref map) => match map.get(key) {
                 Some(value) => *value,
                 None => UNDEFINED,
             },
@@ -296,50 +302,49 @@ impl Value {
         }
     }
 
-    pub fn insert_new(&self, key: &str, kind: ValueKind) {
-        match unsafe { &mut *(self.0 as *mut ValueKind) } {
-            ValueKind::Object(ref mut map) => {
-                let kind = ARENA.with(|arena| arena.alloc(kind) as *const ValueKind);
-                map.insert(key.to_owned(), Value(kind));
+    pub fn insert_new(&self, key: &str, kind: Value) {
+        match unsafe { &mut *(self.0 as *mut Value) } {
+            Value::Object(ref mut map) => {
+                let kind = ARENA.with(|arena| arena.alloc(kind) as *const Value);
+                map.insert(key.to_owned(), ValuePtr(kind));
             }
             _ => panic!("Not an object"),
         }
     }
 
-    pub fn insert(&self, key: &str, value: Value) {
-        match unsafe { &mut *(self.0 as *mut ValueKind) } {
-            ValueKind::Object(ref mut map) => {
+    pub fn insert(&self, key: &str, value: ValuePtr) {
+        match unsafe { &mut *(self.0 as *mut Value) } {
+            Value::Object(ref mut map) => {
                 map.insert(key.to_owned(), value);
             }
             _ => panic!("Not an object"),
         }
     }
 
-    pub fn push_new(&self, kind: ValueKind) {
-        match unsafe { &mut *(self.0 as *mut ValueKind) } {
-            ValueKind::Array(ref mut array, _) => {
-                let kind = ARENA.with(|arena| arena.alloc(kind) as *const ValueKind);
-                array.push(Value(kind));
+    pub fn push_new(&self, kind: Value) {
+        match unsafe { &mut *(self.0 as *mut Value) } {
+            Value::Array(ref mut array, _) => {
+                let kind = ARENA.with(|arena| arena.alloc(kind) as *const Value);
+                array.push(ValuePtr(kind));
             }
             _ => panic!("Not an array"),
         }
     }
 
-    pub fn push(&self, value: Value) {
-        match unsafe { &mut *(self.0 as *mut ValueKind) } {
-            ValueKind::Array(ref mut array, _) => array.push(value),
+    pub fn push(&self, value: ValuePtr) {
+        match unsafe { &mut *(self.0 as *mut Value) } {
+            Value::Array(ref mut array, _) => array.push(value),
             _ => panic!("Not an array"),
         }
     }
 
-    pub fn wrap_in_array(&self, flags: ArrayFlags) -> Value {
+    pub fn wrap_in_array(&self, flags: ArrayFlags) -> ValuePtr {
         let array = vec![*self];
-        let result =
-            ARENA.with(|arena| arena.alloc(ValueKind::Array(array, flags)) as *const ValueKind);
-        Value(result)
+        let result = ARENA.with(|arena| arena.alloc(Value::Array(array, flags)) as *const Value);
+        ValuePtr(result)
     }
 
-    pub fn wrap_in_array_if_needed(&self, flags: ArrayFlags) -> Value {
+    pub fn wrap_in_array_if_needed(&self, flags: ArrayFlags) -> ValuePtr {
         if self.is_array() {
             *self
         } else {
@@ -347,44 +352,44 @@ impl Value {
         }
     }
 
-    pub fn members(&self) -> std::slice::Iter<'_, Value> {
+    pub fn members(&self) -> std::slice::Iter<'_, ValuePtr> {
         match unsafe { &*self.0 } {
-            ValueKind::Array(ref array, _) => array.iter(),
+            Value::Array(ref array, _) => array.iter(),
             _ => panic!("Not an array"),
         }
     }
 
-    pub fn entries(&self) -> std::collections::hash_map::Iter<'_, String, Value> {
+    pub fn entries(&self) -> hashbrown::hash_map::Iter<'_, String, ValuePtr> {
         match unsafe { &*self.0 } {
-            ValueKind::Object(ref map) => map.iter(),
+            Value::Object(ref map) => map.iter(),
             _ => panic!("Not an object"),
         }
     }
 
     pub fn get_flags(&self) -> ArrayFlags {
         match unsafe { &*self.0 } {
-            ValueKind::Array(_, flags) => *flags,
+            Value::Array(_, flags) => *flags,
             _ => panic!("Not an array"),
         }
     }
 
     pub fn set_flags(&mut self, new_flags: ArrayFlags) {
-        match unsafe { &mut *(self.0 as *mut ValueKind) } {
-            ValueKind::Array(_, flags) => *flags = new_flags,
+        match unsafe { &mut *(self.0 as *mut Value) } {
+            Value::Array(_, flags) => *flags = new_flags,
             _ => panic!("Not an array"),
         }
     }
 
     pub fn add_flags(&mut self, flags_to_add: ArrayFlags) {
-        match unsafe { &mut *(self.0 as *mut ValueKind) } {
-            ValueKind::Array(_, flags) => flags.insert(flags_to_add),
+        match unsafe { &mut *(self.0 as *mut Value) } {
+            Value::Array(_, flags) => flags.insert(flags_to_add),
             _ => panic!("Not an array"),
         }
     }
 
     pub fn has_flags(&self, check_flags: ArrayFlags) -> bool {
         match unsafe { &*self.0 } {
-            ValueKind::Array(_, flags) => flags.contains(check_flags),
+            Value::Array(_, flags) => flags.contains(check_flags),
             _ => false,
         }
     }
@@ -405,21 +410,21 @@ impl Value {
     }
 }
 
-impl std::fmt::Debug for Value {
+impl std::fmt::Debug for ValuePtr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match unsafe { &*self.0 } {
-            ValueKind::Lambda { ast, .. } => write!(f, "<lambda: {:#?}>", ast),
-            ValueKind::NativeFn0(..) => write!(f, "<nativefn0>"),
-            ValueKind::NativeFn1(..) => write!(f, "<nativefn1>"),
-            ValueKind::NativeFn2(..) => write!(f, "<nativefn2>"),
-            ValueKind::NativeFn3(..) => write!(f, "<nativefn3>"),
+            Value::Lambda { ast, .. } => write!(f, "<lambda: {:#?}>", ast),
+            Value::NativeFn0(..) => write!(f, "<nativefn0>"),
+            Value::NativeFn1(..) => write!(f, "<nativefn1>"),
+            Value::NativeFn2(..) => write!(f, "<nativefn2>"),
+            Value::NativeFn3(..) => write!(f, "<nativefn3>"),
             _ => write!(f, "{}", self.dump()),
         }
     }
 }
 
-impl Deref for Value {
-    type Target = ValueKind;
+impl Deref for ValuePtr {
+    type Target = Value;
 
     fn deref(&self) -> &Self::Target {
         unsafe { &*self.0 }
@@ -430,17 +435,17 @@ impl Deref for Value {
 ///
 /// Delegates comparison to the ValueKind instance in the arena, so you can
 /// directly compare `Value`s to determine if their underlying `ValueKind`s are equal.
-impl PartialEq<Value> for Value {
-    fn eq(&self, other: &Value) -> bool {
+impl PartialEq<ValuePtr> for ValuePtr {
+    fn eq(&self, other: &ValuePtr) -> bool {
         match unsafe { &*self.0 } {
-            ValueKind::Array(..) => {
+            Value::Array(..) => {
                 if other.is_array() && other.len() == self.len() {
                     self.members().zip(other.members()).all(|(l, r)| l == r)
                 } else {
                     false
                 }
             }
-            ValueKind::Object(..) => {
+            Value::Object(..) => {
                 if other.is_object() {
                     self.entries().all(|(k, v)| *v == other.get_entry(k))
                 } else {
@@ -452,70 +457,70 @@ impl PartialEq<Value> for Value {
     }
 }
 
-impl PartialEq<ValueKind> for Value {
-    fn eq(&self, other: &ValueKind) -> bool {
+impl PartialEq<Value> for ValuePtr {
+    fn eq(&self, other: &Value) -> bool {
         unsafe { *self.0 == *other }
     }
 }
 
-impl PartialEq<bool> for Value {
+impl PartialEq<bool> for ValuePtr {
     fn eq(&self, other: &bool) -> bool {
         match unsafe { &*self.0 } {
-            ValueKind::Bool(ref b) => *b == *other,
+            Value::Bool(ref b) => *b == *other,
             _ => false,
         }
     }
 }
 
-impl PartialEq<i32> for Value {
+impl PartialEq<i32> for ValuePtr {
     fn eq(&self, other: &i32) -> bool {
         match unsafe { &*self.0 } {
-            ValueKind::Number(ref n) => *n == *other,
+            Value::Number(ref n) => *n == *other,
             _ => false,
         }
     }
 }
 
-impl PartialEq<i64> for Value {
+impl PartialEq<i64> for ValuePtr {
     fn eq(&self, other: &i64) -> bool {
         match unsafe { &*self.0 } {
-            ValueKind::Number(ref n) => *n == *other,
+            Value::Number(ref n) => *n == *other,
             _ => false,
         }
     }
 }
 
-impl PartialEq<f32> for Value {
+impl PartialEq<f32> for ValuePtr {
     fn eq(&self, other: &f32) -> bool {
         match unsafe { &*self.0 } {
-            ValueKind::Number(ref n) => *n == *other,
+            Value::Number(ref n) => *n == *other,
             _ => false,
         }
     }
 }
 
-impl PartialEq<f64> for Value {
+impl PartialEq<f64> for ValuePtr {
     fn eq(&self, other: &f64) -> bool {
         match unsafe { &*self.0 } {
-            ValueKind::Number(n) => *n == *other,
+            Value::Number(n) => *n == *other,
             _ => false,
         }
     }
 }
 
-impl PartialEq<&str> for Value {
+impl PartialEq<&str> for ValuePtr {
     fn eq(&self, other: &&str) -> bool {
         match unsafe { &*self.0 } {
-            ValueKind::String(s) => *s == **other,
+            Value::String(s) => *s == **other,
             _ => false,
         }
     }
 }
 
-impl PartialEq<String> for Value {
+impl PartialEq<String> for ValuePtr {
     fn eq(&self, other: &String) -> bool {
         match unsafe { &*self.0 } {
-            ValueKind::String(s) => *s == *other,
+            Value::String(s) => *s == *other,
             _ => false,
         }
     }

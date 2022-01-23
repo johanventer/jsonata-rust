@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use super::value::Value;
+use super::value::ValuePtr;
 
 #[derive(Debug)]
 pub struct Frame(Rc<RefCell<FrameData>>);
@@ -20,15 +20,15 @@ impl Frame {
         })))
     }
 
-    pub fn bind(&self, name: &str, value: Value) {
+    pub fn bind(&self, name: &str, value: ValuePtr) {
         // Values in the frame need to be complete clones, otherwise modifying them would change their value.
         // Arrays and object will still point at the same members, and this replicates the reference semantics
         // in Javascript.
-        let v = Value::new((*value).clone());
+        let v = ValuePtr::new((*value).clone());
         self.0.borrow_mut().bindings.insert(name.to_string(), v);
     }
 
-    pub fn lookup(&self, name: &str) -> Option<Value> {
+    pub fn lookup(&self, name: &str) -> Option<ValuePtr> {
         match self.0.borrow().bindings.get(name) {
             Some(value) => Some(*value),
             None => match &self.0.borrow().parent {
@@ -53,7 +53,7 @@ impl Clone for Frame {
 
 #[derive(Debug)]
 pub struct FrameData {
-    bindings: HashMap<String, Value>,
+    bindings: HashMap<String, ValuePtr>,
     parent: Option<Frame>,
 }
 

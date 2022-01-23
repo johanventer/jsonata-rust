@@ -4,7 +4,7 @@ use std::ptr;
 
 use super::number::Number;
 use super::util::print_dec;
-use crate::value::{Value, ValueKind};
+use crate::value::{Value, ValuePtr};
 
 const QU: u8 = b'"';
 const BS: u8 = b'\\';
@@ -110,7 +110,7 @@ pub trait Generator {
     }
 
     #[inline(always)]
-    fn write_object(&mut self, object: &Value) -> io::Result<()> {
+    fn write_object(&mut self, object: &ValuePtr) -> io::Result<()> {
         self.write_char(b'{')?;
         let mut iter = object.entries();
 
@@ -138,14 +138,14 @@ pub trait Generator {
         self.write_char(b'}')
     }
 
-    fn write_json(&mut self, json: &Value) -> io::Result<()> {
+    fn write_json(&mut self, json: &ValuePtr) -> io::Result<()> {
         match **json {
-            ValueKind::Null => self.write(b"null"),
-            ValueKind::String(ref string) => self.write_string(string),
-            ValueKind::Number(ref number) => self.write_number(number),
-            ValueKind::Bool(true) => self.write(b"true"),
-            ValueKind::Bool(false) => self.write(b"false"),
-            ValueKind::Array(..) => {
+            Value::Null => self.write(b"null"),
+            Value::String(ref string) => self.write_string(string),
+            Value::Number(ref number) => self.write_number(number),
+            Value::Bool(true) => self.write(b"true"),
+            Value::Bool(false) => self.write(b"false"),
+            Value::Array(..) => {
                 self.write_char(b'[')?;
                 let mut iter = json.members();
 
@@ -168,7 +168,7 @@ pub trait Generator {
                 self.new_line()?;
                 self.write_char(b']')
             }
-            ValueKind::Object(..) => self.write_object(json),
+            Value::Object(..) => self.write_object(json),
             _ => Ok(()),
         }
     }

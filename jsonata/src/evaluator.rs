@@ -7,7 +7,7 @@ use crate::value;
 use super::ast::*;
 use super::frame::Frame;
 use super::functions::*;
-use super::value::{ArrayFlags, Value, ValueKind};
+use super::value::{ArrayFlags, Value, ValuePtr};
 
 pub struct Evaluator {
     chain_ast: Ast,
@@ -22,7 +22,7 @@ impl Evaluator {
         &'a self,
         name: &'a str,
         char_index: usize,
-        input: Value,
+        input: ValuePtr,
         frame: &'a Frame,
     ) -> FunctionContext<'a> {
         FunctionContext {
@@ -34,12 +34,12 @@ impl Evaluator {
         }
     }
 
-    pub fn evaluate(&self, node: &Ast, input: Value, frame: &Frame) -> Result<Value> {
+    pub fn evaluate(&self, node: &Ast, input: ValuePtr, frame: &Frame) -> Result<ValuePtr> {
         let mut result = match node.kind {
-            AstKind::Null => Value::null(),
-            AstKind::Bool(b) => Value::bool(b),
-            AstKind::String(ref s) => Value::string(String::from(s)),
-            AstKind::Number(n) => Value::number(n),
+            AstKind::Null => ValuePtr::null(),
+            AstKind::Bool(b) => ValuePtr::bool(b),
+            AstKind::String(ref s) => ValuePtr::string(String::from(s)),
+            AstKind::Number(n) => ValuePtr::number(n),
             AstKind::Block(ref exprs) => self.evaluate_block(exprs, input, frame)?,
             AstKind::Unary(ref op) => self.evaluate_unary_op(node, op, input, frame)?,
             AstKind::Binary(ref op, ref lhs, ref rhs) => {
@@ -57,7 +57,7 @@ impl Evaluator {
                 input,
                 name,
             ),
-            AstKind::Lambda { .. } => Value::lambda(node, input, frame.clone()),
+            AstKind::Lambda { .. } => ValuePtr::lambda(node, input, frame.clone()),
             AstKind::Function {
                 ref proc,
                 ref args,
@@ -94,7 +94,7 @@ impl Evaluator {
         })
     }
 
-    fn evaluate_block(&self, exprs: &[Ast], input: Value, frame: &Frame) -> Result<Value> {
+    fn evaluate_block(&self, exprs: &[Ast], input: ValuePtr, frame: &Frame) -> Result<ValuePtr> {
         let frame = Frame::new_with_parent(frame);
         if exprs.is_empty() {
             return Ok(value::UNDEFINED);
@@ -108,7 +108,7 @@ impl Evaluator {
         Ok(result)
     }
 
-    fn evaluate_var(&self, name: &str, input: Value, frame: &Frame) -> Result<Value> {
+    fn evaluate_var(&self, name: &str, input: ValuePtr, frame: &Frame) -> Result<ValuePtr> {
         Ok(if name.is_empty() {
             if input.has_flags(ArrayFlags::WRAPPED) {
                 input.get_member(0)
@@ -126,15 +126,15 @@ impl Evaluator {
         &self,
         node: &Ast,
         op: &UnaryOp,
-        input: Value,
+        input: ValuePtr,
         frame: &Frame,
-    ) -> Result<Value> {
+    ) -> Result<ValuePtr> {
         match *op {
             UnaryOp::Minus(ref value) => {
                 let result = self.evaluate(value, input, frame)?;
                 match *result {
-                    ValueKind::Undefined => Ok(value::UNDEFINED),
-                    ValueKind::Number(num) if !num.is_nan() => Ok(Value::number(-num)),
+                    Value::Undefined => Ok(value::UNDEFINED),
+                    Value::Number(num) if !num.is_nan() => Ok(ValuePtr::number(-num)),
                     _ => Err(Error::D1002NegatingNonNumeric(
                         node.char_index,
                         result.dump(),
@@ -142,7 +142,7 @@ impl Evaluator {
                 }
             }
             UnaryOp::ArrayConstructor(ref array) => {
-                let mut result = Value::array(if node.cons_array {
+                let mut result = ValuePtr::array(if node.cons_array {
                     ArrayFlags::CONS
                 } else {
                     ArrayFlags::empty()
@@ -171,11 +171,11 @@ impl Evaluator {
         &self,
         char_index: usize,
         object: &[(Ast, Ast)],
-        input: Value,
+        input: ValuePtr,
         frame: &Frame,
-    ) -> Result<Value> {
+    ) -> Result<ValuePtr> {
         struct Group {
-            pub data: Value,
+            pub data: ValuePtr,
             pub index: usize,
         }
 
@@ -183,7 +183,7 @@ impl Evaluator {
         let input = input.wrap_in_array_if_needed(ArrayFlags::empty());
 
         if input.is_empty() {
-            input.push_new(ValueKind::Undefined);
+            input.push_new(Value::Undefined);
         }
 
         for item in input.members() {
@@ -214,7 +214,7 @@ impl Evaluator {
             }
         }
 
-        let result = Value::object();
+        let result = ValuePtr::object();
 
         for key in groups.keys() {
             let group = groups.get(key).unwrap();
@@ -233,9 +233,9 @@ impl Evaluator {
         op: &BinaryOp,
         lhs_ast: &Ast,
         rhs_ast: &Ast,
-        input: Value,
+        input: ValuePtr,
         frame: &Frame,
-    ) -> Result<Value> {
+    ) -> Result<ValuePtr> {
         if *op == BinaryOp::Bind {
             if let AstKind::Var(ref name) = lhs_ast.kind {
                 let rhs = self.evaluate(rhs_ast, input, frame)?;
@@ -258,8 +258,8 @@ impl Evaluator {
                 let rhs = self.evaluate(rhs_ast, input, frame)?;
 
                 let lhs = match *lhs {
-                    ValueKind::Undefined => return Ok(value::UNDEFINED),
-                    ValueKind::Number(n) if !n.is_nan() => f64::from(n),
+                    Value::Undefined => return Ok(value::UNDEFINED),
+                    Value::Number(n) if !n.is_nan() => f64::from(n),
                     _ => {
                         return Err(Error::T2001LeftSideNotNumber(
                             node.char_index,
@@ -269,8 +269,8 @@ impl Evaluator {
                 };
 
                 let rhs = match *rhs {
-                    ValueKind::Undefined => return Ok(value::UNDEFINED),
-                    ValueKind::Number(n) if !n.is_nan() => f64::from(n),
+                    Value::Undefined => return Ok(value::UNDEFINED),
+                    Value::Number(n) if !n.is_nan() => f64::from(n),
                     _ => {
                         return Err(Error::T2002RightSideNotNumber(
                             node.char_index,
@@ -291,7 +291,7 @@ impl Evaluator {
                 if result.is_infinite() {
                     Err(Error::D1001NumberOfOutRange(result))
                 } else {
-                    Ok(Value::number(result))
+                    Ok(ValuePtr::number(result))
                 }
             }
 
@@ -309,10 +309,10 @@ impl Evaluator {
                     return Err(Error::T2010BinaryOpTypes(node.char_index, op.to_string()));
                 }
 
-                if let (ValueKind::Number(ref lhs), ValueKind::Number(ref rhs)) = (&*lhs, &*rhs) {
+                if let (Value::Number(ref lhs), Value::Number(ref rhs)) = (&*lhs, &*rhs) {
                     let lhs = f64::from(*lhs);
                     let rhs = f64::from(*rhs);
-                    return Ok(Value::bool(match op {
+                    return Ok(ValuePtr::bool(match op {
                         BinaryOp::LessThan => lhs < rhs,
                         BinaryOp::LessThanEqual => lhs <= rhs,
                         BinaryOp::GreaterThan => lhs > rhs,
@@ -321,8 +321,8 @@ impl Evaluator {
                     }));
                 }
 
-                if let (ValueKind::String(ref lhs), ValueKind::String(ref rhs)) = (&*lhs, &*rhs) {
-                    return Ok(Value::bool(match op {
+                if let (Value::String(ref lhs), Value::String(ref rhs)) = (&*lhs, &*rhs) {
+                    return Ok(ValuePtr::bool(match op {
                         BinaryOp::LessThan => lhs < rhs,
                         BinaryOp::LessThanEqual => lhs <= rhs,
                         BinaryOp::GreaterThan => lhs > rhs,
@@ -343,10 +343,10 @@ impl Evaluator {
                 let rhs = self.evaluate(rhs_ast, input, frame)?;
 
                 if lhs.is_undefined() || rhs.is_undefined() {
-                    return Ok(Value::bool(false));
+                    return Ok(ValuePtr::bool(false));
                 }
 
-                Ok(Value::bool(match op {
+                Ok(ValuePtr::bool(match op {
                     BinaryOp::Equal => lhs == rhs,
                     BinaryOp::NotEqual => lhs != rhs,
                     _ => unreachable!(),
@@ -381,9 +381,9 @@ impl Evaluator {
                     unreachable!()
                 }
 
-                let result = Value::array_with_capacity(size, ArrayFlags::SEQUENCE);
+                let result = ValuePtr::array_with_capacity(size, ArrayFlags::SEQUENCE);
                 for index in lhs..rhs + 1 {
-                    result.push_new(ValueKind::Number(index.into()));
+                    result.push_new(Value::Number(index.into()));
                 }
 
                 Ok(result)
@@ -410,14 +410,14 @@ impl Evaluator {
                         .as_str(),
                     );
                 }
-                Ok(Value::string(result))
+                Ok(ValuePtr::string(result))
             }
 
-            BinaryOp::And => Ok(Value::bool(
+            BinaryOp::And => Ok(ValuePtr::bool(
                 lhs.is_truthy() && self.evaluate(rhs_ast, input, frame)?.is_truthy(),
             )),
 
-            BinaryOp::Or => Ok(Value::bool(
+            BinaryOp::Or => Ok(ValuePtr::bool(
                 lhs.is_truthy() || self.evaluate(rhs_ast, input, frame)?.is_truthy(),
             )),
 
@@ -443,7 +443,7 @@ impl Evaluator {
                         // Apply function chaining
                         let chain = self.evaluate(&self.chain_ast, value::UNDEFINED, frame)?;
 
-                        let args = Value::array_with_capacity(2, ArrayFlags::empty());
+                        let args = ValuePtr::array_with_capacity(2, ArrayFlags::empty());
                         args.push(lhs);
                         args.push(rhs);
 
@@ -455,7 +455,7 @@ impl Evaluator {
                             frame,
                         )
                     } else {
-                        let args = Value::array_with_capacity(1, ArrayFlags::empty());
+                        let args = ValuePtr::array_with_capacity(1, ArrayFlags::empty());
                         args.push(lhs);
                         self.apply_function(rhs_ast.char_index, value::UNDEFINED, rhs, args, frame)
                     }
@@ -466,18 +466,18 @@ impl Evaluator {
                 let rhs = self.evaluate(rhs_ast, input, frame)?;
 
                 if lhs.is_undefined() || rhs.is_undefined() {
-                    return Ok(Value::bool(false));
+                    return Ok(ValuePtr::bool(false));
                 }
 
                 let rhs = rhs.wrap_in_array_if_needed(ArrayFlags::empty());
 
                 for item in rhs.members() {
                     if *item == lhs {
-                        return Ok(Value::bool(true));
+                        return Ok(ValuePtr::bool(true));
                     }
                 }
 
-                Ok(Value::bool(false))
+                Ok(ValuePtr::bool(false))
             }
 
             _ => unimplemented!("TODO: binary op not supported yet: {:#?}", *op),
@@ -489,9 +489,9 @@ impl Evaluator {
         cond: &Ast,
         truthy: &Ast,
         falsy: Option<&Ast>,
-        input: Value,
+        input: ValuePtr,
         frame: &Frame,
-    ) -> Result<Value> {
+    ) -> Result<ValuePtr> {
         let cond = self.evaluate(cond, input, frame)?;
         if cond.is_truthy() {
             self.evaluate(truthy, input, frame)
@@ -506,9 +506,9 @@ impl Evaluator {
         &self,
         node: &Ast,
         steps: &[Ast],
-        input: Value,
+        input: ValuePtr,
         frame: &Frame,
-    ) -> Result<Value> {
+    ) -> Result<ValuePtr> {
         let mut input = if input.is_array() && !matches!(steps[0].kind, AstKind::Var(..)) {
             input
         } else {
@@ -552,11 +552,11 @@ impl Evaluator {
     fn evaluate_step(
         &self,
         step: &Ast,
-        input: Value,
+        input: ValuePtr,
         frame: &Frame,
         last_step: bool,
-    ) -> Result<Value> {
-        let mut result = Value::array(ArrayFlags::SEQUENCE);
+    ) -> Result<ValuePtr> {
+        let mut result = ValuePtr::array(ArrayFlags::SEQUENCE);
 
         if let AstKind::Sort(ref sorts) = step.kind {
             result = self.evaluate_sorts(sorts, input, frame)?;
@@ -588,7 +588,7 @@ impl Evaluator {
             {
                 result.get_member(0)
             } else {
-                let result_sequence = Value::array(ArrayFlags::SEQUENCE);
+                let result_sequence = ValuePtr::array(ArrayFlags::SEQUENCE);
 
                 for result_item in result.members() {
                     if !result_item.is_array() || result_item.has_flags(ArrayFlags::CONS) {
@@ -607,18 +607,23 @@ impl Evaluator {
     fn evaluate_sorts(
         &self,
         _sorts: &[(Ast, bool)],
-        _inputt: Value,
+        _inputt: ValuePtr,
         _frame: &Frame,
-    ) -> Result<Value> {
+    ) -> Result<ValuePtr> {
         unimplemented!("Sorts not yet implemented")
     }
 
-    fn evaluate_stages(&self, _stages: &[Ast], _input: Value, _frame: &Frame) -> Result<Value> {
+    fn evaluate_stages(
+        &self,
+        _stages: &[Ast],
+        _input: ValuePtr,
+        _frame: &Frame,
+    ) -> Result<ValuePtr> {
         unimplemented!("Stages not yet implemented")
     }
 
-    fn evaluate_filter(&self, node: &Ast, input: Value, frame: &Frame) -> Result<Value> {
-        let mut result = Value::array(ArrayFlags::SEQUENCE);
+    fn evaluate_filter(&self, node: &Ast, input: ValuePtr, frame: &Frame) -> Result<ValuePtr> {
+        let mut result = ValuePtr::array(ArrayFlags::SEQUENCE);
         let input = input.wrap_in_array_if_needed(ArrayFlags::empty());
 
         let get_index = |n: f64| {
@@ -676,13 +681,13 @@ impl Evaluator {
 
     pub fn evaluate_function(
         &self,
-        input: Value,
+        input: ValuePtr,
         proc: &Ast,
         args: &[Ast],
         _is_partial: bool,
         frame: &Frame,
-        context: Option<&Value>,
-    ) -> Result<Value> {
+        context: Option<&ValuePtr>,
+    ) -> Result<ValuePtr> {
         let evaluated_proc = self.evaluate(proc, input, frame)?;
 
         // Help the user out if they forgot a '$'
@@ -699,7 +704,7 @@ impl Evaluator {
             }
         }
 
-        let evaluated_args = Value::array_with_capacity(args.len(), ArrayFlags::empty());
+        let evaluated_args = ValuePtr::array_with_capacity(args.len(), ArrayFlags::empty());
 
         if let Some(context) = context {
             evaluated_args.push(*context);
@@ -720,7 +725,7 @@ impl Evaluator {
 
         // Trampoline loop for tail-call optimization
         // TODO: This loop needs help
-        while let ValueKind::Lambda {
+        while let Value::Lambda {
             ast,
             input: ref lambda_input,
             frame: ref lambda_frame,
@@ -737,7 +742,7 @@ impl Evaluator {
                 {
                     let next = self.evaluate(proc, *lambda_input, lambda_frame)?;
                     let evaluated_args =
-                        Value::array_with_capacity(args.len(), ArrayFlags::empty());
+                        ValuePtr::array_with_capacity(args.len(), ArrayFlags::empty());
 
                     for arg in args {
                         let arg = self.evaluate(arg, *lambda_input, lambda_frame)?;
@@ -760,13 +765,13 @@ impl Evaluator {
     pub fn apply_function(
         &self,
         char_index: usize,
-        input: Value,
-        evaluated_proc: Value,
-        evaluated_args: Value,
+        input: ValuePtr,
+        evaluated_proc: ValuePtr,
+        evaluated_args: ValuePtr,
         frame: &Frame,
-    ) -> Result<Value> {
+    ) -> Result<ValuePtr> {
         match *evaluated_proc {
-            ValueKind::Lambda {
+            Value::Lambda {
                 ast,
                 ref frame,
                 ref input,
@@ -791,10 +796,10 @@ impl Evaluator {
                     unreachable!()
                 }
             }
-            ValueKind::NativeFn0(ref name, ref func) => {
+            Value::NativeFn0(ref name, ref func) => {
                 func(&self.fn_context(name, char_index, input, frame))
             }
-            ValueKind::NativeFn1(ref name, ref func) => {
+            Value::NativeFn1(ref name, ref func) => {
                 let context = self.fn_context(name, char_index, input, frame);
                 if evaluated_args.len() > 1 {
                     Err(Error::T0410ArgumentNotValid(
@@ -809,7 +814,7 @@ impl Evaluator {
                     func(&context, evaluated_args.get_member(0))
                 }
             }
-            ValueKind::NativeFn2(ref name, ref func) => {
+            Value::NativeFn2(ref name, ref func) => {
                 let context = self.fn_context(name, char_index, input, frame);
                 if evaluated_args.len() > 2 {
                     Err(Error::T0410ArgumentNotValid(
@@ -825,7 +830,7 @@ impl Evaluator {
                     )
                 }
             }
-            ValueKind::NativeFn3(ref name, ref func) => {
+            Value::NativeFn3(ref name, ref func) => {
                 let context = self.fn_context(name, char_index, input, frame);
                 if evaluated_args.len() > 3 {
                     Err(Error::T0410ArgumentNotValid(

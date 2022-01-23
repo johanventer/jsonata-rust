@@ -10,7 +10,7 @@ pub mod tokenizer;
 pub mod value;
 
 pub use jsonata_errors::{Error, Result};
-pub use value::{Value, ValueKind};
+pub use value::{Value, ValuePtr};
 
 use ast::Ast;
 use evaluator::Evaluator;
@@ -35,11 +35,11 @@ impl JsonAta {
         &self.ast
     }
 
-    pub fn assign_var(&self, name: &str, value: Value) {
+    pub fn assign_var(&self, name: &str, value: ValuePtr) {
         self.frame.bind(name, value)
     }
 
-    pub fn evaluate(&self, input: Option<&str>) -> Result<Value> {
+    pub fn evaluate(&self, input: Option<&str>) -> Result<ValuePtr> {
         let input = match input {
             Some(input) => json::parse(input).unwrap(),
             None => value::UNDEFINED,
@@ -48,7 +48,7 @@ impl JsonAta {
         self.evaluate_with_value(input)
     }
 
-    pub fn evaluate_with_value(&self, input: Value) -> Result<Value> {
+    pub fn evaluate_with_value(&self, input: ValuePtr) -> Result<ValuePtr> {
         // let mut input = Rc::new(Value::from_raw(input));
         // if input.is_array() {
         //     input = Rc::new(Value::wrap(Rc::clone(&input)));
@@ -69,7 +69,7 @@ impl JsonAta {
 
         macro_rules! bind {
             ($name:literal, $new:ident, $fn:ident) => {
-                self.frame.bind($name, Value::$new($name, $fn));
+                self.frame.bind($name, ValuePtr::$new($name, $fn));
             };
         }
 
