@@ -4,7 +4,7 @@ use std::ptr;
 
 use super::number::Number;
 use super::util::print_dec;
-use crate::value::{Value, ValuePtr};
+use crate::value::Value;
 
 const QU: u8 = b'"';
 const BS: u8 = b'\\';
@@ -110,7 +110,7 @@ pub trait Generator {
     }
 
     #[inline(always)]
-    fn write_object(&mut self, object: &ValuePtr) -> io::Result<()> {
+    fn write_object(&mut self, object: &Value) -> io::Result<()> {
         self.write_char(b'{')?;
         let mut iter = object.entries();
 
@@ -138,8 +138,8 @@ pub trait Generator {
         self.write_char(b'}')
     }
 
-    fn write_json(&mut self, json: &ValuePtr) -> io::Result<()> {
-        match **json {
+    fn write_json(&mut self, json: &Value) -> io::Result<()> {
+        match *json {
             Value::Null => self.write(b"null"),
             Value::String(ref string) => self.write_string(string),
             Value::Number(ref number) => self.write_number(number),

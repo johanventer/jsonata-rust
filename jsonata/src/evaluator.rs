@@ -81,7 +81,9 @@ impl<'a> Evaluator<'a> {
 
         Ok(if result.has_flags(ArrayFlags::SEQUENCE) {
             if node.keep_array {
-                result.add_flags(ArrayFlags::SINGLETON);
+                result = result
+                    .clone_array_with_flags(self.arena, result.get_flags() | ArrayFlags::SINGLETON)
+                    .as_ptr();
             }
             if result.is_empty() {
                 value::UNDEFINED.as_ptr()
