@@ -359,19 +359,19 @@ impl ValuePtr {
     //     }
     // }
 
-    pub fn get_flags(&self) -> ArrayFlags {
-        match unsafe { &*self.0 } {
-            Value::Array(_, flags) => *flags,
-            _ => panic!("Not an array"),
-        }
-    }
+    // pub fn get_flags(&self) -> ArrayFlags {
+    //     match unsafe { &*self.0 } {
+    //         Value::Array(_, flags) => *flags,
+    //         _ => panic!("Not an array"),
+    //     }
+    // }
 
-    pub fn set_flags(&mut self, new_flags: ArrayFlags) {
-        match unsafe { &mut *(self.0 as *mut Value) } {
-            Value::Array(_, flags) => *flags = new_flags,
-            _ => panic!("Not an array"),
-        }
-    }
+    // pub fn set_flags(&mut self, new_flags: ArrayFlags) {
+    //     match unsafe { &mut *(self.0 as *mut Value) } {
+    //         Value::Array(_, flags) => *flags = new_flags,
+    //         _ => panic!("Not an array"),
+    //     }
+    // }
 
     pub fn add_flags(&mut self, flags_to_add: ArrayFlags) {
         match unsafe { &mut *(self.0 as *mut Value) } {
@@ -380,12 +380,12 @@ impl ValuePtr {
         }
     }
 
-    pub fn has_flags(&self, check_flags: ArrayFlags) -> bool {
-        match unsafe { &*self.0 } {
-            Value::Array(_, flags) => flags.contains(check_flags),
-            _ => false,
-        }
-    }
+    // pub fn has_flags(&self, check_flags: ArrayFlags) -> bool {
+    //     match unsafe { &*self.0 } {
+    //         Value::Array(_, flags) => flags.contains(check_flags),
+    //         _ => false,
+    //     }
+    // }
 
     // Prints out the value as JSON string.
     pub fn dump(&self) -> String {

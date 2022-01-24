@@ -352,6 +352,27 @@ impl Value {
             Value::wrap_in_array(arena, value, flags)
         }
     }
+
+    pub fn get_flags(&self) -> ArrayFlags {
+        match *self {
+            Value::Array(_, flags) => flags,
+            _ => panic!("Not an array"),
+        }
+    }
+
+    pub fn has_flags(&self, check_flags: ArrayFlags) -> bool {
+        match *self {
+            Value::Array(_, flags) => flags.contains(check_flags),
+            _ => false,
+        }
+    }
+
+    pub fn clone_array_with_flags<'a>(&self, arena: &'a Bump, flags: ArrayFlags) -> &'a Value {
+        match *self {
+            Value::Array(ref array, _) => arena.alloc(Value::Array(array.clone(), flags)),
+            _ => panic!("Not an array"),
+        }
+    }
 }
 
 impl PartialEq<Value> for Value {

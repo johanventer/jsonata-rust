@@ -574,20 +574,25 @@ impl<'a> Evaluator<'a> {
         }
 
         if node.keep_singleton_array {
-            let mut flags = result.get_flags();
+            let flags = result.get_flags();
             if flags.contains(ArrayFlags::CONS) && !flags.contains(ArrayFlags::SEQUENCE) {
-                result = Value::wrap_in_array(self.arena, &*result, flags | ArrayFlags::SEQUENCE)
-                    .as_ptr();
+                result = Value::wrap_in_array(
+                    self.arena,
+                    &*result,
+                    flags | ArrayFlags::SEQUENCE | ArrayFlags::SINGLETON,
+                )
+                .as_ptr();
             }
-            flags |= ArrayFlags::SINGLETON;
-            result.set_flags(flags);
+            result = result
+                .clone_array_with_flags(self.arena, flags | ArrayFlags::SINGLETON)
+                .as_ptr();
         }
 
         if let Some((char_index, ref object)) = node.group_by {
-            result = self.evaluate_group_expression(char_index, object, result, frame)?;
+            self.evaluate_group_expression(char_index, object, result, frame)
+        } else {
+            Ok(result.as_ptr())
         }
-
-        Ok(result)
     }
 
     fn evaluate_step(
