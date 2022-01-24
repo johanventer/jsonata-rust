@@ -1,13 +1,14 @@
 #![cfg(test)]
 extern crate test_generator;
 
+use bumpalo::Bump;
 use std::fs;
 use std::path;
 use test_generator::test_resources;
 
 use jsonata::json;
 use jsonata::value::ArrayFlags;
-use jsonata::JsonAta;
+use jsonata::{JsonAta, Value};
 
 // TODO: timelimit, depth
 #[test_resources("jsonata/tests/testsuite/groups/*/*.json")]
@@ -20,9 +21,11 @@ fn t(resource: &str) {
     let test = fs::read_to_string(resource)
         .unwrap_or_else(|_| panic!("Failed to read test case: {}", resource));
 
-    let test = json::parse(&test)
-        .unwrap()
-        .wrap_in_array_if_needed(ArrayFlags::empty());
+    let arena = Bump::new();
+
+    let test = json::parse(&test, &arena).unwrap();
+
+    let test = Value::wrap_in_array_if_needed(&arena, &*test, ArrayFlags::empty());
 
     for case in test.members() {
         let expr = case.get_entry("expr");
@@ -49,9 +52,9 @@ fn t(resource: &str) {
             let dataset = format!("jsonata/tests/testsuite/datasets/{}.json", dataset.as_str());
             let dataset = fs::read_to_string(&dataset)
                 .unwrap_or_else(|_e| panic!("Could not read dataset file: {}", dataset));
-            json::parse(&dataset).unwrap()
+            json::parse(&dataset, &arena).unwrap()
         } else {
-            data
+            data.as_ptr()
         };
 
         let jsonata = JsonAta::new(&expr);
@@ -71,7 +74,7 @@ fn t(resource: &str) {
                     Ok(result) => {
                         let undefined_result = case.get_entry("undefinedResult");
                         let expected_result = case.get_entry("result");
-                        if undefined_result.is_bool() && undefined_result == true {
+                        if undefined_result.is_bool() && *undefined_result == true {
                             assert!(result.is_undefined())
                         } else if expected_result.is_number() {
                             assert!(result.is_number());
@@ -79,20 +82,20 @@ fn t(resource: &str) {
                                 (expected_result.as_f64() - result.as_f64()).abs() < f64::EPSILON
                             );
                         } else {
-                            assert_eq!(result, expected_result);
+                            assert_eq!(*result, *expected_result);
                         }
                     }
                     Err(error) => {
                         println!("{}", error);
                         let code = case.get_entry("code");
-                        assert_eq!(code, error.code());
+                        assert_eq!(*code, error.code());
                     }
                 }
             }
             Err(error) => {
                 println!("{}", error);
                 let code = case.get_entry("code");
-                assert_eq!(code, error.code());
+                assert_eq!(*code, error.code());
             }
         }
     }

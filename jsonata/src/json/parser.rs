@@ -19,7 +19,8 @@
 
 use super::number::Number;
 use crate::value::ArrayFlags;
-use crate::{Error, Result, ValuePtr};
+use crate::{Error, Result, Value, ValuePtr};
+use bumpalo::Bump;
 use std::char::decode_utf16;
 use std::convert::TryFrom;
 use std::{slice, str};
@@ -50,6 +51,8 @@ struct Parser<'a> {
 
     // Length of the source
     length: usize,
+
+    arena: &'a Bump,
 }
 
 // Read a byte from the source.
@@ -355,13 +358,14 @@ macro_rules! expect_fraction {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(source: &'a str) -> Self {
+    pub fn new(source: &'a str, arena: &'a Bump) -> Self {
         Parser {
             buffer: Vec::with_capacity(30),
             source,
             byte_ptr: source.as_ptr(),
             index: 0,
             length: source.len(),
+            arena,
         }
     }
 
@@ -628,13 +632,13 @@ impl<'a> Parser<'a> {
                         }
 
                         stack.push(StackBlock(
-                            ValuePtr::array_with_capacity(2, ArrayFlags::empty()),
+                            Value::array_with_capacity(self.arena, 2, ArrayFlags::empty()),
                             None,
                         ));
                         continue 'parsing;
                     }
 
-                    ValuePtr::array(ArrayFlags::empty())
+                    Value::array(self.arena, ArrayFlags::empty())
                 }
                 b'{' => {
                     ch = expect_byte_ignore_whitespace!(self);
@@ -644,7 +648,7 @@ impl<'a> Parser<'a> {
                             return Err(Error::I0203ExceededDepthLimit);
                         }
 
-                        let object = ValuePtr::object_with_capacity(3);
+                        let object = Value::object_with_capacity(self.arena, 3);
 
                         if ch != b'"' {
                             return self.unexpected_character();
@@ -660,30 +664,33 @@ impl<'a> Parser<'a> {
                         continue 'parsing;
                     }
 
-                    ValuePtr::object()
+                    Value::object(self.arena)
                 }
-                b'"' => ValuePtr::string(String::from(expect_string!(self))),
-                b'0' => ValuePtr::number(allow_number_extensions!(self)),
-                b'1'..=b'9' => ValuePtr::number(expect_number!(self, ch)),
+                b'"' => Value::string(self.arena, String::from(expect_string!(self))),
+                b'0' => Value::number(self.arena, allow_number_extensions!(self)),
+                b'1'..=b'9' => Value::number(self.arena, expect_number!(self, ch)),
                 b'-' => {
                     let ch = expect_byte!(self);
-                    ValuePtr::number(-match ch {
-                        b'0' => allow_number_extensions!(self),
-                        b'1'..=b'9' => expect_number!(self, ch),
-                        _ => return self.unexpected_character(),
-                    })
+                    Value::number(
+                        self.arena,
+                        -match ch {
+                            b'0' => allow_number_extensions!(self),
+                            b'1'..=b'9' => expect_number!(self, ch),
+                            _ => return self.unexpected_character(),
+                        },
+                    )
                 }
                 b't' => {
                     expect_sequence!(self, b'r', b'u', b'e');
-                    ValuePtr::bool(true)
+                    Value::bool(self.arena, true)
                 }
                 b'f' => {
                     expect_sequence!(self, b'a', b'l', b's', b'e');
-                    ValuePtr::bool(false)
+                    Value::bool(self.arena, false)
                 }
                 b'n' => {
                     expect_sequence!(self, b'u', b'l', b'l');
-                    ValuePtr::null()
+                    Value::null(self.arena)
                 }
                 _ => return self.unexpected_character(),
             };
@@ -693,7 +700,7 @@ impl<'a> Parser<'a> {
                     None => {
                         expect_eof!(self);
 
-                        return Ok(value);
+                        return Ok(value.as_ptr());
                     }
 
                     Some(StackBlock(ref mut stack_value, ref mut key)) => {
@@ -744,10 +751,10 @@ impl<'a> Parser<'a> {
     }
 }
 
-struct StackBlock<'a>(ValuePtr, Option<&'a str>);
+struct StackBlock<'a>(&'a mut Value, Option<&'a str>);
 
 // All that hard work, and in the end it's just a single function in the API.
 #[inline]
-pub fn parse(source: &str) -> Result<ValuePtr> {
-    Parser::new(source).parse()
+pub fn parse(source: &str, arena: &Bump) -> Result<ValuePtr> {
+    Parser::new(source, arena).parse()
 }

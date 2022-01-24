@@ -1,3 +1,4 @@
+use bumpalo::Bump;
 use std::collections::{hash_map, HashMap};
 
 use jsonata_errors::{Error, Result};
@@ -9,21 +10,22 @@ use super::frame::Frame;
 use super::functions::*;
 use super::value::{ArrayFlags, Value, ValuePtr};
 
-pub struct Evaluator {
+pub struct Evaluator<'a> {
     chain_ast: Ast,
+    arena: &'a Bump,
 }
 
-impl Evaluator {
-    pub fn new(chain_ast: Ast) -> Self {
-        Evaluator { chain_ast }
+impl<'a> Evaluator<'a> {
+    pub fn new(chain_ast: Ast, arena: &'a Bump) -> Self {
+        Evaluator { chain_ast, arena }
     }
 
-    fn fn_context<'a>(
+    fn fn_context(
         &'a self,
         name: &'a str,
         char_index: usize,
         input: ValuePtr,
-        frame: &'a Frame,
+        frame: &Frame,
     ) -> FunctionContext<'a> {
         FunctionContext {
             name,
@@ -31,15 +33,16 @@ impl Evaluator {
             evaluator: self,
             input,
             frame: frame.clone(),
+            arena: self.arena,
         }
     }
 
     pub fn evaluate(&self, node: &Ast, input: ValuePtr, frame: &Frame) -> Result<ValuePtr> {
         let mut result = match node.kind {
-            AstKind::Null => ValuePtr::null(),
-            AstKind::Bool(b) => ValuePtr::bool(b),
-            AstKind::String(ref s) => ValuePtr::string(String::from(s)),
-            AstKind::Number(n) => ValuePtr::number(n),
+            AstKind::Null => Value::null(self.arena).as_ptr(),
+            AstKind::Bool(b) => Value::bool(self.arena, b).as_ptr(),
+            AstKind::String(ref s) => Value::string(self.arena, String::from(s)).as_ptr(),
+            AstKind::Number(n) => Value::number(self.arena, n).as_ptr(),
             AstKind::Block(ref exprs) => self.evaluate_block(exprs, input, frame)?,
             AstKind::Unary(ref op) => self.evaluate_unary_op(node, op, input, frame)?,
             AstKind::Binary(ref op, ref lhs, ref rhs) => {
@@ -57,7 +60,9 @@ impl Evaluator {
                 input,
                 name,
             ),
-            AstKind::Lambda { .. } => ValuePtr::lambda(node, input, frame.clone()),
+            AstKind::Lambda { .. } => {
+                Value::lambda(self.arena, node, input, frame.clone()).as_ptr()
+            }
             AstKind::Function {
                 ref proc,
                 ref args,
@@ -79,12 +84,12 @@ impl Evaluator {
                 result.add_flags(ArrayFlags::SINGLETON);
             }
             if result.is_empty() {
-                value::UNDEFINED
+                value::UNDEFINED.as_ptr()
             } else if result.len() == 1 {
                 if result.has_flags(ArrayFlags::SINGLETON) {
                     result
                 } else {
-                    result.get_member(0)
+                    result.get_member(0).as_ptr()
                 }
             } else {
                 result
@@ -97,10 +102,10 @@ impl Evaluator {
     fn evaluate_block(&self, exprs: &[Ast], input: ValuePtr, frame: &Frame) -> Result<ValuePtr> {
         let frame = Frame::new_with_parent(frame);
         if exprs.is_empty() {
-            return Ok(value::UNDEFINED);
+            return Ok(value::UNDEFINED.as_ptr());
         }
 
-        let mut result = value::UNDEFINED;
+        let mut result = value::UNDEFINED.as_ptr();
         for expr in exprs {
             result = self.evaluate(expr, input, &frame)?;
         }
@@ -111,14 +116,14 @@ impl Evaluator {
     fn evaluate_var(&self, name: &str, input: ValuePtr, frame: &Frame) -> Result<ValuePtr> {
         Ok(if name.is_empty() {
             if input.has_flags(ArrayFlags::WRAPPED) {
-                input.get_member(0)
+                input.get_member(0).as_ptr()
             } else {
                 input
             }
         } else if let Some(value) = frame.lookup(name) {
             value
         } else {
-            value::UNDEFINED
+            value::UNDEFINED.as_ptr()
         })
     }
 
@@ -133,8 +138,10 @@ impl Evaluator {
             UnaryOp::Minus(ref value) => {
                 let result = self.evaluate(value, input, frame)?;
                 match *result {
-                    Value::Undefined => Ok(value::UNDEFINED),
-                    Value::Number(num) if !num.is_nan() => Ok(ValuePtr::number(-num)),
+                    Value::Undefined => Ok(value::UNDEFINED.as_ptr()),
+                    Value::Number(num) if !num.is_nan() => {
+                        Ok(Value::number(self.arena, -num).as_ptr())
+                    }
                     _ => Err(Error::D1002NegatingNonNumeric(
                         node.char_index,
                         result.dump(),
@@ -142,24 +149,27 @@ impl Evaluator {
                 }
             }
             UnaryOp::ArrayConstructor(ref array) => {
-                let mut result = ValuePtr::array(if node.cons_array {
-                    ArrayFlags::CONS
-                } else {
-                    ArrayFlags::empty()
-                });
+                let mut result = Value::array(
+                    self.arena,
+                    if node.cons_array {
+                        ArrayFlags::CONS
+                    } else {
+                        ArrayFlags::empty()
+                    },
+                );
                 for item in array.iter() {
                     let value = self.evaluate(item, input, frame)?;
                     if let AstKind::Unary(UnaryOp::ArrayConstructor(..)) = item.kind {
-                        result.push(value);
+                        result.push(&*value);
                     } else {
-                        result = fn_append(
+                        result = fn_append_internal(
                             &self.fn_context("append", node.char_index, input, frame),
                             result,
                             value,
-                        )?;
+                        );
                     }
                 }
-                Ok(result)
+                Ok(result.as_ptr())
             }
             UnaryOp::ObjectConstructor(ref object) => {
                 self.evaluate_group_expression(node.char_index, object, input, frame)
@@ -180,11 +190,18 @@ impl Evaluator {
         }
 
         let mut groups: HashMap<String, Group> = HashMap::new();
-        let input = input.wrap_in_array_if_needed(ArrayFlags::empty());
 
-        if input.is_empty() {
-            input.push_new(Value::Undefined);
-        }
+        let input = if input.is_array() && input.is_empty() {
+            let input = Value::array_with_capacity(self.arena, 1, ArrayFlags::empty());
+            input.push(&value::UNDEFINED);
+            input
+        } else if !input.is_array() {
+            let wrapped = Value::array_with_capacity(self.arena, 1, ArrayFlags::empty());
+            wrapped.push(&*input);
+            wrapped
+        } else {
+            &*input
+        };
 
         for item in input.members() {
             for (index, pair) in object.iter().enumerate() {
@@ -202,7 +219,7 @@ impl Evaluator {
                             return Err(Error::D1009MultipleKeys(char_index, key.to_string()));
                         }
                         group.data = fn_append(
-                            &self.fn_context("append", char_index, input, frame),
+                            &self.fn_context("append", char_index, input.as_ptr(), frame),
                             group.data,
                             *item,
                         )?;
@@ -214,17 +231,17 @@ impl Evaluator {
             }
         }
 
-        let result = ValuePtr::object();
+        let result = Value::object(self.arena);
 
         for key in groups.keys() {
             let group = groups.get(key).unwrap();
             let value = self.evaluate(&object[group.index].1, group.data, frame)?;
             if !value.is_undefined() {
-                result.insert(key, value);
+                result.insert(key, &*value);
             }
         }
 
-        Ok(result)
+        Ok(result.as_ptr())
     }
 
     fn evaluate_binary_op(
@@ -258,7 +275,7 @@ impl Evaluator {
                 let rhs = self.evaluate(rhs_ast, input, frame)?;
 
                 let lhs = match *lhs {
-                    Value::Undefined => return Ok(value::UNDEFINED),
+                    Value::Undefined => return Ok(value::UNDEFINED.as_ptr()),
                     Value::Number(n) if !n.is_nan() => f64::from(n),
                     _ => {
                         return Err(Error::T2001LeftSideNotNumber(
@@ -269,7 +286,7 @@ impl Evaluator {
                 };
 
                 let rhs = match *rhs {
-                    Value::Undefined => return Ok(value::UNDEFINED),
+                    Value::Undefined => return Ok(value::UNDEFINED.as_ptr()),
                     Value::Number(n) if !n.is_nan() => f64::from(n),
                     _ => {
                         return Err(Error::T2002RightSideNotNumber(
@@ -291,7 +308,7 @@ impl Evaluator {
                 if result.is_infinite() {
                     Err(Error::D1001NumberOfOutRange(result))
                 } else {
-                    Ok(ValuePtr::number(result))
+                    Ok(Value::number(self.arena, result).as_ptr())
                 }
             }
 
@@ -302,7 +319,7 @@ impl Evaluator {
                 let rhs = self.evaluate(rhs_ast, input, frame)?;
 
                 if lhs.is_undefined() || rhs.is_undefined() {
-                    return Ok(value::UNDEFINED);
+                    return Ok(value::UNDEFINED.as_ptr());
                 }
 
                 if !((lhs.is_number() || lhs.is_string()) && (rhs.is_number() || rhs.is_string())) {
@@ -312,23 +329,31 @@ impl Evaluator {
                 if let (Value::Number(ref lhs), Value::Number(ref rhs)) = (&*lhs, &*rhs) {
                     let lhs = f64::from(*lhs);
                     let rhs = f64::from(*rhs);
-                    return Ok(ValuePtr::bool(match op {
-                        BinaryOp::LessThan => lhs < rhs,
-                        BinaryOp::LessThanEqual => lhs <= rhs,
-                        BinaryOp::GreaterThan => lhs > rhs,
-                        BinaryOp::GreaterThanEqual => lhs >= rhs,
-                        _ => unreachable!(),
-                    }));
+                    return Ok(Value::bool(
+                        self.arena,
+                        match op {
+                            BinaryOp::LessThan => lhs < rhs,
+                            BinaryOp::LessThanEqual => lhs <= rhs,
+                            BinaryOp::GreaterThan => lhs > rhs,
+                            BinaryOp::GreaterThanEqual => lhs >= rhs,
+                            _ => unreachable!(),
+                        },
+                    )
+                    .as_ptr());
                 }
 
                 if let (Value::String(ref lhs), Value::String(ref rhs)) = (&*lhs, &*rhs) {
-                    return Ok(ValuePtr::bool(match op {
-                        BinaryOp::LessThan => lhs < rhs,
-                        BinaryOp::LessThanEqual => lhs <= rhs,
-                        BinaryOp::GreaterThan => lhs > rhs,
-                        BinaryOp::GreaterThanEqual => lhs >= rhs,
-                        _ => unreachable!(),
-                    }));
+                    return Ok(Value::bool(
+                        self.arena,
+                        match op {
+                            BinaryOp::LessThan => lhs < rhs,
+                            BinaryOp::LessThanEqual => lhs <= rhs,
+                            BinaryOp::GreaterThan => lhs > rhs,
+                            BinaryOp::GreaterThanEqual => lhs >= rhs,
+                            _ => unreachable!(),
+                        },
+                    )
+                    .as_ptr());
                 }
 
                 Err(Error::T2009BinaryOpMismatch(
@@ -343,14 +368,18 @@ impl Evaluator {
                 let rhs = self.evaluate(rhs_ast, input, frame)?;
 
                 if lhs.is_undefined() || rhs.is_undefined() {
-                    return Ok(ValuePtr::bool(false));
+                    return Ok(Value::bool(self.arena, false).as_ptr());
                 }
 
-                Ok(ValuePtr::bool(match op {
-                    BinaryOp::Equal => lhs == rhs,
-                    BinaryOp::NotEqual => lhs != rhs,
-                    _ => unreachable!(),
-                }))
+                Ok(Value::bool(
+                    self.arena,
+                    match op {
+                        BinaryOp::Equal => lhs == rhs,
+                        BinaryOp::NotEqual => lhs != rhs,
+                        _ => unreachable!(),
+                    },
+                )
+                .as_ptr())
             }
 
             BinaryOp::Range => {
@@ -365,14 +394,14 @@ impl Evaluator {
                 }
 
                 if lhs.is_undefined() || rhs.is_undefined() {
-                    return Ok(value::UNDEFINED);
+                    return Ok(value::UNDEFINED.as_ptr());
                 }
 
                 let lhs = lhs.as_usize();
                 let rhs = rhs.as_usize();
 
                 if lhs > rhs {
-                    return Ok(value::UNDEFINED);
+                    return Ok(value::UNDEFINED.as_ptr());
                 }
 
                 let size = rhs - lhs + 1;
@@ -381,12 +410,12 @@ impl Evaluator {
                     unreachable!()
                 }
 
-                let result = ValuePtr::array_with_capacity(size, ArrayFlags::SEQUENCE);
+                let result = Value::array_with_capacity(self.arena, size, ArrayFlags::SEQUENCE);
                 for index in lhs..rhs + 1 {
-                    result.push_new(Value::Number(index.into()));
+                    result.push(Value::number(self.arena, index));
                 }
 
-                Ok(result)
+                Ok(result.as_ptr())
             }
 
             BinaryOp::Concat => {
@@ -410,16 +439,20 @@ impl Evaluator {
                         .as_str(),
                     );
                 }
-                Ok(ValuePtr::string(result))
+                Ok(Value::string(self.arena, result).as_ptr())
             }
 
-            BinaryOp::And => Ok(ValuePtr::bool(
+            BinaryOp::And => Ok(Value::bool(
+                self.arena,
                 lhs.is_truthy() && self.evaluate(rhs_ast, input, frame)?.is_truthy(),
-            )),
+            )
+            .as_ptr()),
 
-            BinaryOp::Or => Ok(ValuePtr::bool(
+            BinaryOp::Or => Ok(Value::bool(
+                self.arena,
                 lhs.is_truthy() || self.evaluate(rhs_ast, input, frame)?.is_truthy(),
-            )),
+            )
+            .as_ptr()),
 
             BinaryOp::Apply => {
                 if let AstKind::Function {
@@ -441,23 +474,30 @@ impl Evaluator {
 
                     if lhs.is_function() {
                         // Apply function chaining
-                        let chain = self.evaluate(&self.chain_ast, value::UNDEFINED, frame)?;
+                        let chain =
+                            self.evaluate(&self.chain_ast, value::UNDEFINED.as_ptr(), frame)?;
 
-                        let args = ValuePtr::array_with_capacity(2, ArrayFlags::empty());
-                        args.push(lhs);
-                        args.push(rhs);
+                        let args = Value::array_with_capacity(self.arena, 2, ArrayFlags::empty());
+                        args.push(&*lhs);
+                        args.push(&*rhs);
 
                         self.apply_function(
                             lhs_ast.char_index,
-                            value::UNDEFINED,
+                            value::UNDEFINED.as_ptr(),
                             chain,
-                            args,
+                            args.as_ptr(),
                             frame,
                         )
                     } else {
-                        let args = ValuePtr::array_with_capacity(1, ArrayFlags::empty());
-                        args.push(lhs);
-                        self.apply_function(rhs_ast.char_index, value::UNDEFINED, rhs, args, frame)
+                        let args = Value::array_with_capacity(self.arena, 1, ArrayFlags::empty());
+                        args.push(&*lhs);
+                        self.apply_function(
+                            rhs_ast.char_index,
+                            value::UNDEFINED.as_ptr(),
+                            rhs,
+                            args.as_ptr(),
+                            frame,
+                        )
                     }
                 }
             }
@@ -466,18 +506,18 @@ impl Evaluator {
                 let rhs = self.evaluate(rhs_ast, input, frame)?;
 
                 if lhs.is_undefined() || rhs.is_undefined() {
-                    return Ok(ValuePtr::bool(false));
+                    return Ok(Value::bool(self.arena, false).as_ptr());
                 }
 
-                let rhs = rhs.wrap_in_array_if_needed(ArrayFlags::empty());
+                let rhs = Value::wrap_in_array_if_needed(self.arena, &*rhs, ArrayFlags::empty());
 
                 for item in rhs.members() {
                     if *item == lhs {
-                        return Ok(ValuePtr::bool(true));
+                        return Ok(Value::bool(self.arena, true).as_ptr());
                     }
                 }
 
-                Ok(ValuePtr::bool(false))
+                Ok(Value::bool(self.arena, false).as_ptr())
             }
 
             _ => unimplemented!("TODO: binary op not supported yet: {:#?}", *op),
@@ -498,7 +538,7 @@ impl Evaluator {
         } else if let Some(falsy) = falsy {
             self.evaluate(falsy, input, frame)
         } else {
-            Ok(value::UNDEFINED)
+            Ok(value::UNDEFINED.as_ptr())
         }
     }
 
@@ -512,10 +552,10 @@ impl Evaluator {
         let mut input = if input.is_array() && !matches!(steps[0].kind, AstKind::Var(..)) {
             input
         } else {
-            input.wrap_in_array(ArrayFlags::empty())
+            Value::wrap_in_array(self.arena, &*input, ArrayFlags::empty()).as_ptr()
         };
 
-        let mut result = value::UNDEFINED;
+        let mut result = value::UNDEFINED.as_ptr();
 
         for (index, step) in steps.iter().enumerate() {
             result = if index == 0 && step.cons_array {
@@ -536,7 +576,8 @@ impl Evaluator {
         if node.keep_singleton_array {
             let mut flags = result.get_flags();
             if flags.contains(ArrayFlags::CONS) && !flags.contains(ArrayFlags::SEQUENCE) {
-                result = result.wrap_in_array(flags | ArrayFlags::SEQUENCE);
+                result = Value::wrap_in_array(self.arena, &*result, flags | ArrayFlags::SEQUENCE)
+                    .as_ptr();
             }
             flags |= ArrayFlags::SINGLETON;
             result.set_flags(flags);
@@ -556,15 +597,15 @@ impl Evaluator {
         frame: &Frame,
         last_step: bool,
     ) -> Result<ValuePtr> {
-        let mut result = ValuePtr::array(ArrayFlags::SEQUENCE);
-
         if let AstKind::Sort(ref sorts) = step.kind {
-            result = self.evaluate_sorts(sorts, input, frame)?;
+            let mut result = self.evaluate_sorts(sorts, input, frame)?;
             if let Some(ref stages) = step.stages {
                 result = self.evaluate_stages(stages, result, frame)?;
             }
             return Ok(result);
         }
+
+        let result = Value::array(self.arena, ArrayFlags::SEQUENCE);
 
         for item in input.members() {
             let mut item_result = self.evaluate(step, *item, frame)?;
@@ -576,7 +617,7 @@ impl Evaluator {
             }
 
             if !item_result.is_undefined() {
-                result.push(item_result);
+                result.push(&*item_result);
             }
         }
 
@@ -584,22 +625,25 @@ impl Evaluator {
             if last_step
                 && result.len() == 1
                 && result.get_member(0).is_array()
-                && !result.get_member(0).has_flags(ArrayFlags::SEQUENCE)
+                && !result
+                    .get_member(0)
+                    .as_ptr()
+                    .has_flags(ArrayFlags::SEQUENCE)
             {
-                result.get_member(0)
+                result.get_member(0).as_ptr()
             } else {
-                let result_sequence = ValuePtr::array(ArrayFlags::SEQUENCE);
+                let result_sequence = Value::array(self.arena, ArrayFlags::SEQUENCE);
 
                 for result_item in result.members() {
                     if !result_item.is_array() || result_item.has_flags(ArrayFlags::CONS) {
-                        result_sequence.push(*result_item);
+                        result_sequence.push(&*result_item);
                     } else {
                         for item in result_item.members() {
-                            result_sequence.push(*item);
+                            result_sequence.push(&*item);
                         }
                     }
                 }
-                result_sequence
+                result_sequence.as_ptr()
             },
         )
     }
@@ -623,8 +667,9 @@ impl Evaluator {
     }
 
     fn evaluate_filter(&self, node: &Ast, input: ValuePtr, frame: &Frame) -> Result<ValuePtr> {
-        let mut result = ValuePtr::array(ArrayFlags::SEQUENCE);
-        let input = input.wrap_in_array_if_needed(ArrayFlags::empty());
+        let result = Value::array(self.arena, ArrayFlags::SEQUENCE);
+        let input =
+            Value::wrap_in_array_if_needed(self.arena, &*input, ArrayFlags::empty()).as_ptr();
 
         let get_index = |n: f64| {
             let mut index = n.floor() as isize;
@@ -647,7 +692,7 @@ impl Evaluator {
                     let item = input.get_member(index as usize);
                     if !item.is_undefined() {
                         if item.is_array() {
-                            result = item;
+                            return Ok(item.as_ptr());
                         } else {
                             result.push(item);
                         }
@@ -657,18 +702,19 @@ impl Evaluator {
                     for (i, item) in input.members().enumerate() {
                         let mut index = self.evaluate(filter, *item, frame)?;
                         if index.is_number() && !index.is_nan() {
-                            index = index.wrap_in_array(ArrayFlags::empty());
+                            index = Value::wrap_in_array(self.arena, &*index, ArrayFlags::empty())
+                                .as_ptr();
                         }
                         if index.is_array() && index.members().all(|v| v.is_number() && !v.is_nan())
                         {
                             index.members().for_each(|v| {
                                 let index = get_index(v.as_f64());
                                 if index == i {
-                                    result.push(*item);
+                                    result.push(item);
                                 }
                             });
                         } else if index.is_truthy() {
-                            result.push(*item);
+                            result.push(item);
                         }
                     }
                 }
@@ -676,7 +722,7 @@ impl Evaluator {
             _ => unimplemented!("Filters other than numbers are not yet supported"),
         };
 
-        Ok(result)
+        Ok(result.as_ptr())
     }
 
     pub fn evaluate_function(
@@ -704,22 +750,23 @@ impl Evaluator {
             }
         }
 
-        let evaluated_args = ValuePtr::array_with_capacity(args.len(), ArrayFlags::empty());
+        let evaluated_args =
+            Value::array_with_capacity(self.arena, args.len(), ArrayFlags::empty());
 
         if let Some(context) = context {
-            evaluated_args.push(*context);
+            evaluated_args.push(context);
         }
 
         for arg in args {
             let arg = self.evaluate(arg, input, frame)?;
-            evaluated_args.push(arg);
+            evaluated_args.push(&*arg);
         }
 
         let mut result = self.apply_function(
             proc.char_index,
             input,
             evaluated_proc,
-            evaluated_args,
+            evaluated_args.as_ptr(),
             frame,
         )?;
 
@@ -742,15 +789,20 @@ impl Evaluator {
                 {
                     let next = self.evaluate(proc, *lambda_input, lambda_frame)?;
                     let evaluated_args =
-                        ValuePtr::array_with_capacity(args.len(), ArrayFlags::empty());
+                        Value::array_with_capacity(self.arena, args.len(), ArrayFlags::empty());
 
                     for arg in args {
                         let arg = self.evaluate(arg, *lambda_input, lambda_frame)?;
-                        evaluated_args.push(arg);
+                        evaluated_args.push(&*arg);
                     }
 
-                    result =
-                        self.apply_function(proc.char_index, input, next, evaluated_args, frame)?;
+                    result = self.apply_function(
+                        proc.char_index,
+                        input,
+                        next,
+                        evaluated_args.as_ptr(),
+                        frame,
+                    )?;
                 } else {
                     unreachable!()
                 }
@@ -784,7 +836,7 @@ impl Evaluator {
                     // Bind the arguments to their respective names
                     for (index, arg) in args.iter().enumerate() {
                         if let AstKind::Var(ref name) = arg.kind {
-                            frame.bind(name, evaluated_args.get_member(index));
+                            frame.bind(name, evaluated_args.get_member(index).as_ptr());
                         } else {
                             unreachable!()
                         }
@@ -811,7 +863,7 @@ impl Evaluator {
                     // Some functions take the input as the first argument if one was not provided
                     func(&context, input)
                 } else {
-                    func(&context, evaluated_args.get_member(0))
+                    func(&context, evaluated_args.get_member(0).as_ptr())
                 }
             }
             Value::NativeFn2(ref name, ref func) => {
@@ -825,8 +877,8 @@ impl Evaluator {
                 } else {
                     func(
                         &context,
-                        evaluated_args.get_member(0),
-                        evaluated_args.get_member(1),
+                        evaluated_args.get_member(0).as_ptr(),
+                        evaluated_args.get_member(1).as_ptr(),
                     )
                 }
             }
@@ -841,9 +893,9 @@ impl Evaluator {
                 } else {
                     func(
                         &context,
-                        evaluated_args.get_member(0),
-                        evaluated_args.get_member(1),
-                        evaluated_args.get_member(2),
+                        evaluated_args.get_member(0).as_ptr(),
+                        evaluated_args.get_member(1).as_ptr(),
+                        evaluated_args.get_member(2).as_ptr(),
                     )
                 }
             }
