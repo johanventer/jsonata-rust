@@ -12,16 +12,28 @@ use super::value::{ArrayFlags, Value, ValuePtr};
 pub struct FunctionContext<'a> {
     pub name: &'a str,
     pub char_index: usize,
-    pub input: ValuePtr,
+    pub input: &'a Value<'a>,
     pub frame: &'a Frame,
     pub evaluator: &'a Evaluator<'a>,
     pub arena: &'a Bump,
 }
 
 impl<'a> FunctionContext<'a> {
-    pub fn evaluate_function(&self, proc: ValuePtr, args: ValuePtr) -> Result<ValuePtr> {
-        self.evaluator
-            .apply_function(self.char_index, self.input, proc, args, self.frame)
+    pub fn evaluate_function(
+        &self,
+        proc: &'a Value<'a>,
+        args: &'a Value<'a>,
+    ) -> Result<&'a Value<'a>> {
+        Ok(self
+            .evaluator
+            .apply_function(
+                self.char_index,
+                self.input.as_ptr(),
+                proc.as_ptr(),
+                args.as_ptr(),
+                self.frame,
+            )?
+            .as_ref(self.arena))
     }
 }
 
@@ -218,9 +230,9 @@ pub fn fn_filter<'a>(
             args.push(&*arr);
         }
 
-        let include = context.evaluate_function(func.as_ptr(), args.as_ptr())?;
+        let include = context.evaluate_function(func, args)?;
 
-        if include.as_ref(context.arena).is_truthy() {
+        if include.is_truthy() {
             result.push(item);
         }
     }

@@ -31,7 +31,7 @@ impl<'a> Evaluator<'a> {
             name,
             char_index,
             evaluator: self,
-            input,
+            input: input.as_ref(self.arena),
             frame,
             arena: self.arena,
         }
