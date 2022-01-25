@@ -26,7 +26,6 @@ pub const UNDEFINED: Value = Value::Undefined;
 pub enum Value<'a> {
     Undefined,
     Null,
-    Blah(&'a u32),
     Number(Number),
     Bool(bool),
     String(String),
@@ -201,7 +200,6 @@ impl<'a> Value<'a> {
 
     pub fn is_truthy(&'a self) -> bool {
         match *self {
-            Value::Blah(..) => false,
             Value::Undefined => false,
             Value::Null => false,
             Value::Number(ref n) => *n != 0.0,
@@ -523,7 +521,6 @@ impl From<&str> for Value<'_> {
 impl std::fmt::Debug for Value<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Blah(..) => Ok(()),
             Self::Undefined => write!(f, "undefined"),
             Self::Null => write!(f, "null"),
             Self::Number(n) => write!(f, "{}", n.to_string()),

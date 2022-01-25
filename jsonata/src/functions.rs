@@ -165,7 +165,6 @@ pub fn fn_append(context: FunctionContext, arg1: ValuePtr, arg2: ValuePtr) -> Re
 #[signature("<x-:b>")]
 pub fn fn_boolean<'a>(context: FunctionContext<'a>, arg: ValuePtr) -> Result<&Value<'a>> {
     Ok(match arg.as_ref(context.arena) {
-        Value::Blah(..) => Value::undefined(),
         Value::Undefined => Value::undefined(),
         Value::Null => Value::bool(context.arena, false),
         Value::Bool(b) => Value::bool(context.arena, *b),
