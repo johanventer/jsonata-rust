@@ -110,7 +110,7 @@ pub trait Generator {
     }
 
     #[inline(always)]
-    fn write_object(&mut self, object: &Value) -> io::Result<()> {
+    fn write_object<'a>(&mut self, object: &'a Value<'a>) -> io::Result<()> {
         self.write_char(b'{')?;
         let mut iter = object.entries();
 
@@ -138,7 +138,7 @@ pub trait Generator {
         self.write_char(b'}')
     }
 
-    fn write_json(&mut self, json: &Value) -> io::Result<()> {
+    fn write_json<'a>(&mut self, json: &'a Value<'a>) -> io::Result<()> {
         match *json {
             Value::Null => self.write(b"null"),
             Value::String(ref string) => self.write_string(string),

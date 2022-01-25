@@ -751,7 +751,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-struct StackBlock<'a>(&'a mut Value, Option<&'a str>);
+struct StackBlock<'a>(&'a mut Value<'a>, Option<&'a str>);
 
 // All that hard work, and in the end it's just a single function in the API.
 #[inline]

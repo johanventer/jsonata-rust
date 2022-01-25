@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::fmt;
-use std::ops::Deref;
 
 use bitflags::bitflags;
 use bumpalo::Bump;
@@ -24,35 +23,43 @@ bitflags! {
 
 pub const UNDEFINED: Value = Value::Undefined;
 
-pub enum Value {
+pub enum Value<'a> {
     Undefined,
     Null,
+    Blah(&'a u32),
     Number(Number),
     Bool(bool),
     String(String),
-    Array(Vec<ValuePtr>, ArrayFlags),
-    Object(HashMap<String, ValuePtr>),
+    Array(Vec<&'a Value<'a>>, ArrayFlags),
+    Object(HashMap<String, &'a Value<'a>>),
     Lambda {
         ast: *const Ast,
-        input: ValuePtr,
+        input: &'a Value<'a>,
         frame: Frame,
     },
-    NativeFn0(String, fn(&FunctionContext) -> Result<ValuePtr>),
-    NativeFn1(String, fn(&FunctionContext, ValuePtr) -> Result<ValuePtr>),
+    NativeFn0(String, fn(FunctionContext<'a>) -> Result<&'a Value<'a>>),
+    NativeFn1(
+        String,
+        fn(FunctionContext<'a>, ValuePtr) -> Result<&'a Value<'a>>,
+    ),
     NativeFn2(
         String,
-        fn(&FunctionContext, ValuePtr, ValuePtr) -> Result<ValuePtr>,
+        fn(FunctionContext, ValuePtr, ValuePtr) -> Result<ValuePtr>,
     ),
     NativeFn3(
         String,
-        fn(&FunctionContext, ValuePtr, ValuePtr, ValuePtr) -> Result<ValuePtr>,
+        fn(FunctionContext, ValuePtr, ValuePtr, ValuePtr) -> Result<ValuePtr>,
     ),
 }
 
 #[allow(clippy::mut_from_ref)]
-impl Value {
-    pub fn as_ptr(&self) -> ValuePtr {
-        ValuePtr(self)
+impl<'a> Value<'a> {
+    pub fn as_ptr(&'a self) -> ValuePtr {
+        ValuePtr(unsafe { std::mem::transmute::<&'a Value<'a>, &'static Value<'static>>(self) })
+    }
+
+    pub fn undefined() -> &'a Value<'a> {
+        unsafe { std::mem::transmute::<&Value<'static>, &'a Value<'a>>(&UNDEFINED) }
     }
 
     pub fn null(arena: &Bump) -> &mut Value {
@@ -87,7 +94,12 @@ impl Value {
         arena.alloc(Value::Object(HashMap::with_capacity(capacity)))
     }
 
-    pub fn lambda<'a>(arena: &'a Bump, node: &Ast, input: ValuePtr, frame: Frame) -> &'a mut Value {
+    pub fn lambda(
+        arena: &'a Bump,
+        node: &Ast,
+        input: &'a Value<'a>,
+        frame: Frame,
+    ) -> &'a mut Value<'a> {
         arena.alloc(Value::Lambda {
             ast: node,
             input,
@@ -95,35 +107,35 @@ impl Value {
         })
     }
 
-    pub fn nativefn0<'a>(
+    pub fn nativefn0(
         arena: &'a Bump,
         name: &str,
-        func: fn(&FunctionContext) -> Result<ValuePtr>,
-    ) -> &'a mut Value {
+        func: fn(FunctionContext) -> Result<&'a Value<'a>>,
+    ) -> &'a mut Value<'a> {
         arena.alloc(Value::NativeFn0(name.to_string(), func))
     }
 
-    pub fn nativefn1<'a>(
+    pub fn nativefn1(
         arena: &'a Bump,
         name: &str,
-        func: fn(&FunctionContext, ValuePtr) -> Result<ValuePtr>,
-    ) -> &'a mut Value {
+        func: fn(FunctionContext<'a>, ValuePtr) -> Result<&'a Value<'a>>,
+    ) -> &'a mut Value<'a> {
         arena.alloc(Value::NativeFn1(name.to_string(), func))
     }
 
-    pub fn nativefn2<'a>(
+    pub fn nativefn2(
         arena: &'a Bump,
         name: &str,
-        func: fn(&FunctionContext, ValuePtr, ValuePtr) -> Result<ValuePtr>,
-    ) -> &'a mut Value {
+        func: fn(FunctionContext, ValuePtr, ValuePtr) -> Result<ValuePtr>,
+    ) -> &'a mut Value<'a> {
         arena.alloc(Value::NativeFn2(name.to_string(), func))
     }
 
-    pub fn nativefn3<'a>(
+    pub fn nativefn3(
         arena: &'a Bump,
         name: &str,
-        func: fn(&FunctionContext, ValuePtr, ValuePtr, ValuePtr) -> Result<ValuePtr>,
-    ) -> &'a mut Value {
+        func: fn(FunctionContext, ValuePtr, ValuePtr, ValuePtr) -> Result<ValuePtr>,
+    ) -> &'a mut Value<'a> {
         arena.alloc(Value::NativeFn3(name.to_string(), func))
     }
 
@@ -187,8 +199,9 @@ impl Value {
         )
     }
 
-    pub fn is_truthy(&self) -> bool {
+    pub fn is_truthy(&'a self) -> bool {
         match *self {
+            Value::Blah(..) => false,
             Value::Undefined => false,
             Value::Null => false,
             Value::Number(ref n) => *n != 0.0,
@@ -215,24 +228,24 @@ impl Value {
         }
     }
 
-    pub fn get_member(&self, index: usize) -> &Value {
+    pub fn get_member(&'a self, index: usize) -> &Value {
         match *self {
             Value::Array(ref array, _) => match array.get(index) {
-                Some(value) => &*value,
-                None => &UNDEFINED,
+                Some(value) => *value,
+                None => Value::undefined(),
             },
             _ => panic!("Not an array"),
         }
     }
 
-    pub fn members(&self) -> std::slice::Iter<'_, ValuePtr> {
+    pub fn members(&self) -> std::slice::Iter<'_, &'a Value> {
         match *self {
             Value::Array(ref array, _) => array.iter(),
             _ => panic!("Not an array"),
         }
     }
 
-    pub fn entries(&self) -> hashbrown::hash_map::Iter<'_, String, ValuePtr> {
+    pub fn entries(&self) -> hashbrown::hash_map::Iter<'_, String, &'a Value> {
         match *self {
             Value::Object(ref map) => map.iter(),
             _ => panic!("Not an object"),
@@ -312,41 +325,45 @@ impl Value {
         }
     }
 
-    pub fn get_entry(&self, key: &str) -> &Value {
+    pub fn get_entry(&'a self, key: &str) -> &Value {
         match *self {
             Value::Object(ref map) => match map.get(key) {
-                Some(value) => &*value,
-                None => &UNDEFINED,
+                Some(value) => value,
+                None => Value::undefined(),
             },
             _ => panic!("Not an object"),
         }
     }
 
-    pub fn push(&mut self, value: &Value) {
+    pub fn push(&mut self, value: &'a Value<'a>) {
         match *self {
-            Value::Array(ref mut array, _) => array.push(value.as_ptr()),
+            Value::Array(ref mut array, _) => array.push(value),
             _ => panic!("Not an array"),
         }
     }
 
-    pub fn insert(&mut self, key: &str, value: &Value) {
+    pub fn insert(&mut self, key: &str, value: &'a Value<'a>) {
         match *self {
             Value::Object(ref mut map) => {
-                map.insert(key.to_owned(), value.as_ptr());
+                map.insert(key.to_owned(), value);
             }
             _ => panic!("Not an object"),
         }
     }
 
-    pub fn wrap_in_array<'a>(arena: &'a Bump, value: &Value, flags: ArrayFlags) -> &'a Value {
-        arena.alloc(Value::Array(vec![value.as_ptr()], flags))
+    pub fn wrap_in_array(
+        arena: &'a Bump,
+        value: &'a Value<'a>,
+        flags: ArrayFlags,
+    ) -> &'a Value<'a> {
+        arena.alloc(Value::Array(vec![value], flags))
     }
 
-    pub fn wrap_in_array_if_needed<'a>(
+    pub fn wrap_in_array_if_needed(
         arena: &'a Bump,
-        value: &'a Value,
+        value: &'a Value<'a>,
         flags: ArrayFlags,
-    ) -> &'a Value {
+    ) -> &'a Value<'a> {
         if value.is_array() {
             value
         } else {
@@ -368,7 +385,7 @@ impl Value {
         }
     }
 
-    pub fn clone_array_with_flags<'a>(&self, arena: &'a Bump, flags: ArrayFlags) -> &'a Value {
+    pub fn clone_array_with_flags(&self, arena: &'a Bump, flags: ArrayFlags) -> &'a Value<'a> {
         match *self {
             Value::Array(ref array, _) => arena.alloc(Value::Array(array.clone(), flags)),
             _ => panic!("Not an array"),
@@ -376,7 +393,7 @@ impl Value {
     }
 
     // Prints out the value as JSON string.
-    pub fn dump(&self) -> String {
+    pub fn dump(&'a self) -> String {
         let mut gen = DumpGenerator::new();
         gen.write_json(self).expect("Can't fail");
         gen.consume()
@@ -384,15 +401,15 @@ impl Value {
 
     /// Pretty prints out the value as JSON string. Takes an argument that's
     /// number of spaces to indent new blocks with.
-    pub fn pretty(&self, spaces: u16) -> String {
+    pub fn pretty(&'a self, spaces: u16) -> String {
         let mut gen = PrettyGenerator::new(spaces);
         gen.write_json(self).expect("Can't fail");
         gen.consume()
     }
 }
 
-impl PartialEq<Value> for Value {
-    fn eq(&self, other: &Value) -> bool {
+impl<'a> PartialEq<Value<'a>> for Value<'a> {
+    fn eq(&self, other: &Value<'a>) -> bool {
         match (self, other) {
             (Self::Number(l0), Self::Number(r0)) => l0 == r0,
             (Self::Bool(l0), Self::Bool(r0)) => l0 == r0,
@@ -404,7 +421,7 @@ impl PartialEq<Value> for Value {
     }
 }
 
-impl PartialEq<i32> for Value {
+impl PartialEq<i32> for Value<'_> {
     fn eq(&self, other: &i32) -> bool {
         match *self {
             Value::Number(ref n) => *n == *other,
@@ -413,7 +430,7 @@ impl PartialEq<i32> for Value {
     }
 }
 
-impl PartialEq<i64> for Value {
+impl PartialEq<i64> for Value<'_> {
     fn eq(&self, other: &i64) -> bool {
         match *self {
             Value::Number(ref n) => *n == *other,
@@ -422,7 +439,7 @@ impl PartialEq<i64> for Value {
     }
 }
 
-impl PartialEq<f32> for Value {
+impl PartialEq<f32> for Value<'_> {
     fn eq(&self, other: &f32) -> bool {
         match *self {
             Value::Number(ref n) => *n == *other,
@@ -431,7 +448,7 @@ impl PartialEq<f32> for Value {
     }
 }
 
-impl PartialEq<f64> for Value {
+impl PartialEq<f64> for Value<'_> {
     fn eq(&self, other: &f64) -> bool {
         match *self {
             Value::Number(ref n) => *n == *other,
@@ -440,7 +457,7 @@ impl PartialEq<f64> for Value {
     }
 }
 
-impl PartialEq<bool> for Value {
+impl PartialEq<bool> for Value<'_> {
     fn eq(&self, other: &bool) -> bool {
         match *self {
             Value::Bool(ref b) => *b == *other,
@@ -449,7 +466,7 @@ impl PartialEq<bool> for Value {
     }
 }
 
-impl PartialEq<&str> for Value {
+impl PartialEq<&str> for Value<'_> {
     fn eq(&self, other: &&str) -> bool {
         match *self {
             Value::String(ref s) => s == *other,
@@ -458,7 +475,7 @@ impl PartialEq<&str> for Value {
     }
 }
 
-impl PartialEq<String> for Value {
+impl PartialEq<String> for Value<'_> {
     fn eq(&self, other: &String) -> bool {
         match *self {
             Value::String(ref s) => *s == *other,
@@ -467,45 +484,46 @@ impl PartialEq<String> for Value {
     }
 }
 
-impl From<i32> for Value {
+impl From<i32> for Value<'_> {
     fn from(v: i32) -> Self {
         Value::Number(v.into())
     }
 }
 
-impl From<i64> for Value {
+impl From<i64> for Value<'_> {
     fn from(v: i64) -> Self {
         Value::Number(v.into())
     }
 }
 
-impl From<f32> for Value {
+impl From<f32> for Value<'_> {
     fn from(v: f32) -> Self {
         Value::Number(v.into())
     }
 }
 
-impl From<f64> for Value {
+impl From<f64> for Value<'_> {
     fn from(v: f64) -> Self {
         Value::Number(v.into())
     }
 }
 
-impl From<bool> for Value {
+impl From<bool> for Value<'_> {
     fn from(v: bool) -> Self {
         Value::Bool(v)
     }
 }
 
-impl From<&str> for Value {
+impl From<&str> for Value<'_> {
     fn from(v: &str) -> Self {
         Value::String(v.into())
     }
 }
 
-impl std::fmt::Debug for Value {
+impl std::fmt::Debug for Value<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Blah(..) => Ok(()),
             Self::Undefined => write!(f, "undefined"),
             Self::Null => write!(f, "null"),
             Self::Number(n) => write!(f, "{}", n.to_string()),
@@ -529,7 +547,13 @@ impl std::fmt::Debug for Value {
 }
 
 #[derive(Clone, Copy)]
-pub struct ValuePtr(*const Value);
+pub struct ValuePtr(*const Value<'static>);
+
+impl ValuePtr {
+    pub fn as_ref<'a>(&self, _arena: &'a Bump) -> &'a Value<'a> {
+        unsafe { std::mem::transmute::<&'a Value<'static>, &'a Value<'a>>(&*self.0) }
+    }
+}
 
 impl std::fmt::Debug for ValuePtr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -537,32 +561,29 @@ impl std::fmt::Debug for ValuePtr {
     }
 }
 
-impl Deref for ValuePtr {
-    type Target = Value;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.0 }
-    }
-}
-
-impl PartialEq<ValuePtr> for ValuePtr {
-    fn eq(&self, other: &ValuePtr) -> bool {
-        match unsafe { &*self.0 } {
-            Value::Array(..) => {
-                if other.is_array() && other.len() == self.len() {
-                    self.members().zip(other.members()).all(|(l, r)| l == r)
-                } else {
-                    false
-                }
-            }
-            Value::Object(..) => {
-                if other.is_object() {
-                    self.entries().all(|(k, v)| &**v == other.get_entry(k))
-                } else {
-                    false
-                }
-            }
-            _ => unsafe { *self.0 == **other },
-        }
-    }
-}
+// impl PartialEq<ValuePtr> for ValuePtr {
+//     fn eq(&self, other: &ValuePtr) -> bool {
+//         match unsafe { &*self.0 } {
+//             Value::Array(..) => {
+//                 if other.as_ref().is_array() && other.as_ref().len() == self.as_ref().len() {
+//                     self.as_ref()
+//                         .members()
+//                         .zip(other.as_ref().members())
+//                         .all(|(l, r)| l == r)
+//                 } else {
+//                     false
+//                 }
+//             }
+//             Value::Object(..) => {
+//                 if other.as_ref().is_object() {
+//                     self.as_ref()
+//                         .entries()
+//                         .all(|(k, v)| *v == other.as_ref().get_entry(k))
+//                 } else {
+//                     false
+//                 }
+//             }
+//             _ => unsafe { self.as_ref() == other.as_ref() },
+//         }
+//     }
+// }

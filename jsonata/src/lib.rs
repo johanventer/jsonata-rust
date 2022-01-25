@@ -23,7 +23,7 @@ use value::ArrayFlags;
 pub struct JsonAta {
     ast: Ast,
     frame: Frame,
-    arena: Bump,
+    pub arena: Bump,
 }
 
 impl JsonAta {
@@ -54,8 +54,9 @@ impl JsonAta {
 
     pub fn evaluate_with_value(&self, input: ValuePtr) -> Result<ValuePtr> {
         // If the input is an array, wrap it in an array so that it gets treated as a single input
-        let input = if input.is_array() {
-            Value::wrap_in_array(&self.arena, &*input, ArrayFlags::WRAPPED).as_ptr()
+        let input = if input.as_ref(&self.arena).is_array() {
+            Value::wrap_in_array(&self.arena, input.as_ref(&self.arena), ArrayFlags::WRAPPED)
+                .as_ptr()
         } else {
             input
         };

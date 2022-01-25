@@ -25,7 +25,7 @@ fn t(resource: &str) {
 
     let test = json::parse(&test, &arena).unwrap();
 
-    let test = Value::wrap_in_array_if_needed(&arena, &*test, ArrayFlags::empty());
+    let test = Value::wrap_in_array_if_needed(&arena, test.as_ref(&arena), ArrayFlags::empty());
 
     for case in test.members() {
         let expr = case.get_entry("expr");
@@ -64,7 +64,7 @@ fn t(resource: &str) {
                 let bindings = case.get_entry("bindings");
                 if bindings.is_object() {
                     for (key, value) in bindings.entries() {
-                        jsonata.assign_var(key, *value);
+                        jsonata.assign_var(key, value.as_ptr());
                     }
                 }
 
@@ -75,14 +75,15 @@ fn t(resource: &str) {
                         let undefined_result = case.get_entry("undefinedResult");
                         let expected_result = case.get_entry("result");
                         if undefined_result.is_bool() && *undefined_result == true {
-                            assert!(result.is_undefined())
+                            assert!(result.as_ref(&arena).is_undefined())
                         } else if expected_result.is_number() {
-                            assert!(result.is_number());
+                            assert!(result.as_ref(&arena).is_number());
                             assert!(
-                                (expected_result.as_f64() - result.as_f64()).abs() < f64::EPSILON
+                                (expected_result.as_f64() - result.as_ref(&arena).as_f64()).abs()
+                                    < f64::EPSILON
                             );
                         } else {
-                            assert_eq!(*result, *expected_result);
+                            assert_eq!(result.as_ref(&arena), expected_result);
                         }
                     }
                     Err(error) => {

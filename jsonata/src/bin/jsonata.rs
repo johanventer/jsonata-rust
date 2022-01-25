@@ -54,7 +54,7 @@ fn main() {
             };
 
             match jsonata.evaluate(Some(&input)) {
-                Ok(result) => println!("{}", result.pretty(4)),
+                Ok(result) => println!("{}", result.as_ref(&jsonata.arena).pretty(4)),
                 Err(error) => println!("{}", error),
             }
         }
