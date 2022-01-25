@@ -13,7 +13,7 @@ pub struct FunctionContext<'a> {
     pub name: &'a str,
     pub char_index: usize,
     pub input: &'a Value<'a>,
-    pub frame: &'a Frame,
+    pub frame: Frame,
     pub evaluator: &'a Evaluator<'a>,
     pub arena: &'a Bump,
 }
@@ -24,16 +24,8 @@ impl<'a> FunctionContext<'a> {
         proc: &'a Value<'a>,
         args: &'a Value<'a>,
     ) -> Result<&'a Value<'a>> {
-        Ok(self
-            .evaluator
-            .apply_function(
-                self.char_index,
-                self.input.as_ptr(),
-                proc.as_ptr(),
-                args.as_ptr(),
-                self.frame,
-            )?
-            .as_ref(self.arena))
+        self.evaluator
+            .apply_function(self.char_index, self.input, proc, args, &self.frame)
     }
 }
 
