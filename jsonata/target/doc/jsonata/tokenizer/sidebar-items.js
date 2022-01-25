@@ -1,1 +1,0 @@
-initSidebarItems({"enum":[["TokenKind",""]],"struct":[["Token",""],["Tokenizer",""]]});
