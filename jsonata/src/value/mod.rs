@@ -43,11 +43,11 @@ pub enum Value<'a> {
     ),
     NativeFn2(
         String,
-        fn(FunctionContext, ValuePtr, ValuePtr) -> Result<ValuePtr>,
+        fn(FunctionContext<'a>, ValuePtr, ValuePtr) -> Result<&'a Value<'a>>,
     ),
     NativeFn3(
         String,
-        fn(FunctionContext, ValuePtr, ValuePtr, ValuePtr) -> Result<ValuePtr>,
+        fn(FunctionContext<'a>, ValuePtr, ValuePtr, ValuePtr) -> Result<&'a Value<'a>>,
     ),
 }
 
@@ -125,7 +125,7 @@ impl<'a> Value<'a> {
     pub fn nativefn2(
         arena: &'a Bump,
         name: &str,
-        func: fn(FunctionContext, ValuePtr, ValuePtr) -> Result<ValuePtr>,
+        func: fn(FunctionContext<'a>, ValuePtr, ValuePtr) -> Result<&'a Value<'a>>,
     ) -> &'a mut Value<'a> {
         arena.alloc(Value::NativeFn2(name.to_string(), func))
     }
@@ -133,7 +133,7 @@ impl<'a> Value<'a> {
     pub fn nativefn3(
         arena: &'a Bump,
         name: &str,
-        func: fn(FunctionContext, ValuePtr, ValuePtr, ValuePtr) -> Result<ValuePtr>,
+        func: fn(FunctionContext<'a>, ValuePtr, ValuePtr, ValuePtr) -> Result<&'a Value<'a>>,
     ) -> &'a mut Value<'a> {
         arena.alloc(Value::NativeFn3(name.to_string(), func))
     }

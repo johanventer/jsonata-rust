@@ -59,7 +59,8 @@ impl<'a> Evaluator<'a> {
                 self.fn_context("lookup", node.char_index, input, frame),
                 input,
                 name,
-            ),
+            )
+            .as_ptr(),
             AstKind::Lambda { .. } => {
                 Value::lambda(self.arena, node, input.as_ref(self.arena), frame.clone()).as_ptr()
             }
@@ -233,7 +234,8 @@ impl<'a> Evaluator<'a> {
                             self.fn_context("append", char_index, input.as_ptr(), frame),
                             group.data,
                             item.as_ptr(),
-                        )?;
+                        )?
+                        .as_ptr();
                     }
                     hash_map::Entry::Vacant(entry) => {
                         entry.insert(Group {
@@ -935,11 +937,12 @@ impl<'a> Evaluator<'a> {
                         context.name.to_string(),
                     ))
                 } else {
-                    func(
+                    Ok(func(
                         context,
                         evaluated_args.as_ref(self.arena).get_member(0).as_ptr(),
                         evaluated_args.as_ref(self.arena).get_member(1).as_ptr(),
-                    )
+                    )?
+                    .as_ptr())
                 }
             }
             Value::NativeFn3(ref name, ref func) => {
@@ -951,12 +954,13 @@ impl<'a> Evaluator<'a> {
                         context.name.to_string(),
                     ))
                 } else {
-                    func(
+                    Ok(func(
                         context,
                         evaluated_args.as_ref(self.arena).get_member(0).as_ptr(),
                         evaluated_args.as_ref(self.arena).get_member(1).as_ptr(),
                         evaluated_args.as_ref(self.arena).get_member(2).as_ptr(),
-                    )
+                    )?
+                    .as_ptr())
                 }
             }
             _ => Err(Error::T1006InvokedNonFunction(char_index)),

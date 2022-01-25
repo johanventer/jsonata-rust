@@ -7,7 +7,6 @@ use jsonata_signature_macro::signature;
 use super::evaluator::Evaluator;
 use super::frame::Frame;
 use super::value::{ArrayFlags, Value, ValuePtr};
-use crate::value;
 
 #[derive(Clone)]
 pub struct FunctionContext<'a> {
@@ -26,33 +25,35 @@ impl<'a> FunctionContext<'a> {
     }
 }
 
-pub fn fn_lookup_internal(context: FunctionContext, input: ValuePtr, key: &str) -> ValuePtr {
+pub fn fn_lookup_internal<'a>(
+    context: FunctionContext<'a>,
+    input: ValuePtr,
+    key: &str,
+) -> &'a Value<'a> {
     match input.as_ref(context.arena) {
         Value::Array { .. } => {
             let result = Value::array(context.arena, ArrayFlags::SEQUENCE);
 
             for input in input.as_ref(context.arena).members() {
                 let res = fn_lookup_internal(context.clone(), input.as_ptr(), key);
-                match res.as_ref(context.arena) {
+                match res {
                     Value::Undefined => {}
                     Value::Array { .. } => {
-                        res.as_ref(context.arena)
-                            .members()
-                            .for_each(|item| result.push(item));
+                        res.members().for_each(|item| result.push(item));
                     }
-                    _ => result.push(res.as_ref(context.arena)),
+                    _ => result.push(res),
                 };
             }
 
-            result.as_ptr()
+            result
         }
-        Value::Object(..) => input.as_ref(context.arena).get_entry(key).as_ptr(),
-        _ => value::UNDEFINED.as_ptr(),
+        Value::Object(..) => input.as_ref(context.arena).get_entry(key),
+        _ => Value::undefined(),
     }
 }
 
 #[signature("<x-s:x>")]
-pub fn fn_lookup(context: FunctionContext, input: ValuePtr, key: ValuePtr) -> Result<ValuePtr> {
+pub fn fn_lookup(context: FunctionContext, input: ValuePtr, key: ValuePtr) -> Result<&Value> {
     if !key.as_ref(context.arena).is_string() {
         Err(Error::T0410ArgumentNotValid(
             context.char_index,
@@ -113,13 +114,13 @@ pub fn fn_append_internal<'a>(
 }
 
 #[signature("<xx:a>")]
-pub fn fn_append(context: FunctionContext, arg1: ValuePtr, arg2: ValuePtr) -> Result<ValuePtr> {
+pub fn fn_append(context: FunctionContext, arg1: ValuePtr, arg2: ValuePtr) -> Result<&Value> {
     if arg1.as_ref(context.arena).is_undefined() {
-        return Ok(arg2);
+        return Ok(arg2.as_ref(context.arena));
     }
 
     if arg2.as_ref(context.arena).is_undefined() {
-        return Ok(arg1);
+        return Ok(arg1.as_ref(context.arena));
     }
 
     let arg1_len = if arg1.as_ref(context.arena).is_array() {
@@ -159,11 +160,11 @@ pub fn fn_append(context: FunctionContext, arg1: ValuePtr, arg2: ValuePtr) -> Re
         result.push(arg2.as_ref(context.arena));
     }
 
-    Ok(result.as_ptr())
+    Ok(result)
 }
 
 #[signature("<x-:b>")]
-pub fn fn_boolean<'a>(context: FunctionContext<'a>, arg: ValuePtr) -> Result<&Value<'a>> {
+pub fn fn_boolean(context: FunctionContext, arg: ValuePtr) -> Result<&Value> {
     Ok(match arg.as_ref(context.arena) {
         Value::Undefined => Value::undefined(),
         Value::Null => Value::bool(context.arena, false),
@@ -195,9 +196,9 @@ pub fn fn_boolean<'a>(context: FunctionContext<'a>, arg: ValuePtr) -> Result<&Va
 }
 
 #[signature("<af>")]
-pub fn fn_filter(context: FunctionContext, arr: ValuePtr, func: ValuePtr) -> Result<ValuePtr> {
+pub fn fn_filter(context: FunctionContext, arr: ValuePtr, func: ValuePtr) -> Result<&Value> {
     if arr.as_ref(context.arena).is_undefined() {
-        return Ok(value::UNDEFINED.as_ptr());
+        return Ok(Value::undefined());
     }
 
     let arr = Value::wrap_in_array_if_needed(
@@ -235,11 +236,11 @@ pub fn fn_filter(context: FunctionContext, arr: ValuePtr, func: ValuePtr) -> Res
         }
     }
 
-    Ok(result.as_ptr())
+    Ok(result)
 }
 
 #[signature("<x-b?:s>")]
-pub fn fn_string<'a>(context: FunctionContext<'a>, arg: ValuePtr) -> Result<&Value<'a>> {
+pub fn fn_string(context: FunctionContext, arg: ValuePtr) -> Result<&Value> {
     if arg.as_ref(context.arena).is_undefined() {
         return Ok(Value::undefined());
     }
@@ -264,7 +265,7 @@ pub fn fn_string<'a>(context: FunctionContext<'a>, arg: ValuePtr) -> Result<&Val
 }
 
 #[signature("<a:n>")]
-pub fn fn_count<'a>(context: FunctionContext<'a>, arg: ValuePtr) -> Result<&Value<'a>> {
+pub fn fn_count(context: FunctionContext, arg: ValuePtr) -> Result<&Value> {
     Ok(Value::number(
         context.arena,
         if arg.as_ref(context.arena).is_undefined() {
@@ -278,7 +279,7 @@ pub fn fn_count<'a>(context: FunctionContext<'a>, arg: ValuePtr) -> Result<&Valu
 }
 
 #[signature("<x-:b>")]
-pub fn fn_not<'a>(context: FunctionContext<'a>, arg: ValuePtr) -> Result<&Value<'a>> {
+pub fn fn_not(context: FunctionContext, arg: ValuePtr) -> Result<&Value> {
     Ok(if arg.as_ref(context.arena).is_undefined() {
         Value::undefined()
     } else {
@@ -287,7 +288,7 @@ pub fn fn_not<'a>(context: FunctionContext<'a>, arg: ValuePtr) -> Result<&Value<
 }
 
 #[signature("<s-:s>")]
-pub fn fn_lowercase<'a>(context: FunctionContext<'a>, arg: ValuePtr) -> Result<&Value<'a>> {
+pub fn fn_lowercase(context: FunctionContext, arg: ValuePtr) -> Result<&Value> {
     Ok(if !arg.as_ref(context.arena).is_string() {
         Value::undefined()
     } else {
@@ -299,7 +300,7 @@ pub fn fn_lowercase<'a>(context: FunctionContext<'a>, arg: ValuePtr) -> Result<&
 }
 
 #[signature("<s-:s>")]
-pub fn fn_uppercase<'a>(context: FunctionContext<'a>, arg: ValuePtr) -> Result<&Value<'a>> {
+pub fn fn_uppercase(context: FunctionContext, arg: ValuePtr) -> Result<&Value> {
     if !arg.as_ref(context.arena).is_string() {
         Ok(Value::undefined())
     } else {
@@ -316,9 +317,9 @@ pub fn fn_substring(
     string: ValuePtr,
     start: ValuePtr,
     length: ValuePtr,
-) -> Result<ValuePtr> {
+) -> Result<&Value> {
     if string.as_ref(context.arena).is_undefined() {
-        return Ok(value::UNDEFINED.as_ptr());
+        return Ok(Value::undefined());
     }
 
     if !string.as_ref(context.arena).is_string() {
@@ -355,7 +356,10 @@ pub fn fn_substring(
     let start = if start < 0 { len + start } else { start };
 
     if length.as_ref(context.arena).is_undefined() {
-        Ok(Value::string(context.arena, string[start as usize..].to_string()).as_ptr())
+        Ok(Value::string(
+            context.arena,
+            string[start as usize..].to_string(),
+        ))
     } else {
         if !length.as_ref(context.arena).is_number() {
             return Err(Error::T0410ArgumentNotValid(
@@ -367,7 +371,7 @@ pub fn fn_substring(
 
         let length = length.as_ref(context.arena).as_isize();
         if length < 0 {
-            Ok(Value::string(context.arena, String::from("")).as_ptr())
+            Ok(Value::string(context.arena, String::from("")))
         } else {
             let end = if start >= 0 {
                 (start + length) as usize
@@ -381,13 +385,13 @@ pub fn fn_substring(
                 .take(end - start as usize)
                 .collect::<String>();
 
-            Ok(Value::string(context.arena, substring).as_ptr())
+            Ok(Value::string(context.arena, substring))
         }
     }
 }
 
 #[signature("<n-:n>")]
-pub fn fn_abs<'a>(context: FunctionContext<'a>, arg: ValuePtr) -> Result<&Value<'a>> {
+pub fn fn_abs(context: FunctionContext, arg: ValuePtr) -> Result<&Value> {
     if arg.as_ref(context.arena).is_undefined() {
         Ok(Value::undefined())
     } else if !arg.as_ref(context.arena).is_number() {
@@ -405,7 +409,7 @@ pub fn fn_abs<'a>(context: FunctionContext<'a>, arg: ValuePtr) -> Result<&Value<
 }
 
 #[signature("<n-:n>")]
-pub fn fn_floor<'a>(context: FunctionContext<'a>, arg: ValuePtr) -> Result<&Value<'a>> {
+pub fn fn_floor(context: FunctionContext, arg: ValuePtr) -> Result<&Value> {
     if arg.as_ref(context.arena).is_undefined() {
         Ok(Value::undefined())
     } else if !arg.as_ref(context.arena).is_number() {
@@ -423,7 +427,7 @@ pub fn fn_floor<'a>(context: FunctionContext<'a>, arg: ValuePtr) -> Result<&Valu
 }
 
 #[signature("<n-:n>")]
-pub fn fn_ceil<'a>(context: FunctionContext<'a>, arg: ValuePtr) -> Result<&Value<'a>> {
+pub fn fn_ceil(context: FunctionContext, arg: ValuePtr) -> Result<&Value> {
     if arg.as_ref(context.arena).is_undefined() {
         Ok(Value::undefined())
     } else if !arg.as_ref(context.arena).is_number() {
@@ -441,7 +445,7 @@ pub fn fn_ceil<'a>(context: FunctionContext<'a>, arg: ValuePtr) -> Result<&Value
 }
 
 #[signature("<a<n>:n>")]
-pub fn fn_max<'a>(context: FunctionContext<'a>, args: ValuePtr) -> Result<&Value<'a>> {
+pub fn fn_max(context: FunctionContext, args: ValuePtr) -> Result<&Value> {
     if args.as_ref(context.arena).is_undefined()
         || (args.as_ref(context.arena).is_array() && args.as_ref(context.arena).is_empty())
     {
@@ -468,7 +472,7 @@ pub fn fn_max<'a>(context: FunctionContext<'a>, args: ValuePtr) -> Result<&Value
 }
 
 #[signature("<a<n>:n>")]
-pub fn fn_min<'a>(context: FunctionContext<'a>, args: ValuePtr) -> Result<&Value<'a>> {
+pub fn fn_min(context: FunctionContext, args: ValuePtr) -> Result<&Value> {
     if args.as_ref(context.arena).is_undefined()
         || (args.as_ref(context.arena).is_array() && args.as_ref(context.arena).is_empty())
     {
@@ -495,7 +499,7 @@ pub fn fn_min<'a>(context: FunctionContext<'a>, args: ValuePtr) -> Result<&Value
 }
 
 #[signature("<a<n>:n>")]
-pub fn fn_sum<'a>(context: FunctionContext<'a>, args: ValuePtr) -> Result<&Value<'a>> {
+pub fn fn_sum(context: FunctionContext, args: ValuePtr) -> Result<&Value> {
     if args.as_ref(context.arena).is_undefined()
         || (args.as_ref(context.arena).is_array() && args.as_ref(context.arena).is_empty())
     {
