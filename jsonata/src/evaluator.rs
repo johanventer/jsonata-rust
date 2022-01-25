@@ -57,7 +57,7 @@ impl<'a> Evaluator<'a> {
             AstKind::Path(ref steps) => self.evaluate_path(node, steps, input, frame)?,
             AstKind::Name(ref name) => fn_lookup_internal(
                 self.fn_context("lookup", node.char_index, input, frame),
-                input,
+                input.as_ref(self.arena),
                 name,
             )
             .as_ptr(),
@@ -232,8 +232,8 @@ impl<'a> Evaluator<'a> {
                         }
                         group.data = fn_append(
                             self.fn_context("append", char_index, input.as_ptr(), frame),
-                            group.data,
-                            item.as_ptr(),
+                            group.data.as_ref(self.arena),
+                            item,
                         )?
                         .as_ptr();
                     }
@@ -447,7 +447,7 @@ impl<'a> Evaluator<'a> {
                     result.push_str(
                         &fn_string(
                             self.fn_context("string", node.char_index, input, frame),
-                            lhs,
+                            lhs.as_ref(self.arena),
                         )?
                         .as_str(),
                     );
@@ -456,7 +456,7 @@ impl<'a> Evaluator<'a> {
                     result.push_str(
                         &fn_string(
                             self.fn_context("string", node.char_index, input, frame),
-                            rhs,
+                            rhs.as_ref(self.arena),
                         )?
                         .as_str(),
                     );
@@ -919,13 +919,9 @@ impl<'a> Evaluator<'a> {
                     ))
                 } else if evaluated_args.as_ref(self.arena).is_empty() {
                     // Some functions take the input as the first argument if one was not provided
-                    Ok(func(context, input)?.as_ptr())
+                    Ok(func(context, input.as_ref(self.arena))?.as_ptr())
                 } else {
-                    Ok(func(
-                        context,
-                        evaluated_args.as_ref(self.arena).get_member(0).as_ptr(),
-                    )?
-                    .as_ptr())
+                    Ok(func(context, evaluated_args.as_ref(self.arena).get_member(0))?.as_ptr())
                 }
             }
             Value::NativeFn2(ref name, ref func) => {
@@ -939,8 +935,8 @@ impl<'a> Evaluator<'a> {
                 } else {
                     Ok(func(
                         context,
-                        evaluated_args.as_ref(self.arena).get_member(0).as_ptr(),
-                        evaluated_args.as_ref(self.arena).get_member(1).as_ptr(),
+                        evaluated_args.as_ref(self.arena).get_member(0),
+                        evaluated_args.as_ref(self.arena).get_member(1),
                     )?
                     .as_ptr())
                 }
@@ -956,9 +952,9 @@ impl<'a> Evaluator<'a> {
                 } else {
                     Ok(func(
                         context,
-                        evaluated_args.as_ref(self.arena).get_member(0).as_ptr(),
-                        evaluated_args.as_ref(self.arena).get_member(1).as_ptr(),
-                        evaluated_args.as_ref(self.arena).get_member(2).as_ptr(),
+                        evaluated_args.as_ref(self.arena).get_member(0),
+                        evaluated_args.as_ref(self.arena).get_member(1),
+                        evaluated_args.as_ref(self.arena).get_member(2),
                     )?
                     .as_ptr())
                 }
