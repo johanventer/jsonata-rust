@@ -416,15 +416,23 @@ impl<'a> Value<'a> {
     }
 }
 
-impl<'a> PartialEq<Value<'a>> for Value<'a> {
-    fn eq(&self, other: &Value<'a>) -> bool {
+impl<'a, 'b> PartialEq<Value<'b>> for Value<'a> {
+    fn eq(&self, other: &Value<'b>) -> bool {
         match (self, other) {
-            (Self::Number(l0), Self::Number(r0)) => l0 == r0,
-            (Self::Bool(l0), Self::Bool(r0)) => l0 == r0,
-            (Self::String(l0), Self::String(r0)) => l0 == r0,
-            (Self::Array(l0, ..), Self::Array(r0, ..)) => l0 == r0,
-            (Self::Object(l0), Self::Object(r0)) => l0 == r0,
-            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+            (Value::Undefined, Value::Undefined) => true,
+            (Value::Null, Value::Null) => true,
+            (Value::Number(l), Value::Number(r)) => *l == *r,
+            (Value::Bool(l), Value::Bool(r)) => *l == *r,
+            (Value::String(l), Value::String(r)) => *l == *r,
+            (Value::Array(l, ..), Value::Array(r, ..)) => {
+                l.len() == r.len() && l.iter().zip(r.iter()).all(|(l, r)| *l == *r)
+            }
+            (Value::<'a>::Object(l), Value::<'b>::Object(r)) => {
+                l.len() == r.len()
+                    && l.keys()
+                        .all(|k| r.contains_key(k) && *l.get(k).unwrap() == *r.get(k).unwrap())
+            }
+            _ => false,
         }
     }
 }

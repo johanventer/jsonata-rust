@@ -74,16 +74,16 @@ fn t(resource: &str) {
                     Ok(result) => {
                         let undefined_result = case.get_entry("undefinedResult");
                         let expected_result = case.get_entry("result");
+
                         if undefined_result.is_bool() && *undefined_result == true {
-                            assert!(result.as_ref(&arena).is_undefined())
+                            assert!(result.is_undefined());
                         } else if expected_result.is_number() {
-                            assert!(result.as_ref(&arena).is_number());
+                            assert!(result.is_number());
                             assert!(
-                                (expected_result.as_f64() - result.as_ref(&arena).as_f64()).abs()
-                                    < f64::EPSILON
+                                (expected_result.as_f64() - result.as_f64()).abs() < f64::EPSILON
                             );
                         } else {
-                            assert_eq!(result.as_ref(&arena), expected_result);
+                            assert_eq!(*result, *expected_result);
                         }
                     }
                     Err(error) => {
@@ -92,6 +92,29 @@ fn t(resource: &str) {
                         assert_eq!(*code, error.code());
                     }
                 }
+
+                // match jsonata.evaluate_with_value(data) {
+                //     Ok(result) => {
+                //         let undefined_result = case.get_entry("undefinedResult");
+                //         let expected_result = case.get_entry("result");
+                //         if undefined_result.is_bool() && *undefined_result == true {
+                //             assert!(result.is_undefined());
+                //         } else if expected_result.is_number() {
+                //             assert!(result.is_number());
+                //             assert!(
+                //                 (expected_result.as_f64() - result.as_f64()).abs() < f64::EPSILON
+                //             );
+                //         } else {
+                //             assert_eq!(result, expected_result);
+                //         }
+                //     }
+
+                //     Err(error) => {
+                //         println!("{}", error);
+                //         let code = case.get_entry("code");
+                //         assert_eq!(*code, error.code());
+                //     }
+                // };
             }
             Err(error) => {
                 println!("{}", error);
