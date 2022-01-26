@@ -3,12 +3,10 @@ use std::collections::{hash_map, HashMap};
 
 use jsonata_errors::{Error, Result};
 
-use crate::value;
-
 use super::ast::*;
 use super::frame::Frame;
 use super::functions::*;
-use super::value::{ArrayFlags, Value, ValuePtr};
+use super::value::{ArrayFlags, Value};
 
 pub struct Evaluator<'a> {
     chain_ast: Ast,
@@ -21,24 +19,23 @@ impl<'a> Evaluator<'a> {
     }
 
     fn fn_context(
-        &'a self,
+        &self,
         name: &'a str,
         char_index: usize,
-        input: ValuePtr,
+        input: &'a Value<'a>,
         frame: &Frame,
     ) -> FunctionContext<'a> {
         FunctionContext {
             name,
             char_index,
-            evaluator: self,
-            input: input.as_ref(self.arena),
+            input,
             frame: frame.clone(),
             arena: self.arena,
         }
     }
 
     pub fn evaluate(
-        &'a self,
+        &self,
         node: &Ast,
         input: &'a Value<'a>,
         frame: &Frame,
@@ -61,7 +58,7 @@ impl<'a> Evaluator<'a> {
             } => self.evaluate_ternary(cond, truthy, falsy.as_deref(), input, frame)?,
             AstKind::Path(ref steps) => self.evaluate_path(node, steps, input, frame)?,
             AstKind::Name(ref name) => fn_lookup_internal(
-                self.fn_context("lookup", node.char_index, input.as_ptr(), frame),
+                self.fn_context("lookup", node.char_index, input, frame),
                 input,
                 name,
             ),
@@ -103,7 +100,7 @@ impl<'a> Evaluator<'a> {
     }
 
     fn evaluate_block(
-        &'a self,
+        &self,
         exprs: &[Ast],
         input: &'a Value<'a>,
         frame: &Frame,
@@ -141,7 +138,7 @@ impl<'a> Evaluator<'a> {
     }
 
     fn evaluate_unary_op(
-        &'a self,
+        &self,
         node: &Ast,
         op: &UnaryOp,
         input: &'a Value<'a>,
@@ -174,9 +171,9 @@ impl<'a> Evaluator<'a> {
                         result.push(value);
                     } else {
                         result = fn_append_internal(
-                            self.fn_context("append", node.char_index, input.as_ptr(), frame),
+                            self.fn_context("append", node.char_index, input, frame),
                             result,
-                            value.as_ptr(),
+                            value,
                         );
                     }
                 }
@@ -189,7 +186,7 @@ impl<'a> Evaluator<'a> {
     }
 
     fn evaluate_group_expression(
-        &'a self,
+        &self,
         char_index: usize,
         object: &[(Ast, Ast)],
         input: &'a Value<'a>,
@@ -230,7 +227,7 @@ impl<'a> Evaluator<'a> {
                             return Err(Error::D1009MultipleKeys(char_index, key.to_string()));
                         }
                         group.data = fn_append(
-                            self.fn_context("append", char_index, input.as_ptr(), frame),
+                            self.fn_context("append", char_index, input, frame),
                             group.data,
                             item,
                         )?;
@@ -256,7 +253,7 @@ impl<'a> Evaluator<'a> {
     }
 
     fn evaluate_binary_op(
-        &'a self,
+        &self,
         node: &Ast,
         op: &BinaryOp,
         lhs_ast: &Ast,
@@ -432,7 +429,7 @@ impl<'a> Evaluator<'a> {
                 if !lhs.is_undefined() {
                     result.push_str(
                         &fn_string(
-                            self.fn_context("string", node.char_index, input.as_ptr(), frame),
+                            self.fn_context("string", node.char_index, input, frame),
                             lhs,
                         )?
                         .as_str(),
@@ -441,7 +438,7 @@ impl<'a> Evaluator<'a> {
                 if !rhs.is_undefined() {
                     result.push_str(
                         &fn_string(
-                            self.fn_context("string", node.char_index, input.as_ptr(), frame),
+                            self.fn_context("string", node.char_index, input, frame),
                             rhs,
                         )?
                         .as_str(),
@@ -530,7 +527,7 @@ impl<'a> Evaluator<'a> {
     }
 
     fn evaluate_ternary(
-        &'a self,
+        &self,
         cond: &Ast,
         truthy: &Ast,
         falsy: Option<&Ast>,
@@ -548,7 +545,7 @@ impl<'a> Evaluator<'a> {
     }
 
     fn evaluate_path(
-        &'a self,
+        &self,
         node: &Ast,
         steps: &[Ast],
         input: &'a Value<'a>,
@@ -598,7 +595,7 @@ impl<'a> Evaluator<'a> {
     }
 
     fn evaluate_step(
-        &'a self,
+        &self,
         step: &Ast,
         input: &'a Value<'a>,
         frame: &Frame,
@@ -671,7 +668,7 @@ impl<'a> Evaluator<'a> {
     }
 
     fn evaluate_filter(
-        &'a self,
+        &self,
         node: &Ast,
         input: &'a Value<'a>,
         frame: &Frame,
@@ -733,7 +730,7 @@ impl<'a> Evaluator<'a> {
     }
 
     pub fn evaluate_function(
-        &'a self,
+        &self,
         input: &'a Value<'a>,
         proc: &Ast,
         args: &[Ast],
@@ -817,7 +814,7 @@ impl<'a> Evaluator<'a> {
     }
 
     pub fn apply_function(
-        &'a self,
+        &self,
         char_index: usize,
         input: &'a Value<'a>,
         evaluated_proc: &'a Value<'a>,
@@ -851,10 +848,10 @@ impl<'a> Evaluator<'a> {
                 }
             }
             Value::NativeFn0(ref name, ref func) => {
-                func(self.fn_context(name, char_index, input.as_ptr(), frame))
+                func(self.fn_context(name, char_index, input, frame))
             }
             Value::NativeFn1(ref name, ref func) => {
-                let context = self.fn_context(name, char_index, input.as_ptr(), frame);
+                let context = self.fn_context(name, char_index, input, frame);
                 if evaluated_args.len() > 1 {
                     Err(Error::T0410ArgumentNotValid(
                         context.char_index,
@@ -869,7 +866,7 @@ impl<'a> Evaluator<'a> {
                 }
             }
             Value::NativeFn2(ref name, ref func) => {
-                let context = self.fn_context(name, char_index, input.as_ptr(), frame);
+                let context = self.fn_context(name, char_index, input, frame);
                 if evaluated_args.len() > 2 {
                     Err(Error::T0410ArgumentNotValid(
                         context.char_index,
@@ -885,7 +882,7 @@ impl<'a> Evaluator<'a> {
                 }
             }
             Value::NativeFn3(ref name, ref func) => {
-                let context = self.fn_context(name, char_index, input.as_ptr(), frame);
+                let context = self.fn_context(name, char_index, input, frame);
                 if evaluated_args.len() > 3 {
                     Err(Error::T0410ArgumentNotValid(
                         context.char_index,

@@ -19,7 +19,7 @@
 
 use super::number::Number;
 use crate::value::ArrayFlags;
-use crate::{Error, Result, Value, ValuePtr};
+use crate::{Error, Result, Value};
 use bumpalo::Bump;
 use std::char::decode_utf16;
 use std::convert::TryFrom;
@@ -35,13 +35,13 @@ const DEPTH_LIMIT: usize = 512;
 // The `Parser` struct keeps track of indexing over our buffer. All niceness
 // has been abandoned in favor of raw pointer magic. Does that make you feel
 // dirty? _Good._
-struct Parser<'a> {
+struct Parser<'source, 'arena> {
     // Helper buffer for parsing strings that can't be just memcopied from
     // the original source (escaped characters)
     buffer: Vec<u8>,
 
     // String slice to parse
-    source: &'a str,
+    source: &'source str,
 
     // Byte pointer to the slice above
     byte_ptr: *const u8,
@@ -52,7 +52,7 @@ struct Parser<'a> {
     // Length of the source
     length: usize,
 
-    arena: &'a Bump,
+    arena: &'arena Bump,
 }
 
 // Read a byte from the source.
@@ -357,8 +357,8 @@ macro_rules! expect_fraction {
     }};
 }
 
-impl<'a> Parser<'a> {
-    pub fn new(source: &'a str, arena: &'a Bump) -> Self {
+impl<'source, 'arena> Parser<'source, 'arena> {
+    pub fn new(source: &'source str, arena: &'arena Bump) -> Self {
         Parser {
             buffer: Vec::with_capacity(30),
             source,
@@ -617,7 +617,7 @@ impl<'a> Parser<'a> {
     }
 
     // Parse away!
-    fn parse(&mut self) -> Result<ValuePtr> {
+    fn parse(&mut self) -> Result<&'arena Value<'arena>> {
         let mut stack = Vec::with_capacity(3);
         let mut ch = expect_byte_ignore_whitespace!(self);
 
@@ -700,7 +700,7 @@ impl<'a> Parser<'a> {
                     None => {
                         expect_eof!(self);
 
-                        return Ok(value.as_ptr());
+                        return Ok(value);
                     }
 
                     Some(StackBlock(ref mut stack_value, ref mut key)) => {
@@ -751,10 +751,13 @@ impl<'a> Parser<'a> {
     }
 }
 
-struct StackBlock<'a>(&'a mut Value<'a>, Option<&'a str>);
+struct StackBlock<'source, 'arena>(&'arena mut Value<'arena>, Option<&'source str>);
 
 // All that hard work, and in the end it's just a single function in the API.
 #[inline]
-pub fn parse(source: &str, arena: &Bump) -> Result<ValuePtr> {
+pub fn parse<'source, 'arena>(
+    source: &'source str,
+    arena: &'arena Bump,
+) -> Result<&'arena Value<'arena>> {
     Parser::new(source, arena).parse()
 }

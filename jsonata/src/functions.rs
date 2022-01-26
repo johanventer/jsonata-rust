@@ -6,7 +6,7 @@ use jsonata_signature_macro::signature;
 
 use super::evaluator::Evaluator;
 use super::frame::Frame;
-use super::value::{ArrayFlags, Value, ValuePtr};
+use super::value::{ArrayFlags, Value};
 
 #[derive(Clone)]
 pub struct FunctionContext<'a> {
@@ -14,19 +14,19 @@ pub struct FunctionContext<'a> {
     pub char_index: usize,
     pub input: &'a Value<'a>,
     pub frame: Frame,
-    pub evaluator: &'a Evaluator<'a>,
+    // pub evaluator: &'a Evaluator<'a>,
     pub arena: &'a Bump,
 }
 
 impl<'a> FunctionContext<'a> {
-    pub fn evaluate_function(
-        &self,
-        proc: &'a Value<'a>,
-        args: &'a Value<'a>,
-    ) -> Result<&'a Value<'a>> {
-        self.evaluator
-            .apply_function(self.char_index, self.input, proc, args, &self.frame)
-    }
+    // pub fn evaluate_function(
+    //     &self,
+    //     proc: &'a Value<'a>,
+    //     args: &'a Value<'a>,
+    // ) -> Result<&'a Value<'a>> {
+    //     self.evaluator
+    //         .apply_function(self.char_index, self.input, proc, args, &self.frame)
+    // }
 }
 
 pub fn fn_lookup_internal<'a>(
@@ -77,18 +77,14 @@ pub fn fn_lookup<'a>(
 pub fn fn_append_internal<'a>(
     context: FunctionContext<'a>,
     arg1: &'a mut Value<'a>,
-    arg2: ValuePtr,
+    arg2: &'a Value<'a>,
 ) -> &'a mut Value<'a> {
-    if arg2.as_ref(context.arena).is_undefined() {
+    if arg2.is_undefined() {
         return arg1;
     }
 
     let arg1_len = if arg1.is_array() { arg1.len() } else { 1 };
-    let arg2_len = if arg2.as_ref(context.arena).is_array() {
-        arg2.as_ref(context.arena).len()
-    } else {
-        1
-    };
+    let arg2_len = if arg2.is_array() { arg2.len() } else { 1 };
 
     let result = Value::array_with_capacity(
         context.arena,
@@ -106,12 +102,10 @@ pub fn fn_append_internal<'a>(
         result.push(&*arg1);
     }
 
-    if arg2.as_ref(context.arena).is_array() {
-        arg2.as_ref(context.arena)
-            .members()
-            .for_each(|m| result.push(m));
+    if arg2.is_array() {
+        arg2.members().for_each(|m| result.push(m));
     } else {
-        result.push(arg2.as_ref(context.arena));
+        result.push(arg2);
     }
 
     result
@@ -222,7 +216,9 @@ pub fn fn_filter<'a>(
             args.push(&*arr);
         }
 
-        let include = context.evaluate_function(func, args)?;
+        // TODO: FIX THIS
+        // let include = context.evaluate_function(func, args)?;
+        let include = Value::bool(context.arena, false);
 
         if include.is_truthy() {
             result.push(item);

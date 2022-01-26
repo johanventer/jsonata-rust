@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::fmt;
+use std::ops::Index;
 
 use bitflags::bitflags;
 use bumpalo::Bump;
@@ -416,22 +417,16 @@ impl<'a> Value<'a> {
     }
 }
 
-impl<'a, 'b> PartialEq<Value<'b>> for Value<'a> {
-    fn eq(&self, other: &Value<'b>) -> bool {
+impl<'a> PartialEq<Value<'a>> for Value<'a> {
+    fn eq(&self, other: &Value<'a>) -> bool {
         match (self, other) {
             (Value::Undefined, Value::Undefined) => true,
             (Value::Null, Value::Null) => true,
             (Value::Number(l), Value::Number(r)) => *l == *r,
             (Value::Bool(l), Value::Bool(r)) => *l == *r,
             (Value::String(l), Value::String(r)) => *l == *r,
-            (Value::Array(l, ..), Value::Array(r, ..)) => {
-                l.len() == r.len() && l.iter().zip(r.iter()).all(|(l, r)| *l == *r)
-            }
-            (Value::<'a>::Object(l), Value::<'b>::Object(r)) => {
-                l.len() == r.len()
-                    && l.keys()
-                        .all(|k| r.contains_key(k) && *l.get(k).unwrap() == *r.get(k).unwrap())
-            }
+            (Value::Array(l, ..), Value::Array(r, ..)) => *l == *r,
+            (Value::Object(l), Value::Object(r)) => *l == *r,
             _ => false,
         }
     }
@@ -500,39 +495,17 @@ impl PartialEq<String> for Value<'_> {
     }
 }
 
-impl From<i32> for Value<'_> {
-    fn from(v: i32) -> Self {
-        Value::Number(v.into())
-    }
-}
+impl<'a> Index<&str> for Value<'a> {
+    type Output = Value<'a>;
 
-impl From<i64> for Value<'_> {
-    fn from(v: i64) -> Self {
-        Value::Number(v.into())
-    }
-}
-
-impl From<f32> for Value<'_> {
-    fn from(v: f32) -> Self {
-        Value::Number(v.into())
-    }
-}
-
-impl From<f64> for Value<'_> {
-    fn from(v: f64) -> Self {
-        Value::Number(v.into())
-    }
-}
-
-impl From<bool> for Value<'_> {
-    fn from(v: bool) -> Self {
-        Value::Bool(v)
-    }
-}
-
-impl From<&str> for Value<'_> {
-    fn from(v: &str) -> Self {
-        Value::String(v.into())
+    fn index(&self, index: &str) -> &Self::Output {
+        match *self {
+            Value::Object(ref o) => match o.get(index) {
+                Some(value) => value,
+                None => Value::undefined(),
+            },
+            _ => Value::undefined(),
+        }
     }
 }
 

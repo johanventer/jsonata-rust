@@ -23,7 +23,7 @@ use value::ArrayFlags;
 pub struct JsonAta {
     ast: Ast,
     frame: Frame,
-    pub arena: Bump,
+    arena: Bump,
 }
 
 impl JsonAta {
@@ -46,17 +46,12 @@ impl JsonAta {
     pub fn evaluate<'a>(&'a self, input: Option<&str>) -> Result<&'a Value<'a>> {
         let input = match input {
             Some(input) => json::parse(input, &self.arena).unwrap(),
-            None => value::UNDEFINED.as_ptr(),
+            None => Value::undefined(),
         };
 
-        self.evaluate_with_value(input)
-    }
-
-    pub fn evaluate_with_value(&self, input: ValuePtr) -> Result<&Value<'_>> {
         // If the input is an array, wrap it in an array so that it gets treated as a single input
-        let input = if input.as_ref(&self.arena).is_array() {
-            Value::wrap_in_array(&self.arena, input.as_ref(&self.arena), ArrayFlags::WRAPPED)
-                .as_ptr()
+        let input = if input.is_array() {
+            Value::wrap_in_array(&self.arena, input, ArrayFlags::WRAPPED)
         } else {
             input
         };
@@ -68,7 +63,7 @@ impl JsonAta {
             };
         }
 
-        self.frame.bind("$", input);
+        self.frame.bind("$", input.as_ptr());
         bind!("lookup", nativefn2, fn_lookup);
         bind!("append", nativefn2, fn_append);
         bind!("boolean", nativefn1, fn_boolean);
@@ -90,9 +85,6 @@ impl JsonAta {
 
         // TODO: FIX THIS CRAP
         let evaluator = Evaluator::new(chain_ast, &self.arena);
-        Ok(evaluator
-            .evaluate(&self.ast, input.as_ref(&self.arena), &self.frame)?
-            .as_ptr()
-            .as_ref(&self.arena))
+        evaluator.evaluate(&self.ast, input, &self.frame)
     }
 }
