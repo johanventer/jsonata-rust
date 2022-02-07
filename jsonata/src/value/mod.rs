@@ -37,19 +37,19 @@ pub enum Value<'a> {
         input: &'a Value<'a>,
         frame: Frame,
     },
-    NativeFn0(String, fn(FunctionContext<'a>) -> Result<&'a Value<'a>>),
+    NativeFn0(String, fn(FunctionContext<'a, '_>) -> Result<&'a Value<'a>>),
     NativeFn1(
         String,
-        fn(FunctionContext<'a>, &'a Value<'a>) -> Result<&'a Value<'a>>,
+        fn(FunctionContext<'a, '_>, &'a Value<'a>) -> Result<&'a Value<'a>>,
     ),
     NativeFn2(
         String,
-        fn(FunctionContext<'a>, &'a Value<'a>, &'a Value<'a>) -> Result<&'a Value<'a>>,
+        fn(FunctionContext<'a, '_>, &'a Value<'a>, &'a Value<'a>) -> Result<&'a Value<'a>>,
     ),
     NativeFn3(
         String,
         fn(
-            FunctionContext<'a>,
+            FunctionContext<'a, '_>,
             &'a Value<'a>,
             &'a Value<'a>,
             &'a Value<'a>,
@@ -123,7 +123,7 @@ impl<'a> Value<'a> {
     pub fn nativefn1(
         arena: &'a Bump,
         name: &str,
-        func: fn(FunctionContext<'a>, &'a Value<'a>) -> Result<&'a Value<'a>>,
+        func: fn(FunctionContext<'a, '_>, &'a Value<'a>) -> Result<&'a Value<'a>>,
     ) -> &'a mut Value<'a> {
         arena.alloc(Value::NativeFn1(name.to_string(), func))
     }
@@ -131,7 +131,7 @@ impl<'a> Value<'a> {
     pub fn nativefn2(
         arena: &'a Bump,
         name: &str,
-        func: fn(FunctionContext<'a>, &'a Value<'a>, &'a Value<'a>) -> Result<&'a Value<'a>>,
+        func: fn(FunctionContext<'a, '_>, &'a Value<'a>, &'a Value<'a>) -> Result<&'a Value<'a>>,
     ) -> &'a mut Value<'a> {
         arena.alloc(Value::NativeFn2(name.to_string(), func))
     }
@@ -140,7 +140,7 @@ impl<'a> Value<'a> {
         arena: &'a Bump,
         name: &str,
         func: fn(
-            FunctionContext<'a>,
+            FunctionContext<'a, '_>,
             &'a Value<'a>,
             &'a Value<'a>,
             &'a Value<'a>,

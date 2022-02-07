@@ -9,28 +9,28 @@ use super::frame::Frame;
 use super::value::{ArrayFlags, Value};
 
 #[derive(Clone)]
-pub struct FunctionContext<'a> {
+pub struct FunctionContext<'a, 'e> {
     pub name: &'a str,
     pub char_index: usize,
     pub input: &'a Value<'a>,
     pub frame: Frame,
-    // pub evaluator: &'a Evaluator<'a>,
+    pub evaluator: &'e Evaluator<'a>,
     pub arena: &'a Bump,
 }
 
-impl<'a> FunctionContext<'a> {
-    // pub fn evaluate_function(
-    //     &self,
-    //     proc: &'a Value<'a>,
-    //     args: &'a Value<'a>,
-    // ) -> Result<&'a Value<'a>> {
-    //     self.evaluator
-    //         .apply_function(self.char_index, self.input, proc, args, &self.frame)
-    // }
+impl<'a, 'e> FunctionContext<'a, 'e> {
+    pub fn evaluate_function(
+        &self,
+        proc: &'a Value<'a>,
+        args: &'a Value<'a>,
+    ) -> Result<&'a Value<'a>> {
+        self.evaluator
+            .apply_function(self.char_index, self.input, proc, args, &self.frame)
+    }
 }
 
-pub fn fn_lookup_internal<'a>(
-    context: FunctionContext<'a>,
+pub fn fn_lookup_internal<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
     input: &'a Value<'a>,
     key: &str,
 ) -> &'a Value<'a> {
@@ -57,8 +57,8 @@ pub fn fn_lookup_internal<'a>(
 }
 
 #[signature("<x-s:x>")]
-pub fn fn_lookup<'a>(
-    context: FunctionContext<'a>,
+pub fn fn_lookup<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
     input: &'a Value<'a>,
     key: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
@@ -74,8 +74,8 @@ pub fn fn_lookup<'a>(
 }
 
 // TODO: Added this to make `evaluate_unary_op` compile, probably can be factored out
-pub fn fn_append_internal<'a>(
-    context: FunctionContext<'a>,
+pub fn fn_append_internal<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
     arg1: &'a mut Value<'a>,
     arg2: &'a Value<'a>,
 ) -> &'a mut Value<'a> {
@@ -112,8 +112,8 @@ pub fn fn_append_internal<'a>(
 }
 
 #[signature("<xx:a>")]
-pub fn fn_append<'a>(
-    context: FunctionContext<'a>,
+pub fn fn_append<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
     arg1: &'a Value<'a>,
     arg2: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
@@ -154,7 +154,10 @@ pub fn fn_append<'a>(
 }
 
 #[signature("<x-:b>")]
-pub fn fn_boolean<'a>(context: FunctionContext<'a>, arg: &'a Value<'a>) -> Result<&'a Value<'a>> {
+pub fn fn_boolean<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    arg: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
     Ok(match arg {
         Value::Undefined => Value::undefined(),
         Value::Null => Value::bool(context.arena, false),
@@ -183,8 +186,8 @@ pub fn fn_boolean<'a>(context: FunctionContext<'a>, arg: &'a Value<'a>) -> Resul
 }
 
 #[signature("<af>")]
-pub fn fn_filter<'a>(
-    context: FunctionContext<'a>,
+pub fn fn_filter<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
     arr: &'a Value<'a>,
     func: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
@@ -216,9 +219,7 @@ pub fn fn_filter<'a>(
             args.push(&*arr);
         }
 
-        // TODO: FIX THIS
-        // let include = context.evaluate_function(func, args)?;
-        let include = Value::bool(context.arena, false);
+        let include = context.evaluate_function(func, args)?;
 
         if include.is_truthy() {
             result.push(item);
@@ -229,7 +230,10 @@ pub fn fn_filter<'a>(
 }
 
 #[signature("<x-b?:s>")]
-pub fn fn_string<'a>(context: FunctionContext<'a>, arg: &'a Value<'a>) -> Result<&'a Value<'a>> {
+pub fn fn_string<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    arg: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
     if arg.is_undefined() {
         return Ok(Value::undefined());
     }
@@ -251,7 +255,10 @@ pub fn fn_string<'a>(context: FunctionContext<'a>, arg: &'a Value<'a>) -> Result
 }
 
 #[signature("<a:n>")]
-pub fn fn_count<'a>(context: FunctionContext<'a>, arg: &'a Value<'a>) -> Result<&'a Value<'a>> {
+pub fn fn_count<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    arg: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
     Ok(Value::number(
         context.arena,
         if arg.is_undefined() {
@@ -265,7 +272,10 @@ pub fn fn_count<'a>(context: FunctionContext<'a>, arg: &'a Value<'a>) -> Result<
 }
 
 #[signature("<x-:b>")]
-pub fn fn_not<'a>(context: FunctionContext<'a>, arg: &'a Value<'a>) -> Result<&'a Value<'a>> {
+pub fn fn_not<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    arg: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
     Ok(if arg.is_undefined() {
         Value::undefined()
     } else {
@@ -274,7 +284,10 @@ pub fn fn_not<'a>(context: FunctionContext<'a>, arg: &'a Value<'a>) -> Result<&'
 }
 
 #[signature("<s-:s>")]
-pub fn fn_lowercase<'a>(context: FunctionContext<'a>, arg: &'a Value<'a>) -> Result<&'a Value<'a>> {
+pub fn fn_lowercase<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    arg: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
     Ok(if !arg.is_string() {
         Value::undefined()
     } else {
@@ -283,7 +296,10 @@ pub fn fn_lowercase<'a>(context: FunctionContext<'a>, arg: &'a Value<'a>) -> Res
 }
 
 #[signature("<s-:s>")]
-pub fn fn_uppercase<'a>(context: FunctionContext<'a>, arg: &'a Value<'a>) -> Result<&'a Value<'a>> {
+pub fn fn_uppercase<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    arg: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
     if !arg.is_string() {
         Ok(Value::undefined())
     } else {
@@ -292,8 +308,8 @@ pub fn fn_uppercase<'a>(context: FunctionContext<'a>, arg: &'a Value<'a>) -> Res
 }
 
 #[signature("<s-nn?:s>")]
-pub fn fn_substring<'a>(
-    context: FunctionContext<'a>,
+pub fn fn_substring<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
     string: &'a Value<'a>,
     start: &'a Value<'a>,
     length: &'a Value<'a>,
@@ -371,7 +387,10 @@ pub fn fn_substring<'a>(
 }
 
 #[signature("<n-:n>")]
-pub fn fn_abs<'a>(context: FunctionContext<'a>, arg: &'a Value<'a>) -> Result<&'a Value<'a>> {
+pub fn fn_abs<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    arg: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
     if arg.is_undefined() {
         Ok(Value::undefined())
     } else if !arg.is_number() {
@@ -386,7 +405,10 @@ pub fn fn_abs<'a>(context: FunctionContext<'a>, arg: &'a Value<'a>) -> Result<&'
 }
 
 #[signature("<n-:n>")]
-pub fn fn_floor<'a>(context: FunctionContext<'a>, arg: &'a Value<'a>) -> Result<&'a Value<'a>> {
+pub fn fn_floor<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    arg: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
     if arg.is_undefined() {
         Ok(Value::undefined())
     } else if !arg.is_number() {
@@ -401,7 +423,10 @@ pub fn fn_floor<'a>(context: FunctionContext<'a>, arg: &'a Value<'a>) -> Result<
 }
 
 #[signature("<n-:n>")]
-pub fn fn_ceil<'a>(context: FunctionContext<'a>, arg: &'a Value<'a>) -> Result<&'a Value<'a>> {
+pub fn fn_ceil<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    arg: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
     if arg.is_undefined() {
         Ok(Value::undefined())
     } else if !arg.is_number() {
@@ -416,7 +441,10 @@ pub fn fn_ceil<'a>(context: FunctionContext<'a>, arg: &'a Value<'a>) -> Result<&
 }
 
 #[signature("<a<n>:n>")]
-pub fn fn_max<'a>(context: FunctionContext<'a>, args: &'a Value<'a>) -> Result<&'a Value<'a>> {
+pub fn fn_max<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
     if args.is_undefined() || (args.is_array() && args.is_empty()) {
         return Ok(Value::undefined());
     }
@@ -437,7 +465,10 @@ pub fn fn_max<'a>(context: FunctionContext<'a>, args: &'a Value<'a>) -> Result<&
 }
 
 #[signature("<a<n>:n>")]
-pub fn fn_min<'a>(context: FunctionContext<'a>, args: &'a Value<'a>) -> Result<&'a Value<'a>> {
+pub fn fn_min<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
     if args.is_undefined() || (args.is_array() && args.is_empty()) {
         return Ok(Value::undefined());
     }
@@ -458,7 +489,10 @@ pub fn fn_min<'a>(context: FunctionContext<'a>, args: &'a Value<'a>) -> Result<&
 }
 
 #[signature("<a<n>:n>")]
-pub fn fn_sum<'a>(context: FunctionContext<'a>, args: &'a Value<'a>) -> Result<&'a Value<'a>> {
+pub fn fn_sum<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
     if args.is_undefined() || (args.is_array() && args.is_empty()) {
         return Ok(Value::undefined());
     }

@@ -18,19 +18,20 @@ impl<'a> Evaluator<'a> {
         Evaluator { chain_ast, arena }
     }
 
-    fn fn_context(
-        &self,
+    fn fn_context<'e>(
+        &'e self,
         name: &'a str,
         char_index: usize,
         input: &'a Value<'a>,
         frame: &Frame,
-    ) -> FunctionContext<'a> {
+    ) -> FunctionContext<'a, 'e> {
         FunctionContext {
             name,
             char_index,
             input,
             frame: frame.clone(),
             arena: self.arena,
+            evaluator: self,
         }
     }
 
