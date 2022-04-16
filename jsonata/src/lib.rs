@@ -10,7 +10,9 @@ pub mod tokenizer;
 pub mod value;
 
 pub use jsonata_errors::{Error, Result};
-pub use value::{Value, ValueKind};
+pub use value::Value;
+
+use bumpalo::Bump;
 
 use ast::Ast;
 use evaluator::Evaluator;
@@ -18,16 +20,18 @@ use frame::Frame;
 use functions::*;
 use value::ArrayFlags;
 
-pub struct JsonAta {
+pub struct JsonAta<'a> {
     ast: Ast,
-    frame: Frame,
+    frame: Frame<'a>,
+    arena: Bump,
 }
 
-impl JsonAta {
-    pub fn new(expr: &str) -> Result<JsonAta> {
+impl<'a> JsonAta<'a> {
+    pub fn new(expr: &str) -> Result<JsonAta<'a>> {
         Ok(Self {
             ast: parser::parse(expr)?,
             frame: Frame::new(),
+            arena: Bump::new(),
         })
     }
 
@@ -35,41 +39,29 @@ impl JsonAta {
         &self.ast
     }
 
-    pub fn assign_var(&self, name: &str, value: Value) {
+    pub fn assign_var<'other>(&'other self, name: &str, value: &'other Value<'other>)
+    where
+        'other: 'a,
+    {
         self.frame.bind(name, value)
     }
 
-    pub fn evaluate(&self, input: Option<&str>) -> Result<Value> {
+    pub fn evaluate(&'a self, input: Option<&str>) -> Result<&'a Value<'a>> {
         let input = match input {
-            Some(input) => json::parse(input).unwrap(),
-            None => value::UNDEFINED,
+            Some(input) => json::parse(input, &self.arena).unwrap(),
+            None => Value::undefined(),
         };
-
-        self.evaluate_with_value(input)
-    }
-
-    pub fn evaluate_with_value(&self, input: Value) -> Result<Value> {
-        // let mut input = Rc::new(Value::from_raw(input));
-        // if input.is_array() {
-        //     input = Rc::new(Value::wrap(Rc::clone(&input)));
-        // }
-
-        // // TODO: Apply statics
-        // // self.frame
-        // //     .borrow_mut()
-        // //     .bind("string", Rc::new(Value::NativeFn(functions::string)))
-        // //     .bind("boolean", Rc::new(Value::NativeFn(functions::boolean)));
 
         // If the input is an array, wrap it in an array so that it gets treated as a single input
         let input = if input.is_array() {
-            input.wrap_in_array(ArrayFlags::WRAPPED)
+            Value::wrap_in_array(&self.arena, input, ArrayFlags::WRAPPED)
         } else {
             input
         };
 
         macro_rules! bind {
             ($name:literal, $new:ident, $fn:ident) => {
-                self.frame.bind($name, Value::$new($name, $fn));
+                self.frame.bind($name, Value::$new(&self.arena, $name, $fn));
             };
         }
 
@@ -92,8 +84,7 @@ impl JsonAta {
         bind!("sum", nativefn1, fn_sum);
 
         let chain_ast = parser::parse("function($f, $g) { function($x){ $g($f($x)) } }")?;
-
-        let evaluator = Evaluator::new(chain_ast);
+        let evaluator = Evaluator::new(chain_ast, &self.arena);
         evaluator.evaluate(&self.ast, input, &self.frame)
     }
 }

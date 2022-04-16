@@ -1,13 +1,14 @@
 #![cfg(test)]
 extern crate test_generator;
 
+use bumpalo::Bump;
 use std::fs;
 use std::path;
 use test_generator::test_resources;
 
 use jsonata::json;
 use jsonata::value::ArrayFlags;
-use jsonata::JsonAta;
+use jsonata::{JsonAta, Value};
 
 // TODO: timelimit, depth
 #[test_resources("jsonata/tests/testsuite/groups/*/*.json")]
@@ -20,13 +21,15 @@ fn t(resource: &str) {
     let test = fs::read_to_string(resource)
         .unwrap_or_else(|_| panic!("Failed to read test case: {}", resource));
 
-    let test = json::parse(&test)
-        .unwrap()
-        .wrap_in_array_if_needed(ArrayFlags::empty());
+    let arena = Bump::new();
+
+    let test = json::parse(&test, &arena).unwrap();
+
+    let test = Value::wrap_in_array_if_needed(&arena, test, ArrayFlags::empty());
 
     for case in test.members() {
-        let expr = case.get_entry("expr");
-        let expr_file = case.get_entry("expr-file");
+        let expr = &case["expr"];
+        let expr_file = &case["expr-file"];
 
         let expr = if expr.is_string() {
             expr.as_str().to_string()
@@ -42,41 +45,48 @@ fn t(resource: &str) {
             panic!("No expression")
         };
 
-        let data = case.get_entry("data");
-        let dataset = case.get_entry("dataset");
+        let data = &case["data"];
+        let dataset = &case["dataset"];
 
         let data = if dataset.is_string() {
             let dataset = format!("jsonata/tests/testsuite/datasets/{}.json", dataset.as_str());
-            let dataset = fs::read_to_string(&dataset)
-                .unwrap_or_else(|_e| panic!("Could not read dataset file: {}", dataset));
-            json::parse(&dataset).unwrap()
+            fs::read_to_string(&dataset)
+                .unwrap_or_else(|_e| panic!("Could not read dataset file: {}", dataset))
+        } else if data.is_undefined() {
+            "".to_string()
         } else {
-            data
+            data.dump()
         };
 
         let jsonata = JsonAta::new(&expr);
 
         match jsonata {
             Ok(jsonata) => {
-                let bindings = case.get_entry("bindings");
-                if bindings.is_object() {
-                    for (key, value) in bindings.entries() {
-                        jsonata.assign_var(key, *value);
+                if case["bindings"].is_object() {
+                    for (key, value) in case["bindings"].entries() {
+                        jsonata.assign_var(key, from(value, &arena));
                     }
                 }
 
-                let result = jsonata.evaluate_with_value(data);
+                let data = if data.is_empty() {
+                    None
+                } else {
+                    Some(data.as_str())
+                };
+
+                let result = jsonata.evaluate(data);
 
                 match result {
                     Ok(result) => {
-                        let undefined_result = case.get_entry("undefinedResult");
-                        let expected_result = case.get_entry("result");
-                        if undefined_result.is_bool() && undefined_result == true {
-                            assert!(result.is_undefined())
-                        } else if expected_result.is_number() {
+                        let expected_result = from(&case["result"], &arena);
+
+                        if case["undefinedResult"] == true {
+                            assert!(result.is_undefined());
+                        } else if case["result"].is_number() {
                             assert!(result.is_number());
                             assert!(
-                                (expected_result.as_f64() - result.as_f64()).abs() < f64::EPSILON
+                                f64::abs(expected_result.as_f64() - result.as_f64())
+                                    <= f64::EPSILON
                             );
                         } else {
                             assert_eq!(result, expected_result);
@@ -84,16 +94,35 @@ fn t(resource: &str) {
                     }
                     Err(error) => {
                         println!("{}", error);
-                        let code = case.get_entry("code");
-                        assert_eq!(code, error.code());
+                        assert_eq!(case["code"], error.code());
                     }
                 }
             }
             Err(error) => {
                 println!("{}", error);
-                let code = case.get_entry("code");
-                assert_eq!(code, error.code());
+                assert_eq!(case["code"], error.code());
             }
         }
+    }
+}
+
+pub fn from<'a>(value: &Value, arena: &'a Bump) -> &'a Value<'a> {
+    match value {
+        Value::Undefined => Value::undefined(),
+        Value::Null => Value::null(arena),
+        Value::Number(n) => Value::number(arena, *n),
+        Value::Bool(b) => Value::bool(arena, *b),
+        Value::String(s) => Value::string(arena, s),
+        Value::Array(a, f) => {
+            let array = Value::array_with_capacity(arena, a.len(), *f);
+            a.iter().for_each(|i| array.push(from(i, arena)));
+            array
+        }
+        Value::Object(o) => {
+            let obj = Value::object_with_capacity(arena, o.len());
+            o.iter().for_each(|(k, v)| obj.insert(k, from(v, arena)));
+            obj
+        }
+        _ => panic!("Can't call Value::from on functions"),
     }
 }

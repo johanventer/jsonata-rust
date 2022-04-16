@@ -3,32 +3,28 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use super::value::Value;
 
 #[derive(Debug)]
-pub struct Frame(Rc<RefCell<FrameData>>);
+pub struct Frame<'a>(Rc<RefCell<FrameData<'a>>>);
 
-impl Frame {
-    pub fn new() -> Frame {
+impl<'a> Frame<'a> {
+    pub fn new() -> Frame<'a> {
         Frame(Rc::new(RefCell::new(FrameData {
             bindings: HashMap::new(),
             parent: None,
         })))
     }
 
-    pub fn new_with_parent(parent: &Frame) -> Frame {
+    pub fn new_with_parent(parent: &Frame<'a>) -> Frame<'a> {
         Frame(Rc::new(RefCell::new(FrameData {
             bindings: HashMap::new(),
             parent: Some(parent.clone()),
         })))
     }
 
-    pub fn bind(&self, name: &str, value: Value) {
-        // Values in the frame need to be complete clones, otherwise modifying them would change their value.
-        // Arrays and object will still point at the same members, and this replicates the reference semantics
-        // in Javascript.
-        let v = Value::new((*value).clone());
-        self.0.borrow_mut().bindings.insert(name.to_string(), v);
+    pub fn bind(&self, name: &str, value: &'a Value<'a>) {
+        self.0.borrow_mut().bindings.insert(name.to_string(), value);
     }
 
-    pub fn lookup(&self, name: &str) -> Option<Value> {
+    pub fn lookup(&self, name: &str) -> Option<&'a Value<'a>> {
         match self.0.borrow().bindings.get(name) {
             Some(value) => Some(*value),
             None => match &self.0.borrow().parent {
@@ -39,22 +35,22 @@ impl Frame {
     }
 }
 
-impl Default for Frame {
+impl Default for Frame<'_> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Clone for Frame {
+impl Clone for Frame<'_> {
     fn clone(&self) -> Self {
         Self(self.0.clone())
     }
 }
 
 #[derive(Debug)]
-pub struct FrameData {
-    bindings: HashMap<String, Value>,
-    parent: Option<Frame>,
+pub struct FrameData<'a> {
+    bindings: HashMap<String, &'a Value<'a>>,
+    parent: Option<Frame<'a>>,
 }
 
 // #[cfg(test)]

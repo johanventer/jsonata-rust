@@ -20,6 +20,7 @@
 use super::number::Number;
 use crate::value::ArrayFlags;
 use crate::{Error, Result, Value};
+use bumpalo::Bump;
 use std::char::decode_utf16;
 use std::convert::TryFrom;
 use std::{slice, str};
@@ -34,13 +35,13 @@ const DEPTH_LIMIT: usize = 512;
 // The `Parser` struct keeps track of indexing over our buffer. All niceness
 // has been abandoned in favor of raw pointer magic. Does that make you feel
 // dirty? _Good._
-struct Parser<'a> {
+struct Parser<'source, 'arena> {
     // Helper buffer for parsing strings that can't be just memcopied from
     // the original source (escaped characters)
     buffer: Vec<u8>,
 
     // String slice to parse
-    source: &'a str,
+    source: &'source str,
 
     // Byte pointer to the slice above
     byte_ptr: *const u8,
@@ -50,6 +51,8 @@ struct Parser<'a> {
 
     // Length of the source
     length: usize,
+
+    arena: &'arena Bump,
 }
 
 // Read a byte from the source.
@@ -354,20 +357,21 @@ macro_rules! expect_fraction {
     }};
 }
 
-impl<'a> Parser<'a> {
-    pub fn new(source: &'a str) -> Self {
+impl<'source, 'arena> Parser<'source, 'arena> {
+    pub fn new(source: &'source str, arena: &'arena Bump) -> Self {
         Parser {
             buffer: Vec::with_capacity(30),
             source,
             byte_ptr: source.as_ptr(),
             index: 0,
             length: source.len(),
+            arena,
         }
     }
 
     // Check if we are at the end of the source.
     #[inline(always)]
-    fn is_eof(&mut self) -> bool {
+    fn is_eof(&self) -> bool {
         self.index == self.length
     }
 
@@ -613,7 +617,7 @@ impl<'a> Parser<'a> {
     }
 
     // Parse away!
-    fn parse(&mut self) -> Result<Value> {
+    fn parse(&mut self) -> Result<&'arena Value<'arena>> {
         let mut stack = Vec::with_capacity(3);
         let mut ch = expect_byte_ignore_whitespace!(self);
 
@@ -628,13 +632,13 @@ impl<'a> Parser<'a> {
                         }
 
                         stack.push(StackBlock(
-                            Value::array_with_capacity(2, ArrayFlags::empty()),
+                            Value::array_with_capacity(self.arena, 2, ArrayFlags::empty()),
                             None,
                         ));
                         continue 'parsing;
                     }
 
-                    Value::array(ArrayFlags::empty())
+                    Value::array(self.arena, ArrayFlags::empty())
                 }
                 b'{' => {
                     ch = expect_byte_ignore_whitespace!(self);
@@ -644,7 +648,7 @@ impl<'a> Parser<'a> {
                             return Err(Error::I0203ExceededDepthLimit);
                         }
 
-                        let object = Value::object_with_capacity(3);
+                        let object = Value::object_with_capacity(self.arena, 3);
 
                         if ch != b'"' {
                             return self.unexpected_character();
@@ -660,30 +664,33 @@ impl<'a> Parser<'a> {
                         continue 'parsing;
                     }
 
-                    Value::object()
+                    Value::object(self.arena)
                 }
-                b'"' => Value::string(String::from(expect_string!(self))),
-                b'0' => Value::number(allow_number_extensions!(self)),
-                b'1'..=b'9' => Value::number(expect_number!(self, ch)),
+                b'"' => Value::string(self.arena, String::from(expect_string!(self))),
+                b'0' => Value::number(self.arena, allow_number_extensions!(self)),
+                b'1'..=b'9' => Value::number(self.arena, expect_number!(self, ch)),
                 b'-' => {
                     let ch = expect_byte!(self);
-                    Value::number(-match ch {
-                        b'0' => allow_number_extensions!(self),
-                        b'1'..=b'9' => expect_number!(self, ch),
-                        _ => return self.unexpected_character(),
-                    })
+                    Value::number(
+                        self.arena,
+                        -match ch {
+                            b'0' => allow_number_extensions!(self),
+                            b'1'..=b'9' => expect_number!(self, ch),
+                            _ => return self.unexpected_character(),
+                        },
+                    )
                 }
                 b't' => {
                     expect_sequence!(self, b'r', b'u', b'e');
-                    Value::bool(true)
+                    Value::bool(self.arena, true)
                 }
                 b'f' => {
                     expect_sequence!(self, b'a', b'l', b's', b'e');
-                    Value::bool(false)
+                    Value::bool(self.arena, false)
                 }
                 b'n' => {
                     expect_sequence!(self, b'u', b'l', b'l');
-                    Value::null()
+                    Value::null(self.arena)
                 }
                 _ => return self.unexpected_character(),
             };
@@ -744,10 +751,13 @@ impl<'a> Parser<'a> {
     }
 }
 
-struct StackBlock<'a>(Value, Option<&'a str>);
+struct StackBlock<'source, 'arena>(&'arena mut Value<'arena>, Option<&'source str>);
 
 // All that hard work, and in the end it's just a single function in the API.
 #[inline]
-pub fn parse(source: &str) -> Result<Value> {
-    Parser::new(source).parse()
+pub fn parse<'source, 'arena>(
+    source: &'source str,
+    arena: &'arena Bump,
+) -> Result<&'arena Value<'arena>> {
+    Parser::new(source, arena).parse()
 }

@@ -1,10 +1,9 @@
 use std::io;
 use std::io::Write;
-use std::ptr;
 
 use super::number::Number;
 use super::util::print_dec;
-use crate::value::{Value, ValueKind};
+use crate::value::Value;
 
 const QU: u8 = b'"';
 const BS: u8 = b'\\';
@@ -110,7 +109,7 @@ pub trait Generator {
     }
 
     #[inline(always)]
-    fn write_object(&mut self, object: &Value) -> io::Result<()> {
+    fn write_object<'a>(&mut self, object: &'a Value<'a>) -> io::Result<()> {
         self.write_char(b'{')?;
         let mut iter = object.entries();
 
@@ -138,14 +137,14 @@ pub trait Generator {
         self.write_char(b'}')
     }
 
-    fn write_json(&mut self, json: &Value) -> io::Result<()> {
-        match **json {
-            ValueKind::Null => self.write(b"null"),
-            ValueKind::String(ref string) => self.write_string(string),
-            ValueKind::Number(ref number) => self.write_number(number),
-            ValueKind::Bool(true) => self.write(b"true"),
-            ValueKind::Bool(false) => self.write(b"false"),
-            ValueKind::Array(..) => {
+    fn write_json<'a>(&mut self, json: &'a Value<'a>) -> io::Result<()> {
+        match *json {
+            Value::Null => self.write(b"null"),
+            Value::String(ref string) => self.write_string(string),
+            Value::Number(ref number) => self.write_number(number),
+            Value::Bool(true) => self.write(b"true"),
+            Value::Bool(false) => self.write(b"false"),
+            Value::Array(..) => {
                 self.write_char(b'[')?;
                 let mut iter = json.members();
 
@@ -168,7 +167,7 @@ pub trait Generator {
                 self.new_line()?;
                 self.write_char(b']')
             }
-            ValueKind::Object(..) => self.write_object(json),
+            Value::Object(..) => self.write_object(json),
             _ => Ok(()),
         }
     }
@@ -203,7 +202,7 @@ impl Generator for DumpGenerator {
     type T = Vec<u8>;
 
     fn write(&mut self, slice: &[u8]) -> io::Result<()> {
-        extend_from_slice(&mut self.code, slice);
+        self.code.extend_from_slice(slice);
         Ok(())
     }
 
@@ -251,7 +250,7 @@ impl Generator for PrettyGenerator {
 
     #[inline(always)]
     fn write(&mut self, slice: &[u8]) -> io::Result<()> {
-        extend_from_slice(&mut self.code, slice);
+        self.code.extend_from_slice(slice);
         Ok(())
     }
 
@@ -268,7 +267,7 @@ impl Generator for PrettyGenerator {
 
     #[inline(always)]
     fn write_min(&mut self, slice: &[u8], _: u8) -> io::Result<()> {
-        extend_from_slice(&mut self.code, slice);
+        self.code.extend_from_slice(slice);
         Ok(())
     }
 
@@ -370,25 +369,6 @@ where
 
     fn dedent(&mut self) {
         self.dent -= 1;
-    }
-}
-
-// From: https://github.com/dtolnay/fastwrite/blob/master/src/lib.rs#L68
-//
-// LLVM is not able to lower `Vec::extend_from_slice` into a memcpy, so this
-// helps eke out that last bit of performance.
-#[inline]
-fn extend_from_slice(dst: &mut Vec<u8>, src: &[u8]) {
-    let dst_len = dst.len();
-    let src_len = src.len();
-
-    dst.reserve(src_len);
-
-    unsafe {
-        // We would have failed if `reserve` overflowed
-        dst.set_len(dst_len + src_len);
-
-        ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr().add(dst_len), src_len);
     }
 }
 

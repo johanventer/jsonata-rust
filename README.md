@@ -15,9 +15,15 @@ From the JSONata website:
 
 Read the full documentation [here](https://docs.jsonata.org/overview.html), and give it a go in the exerciser environment [here](https://try.jsonata.org).
 
+## Status
+
+This is my first real Rust project, so I'm learning as I go. There's plenty of non-idiomatic code, and currently there's a bunch of core JSONata features that still need to be implemented. There's a TODO section below with a high-level list.
+
+Currently, the implementation passes over 400 of the tests from the JSONata test suite.
+
 ## Goals
 
-This crate implements JSONata in Rust, and as such can take JSON input, parse it, evaluate it against a JSONata expression. There's a few more things I'm working towards:
+This crate implements JSONata in Rust, and as such can take JSON input, parse it, evaluate it against a JSONata expression. There's a few other ideas in here that are in semi-baked state or non-existent:
 
 - A command line utility and REPL
 - WASM bindings to run directly in the browser
@@ -25,14 +31,7 @@ This crate implements JSONata in Rust, and as such can take JSON input, parse it
 - Native Rust function binding and signature support
 - JSONata-compatible JSON output for the AST, as it's often useful to feed the AST of one expression back into another, particularly for tooling like [jsonata-visual-editor](https://github.com/jsonata-ui/jsonata-visual-editor) and being compatible here would help.
 
-Long term, I would like to try implementing a transformation from the AST to bytecode which can be compiled to WASM or perhaps LLVM IR, so that specific JSONata expressions could be run as native code
-outside of the evaluator to provide high-performance and scale.
-
-## Status
-
-This is my first real Rust project, so I'm learning as I go. There's plenty of non-idiomatic code, and currently there's a bunch of core JSONata features that still need to be implemented. There's a TODO section below with a high-level list.
-
-Currently, the implementation passes over 400 of the tests from the JSONata test suite.
+It would be cool if we could transform the AST to bytecode which can be compiled to WASM or perhaps LLVM IR, so that specific JSONata expressions could be run as native code outside of the evaluator to provide high-performance and scale.
 
 ## TODO
 
@@ -42,31 +41,36 @@ There's still a lot left to do.
 
 There are a number of JSONata features which are not yet implemented:
 
-- [ ] Descendents, parents, wildcards - requires ancestory algorithm
-- [ ] Context and index bind variables
-- [ ] Regular expressions
-- [ ] Lots of functions remain unimplemented
-- [ ] Function signature validation
-- [ ] Object transforms
-- [ ] Sorting
-- [ ] Partial function application
+- Descendents, parents, wildcards - requires ancestory algorithm
+- Context and index bind variables
+- Regular expressions
+- Lots of functions remain unimplemented
+- Function signature validation
+- Object transforms
+- Sorting
+- Partial function application
 
 ### Code issues
 
 There's a bunch of issues with the code - I'm learning Rust as I go, so as I learn more, the code improves. However, here's some issues I know about:
 
-- [ ] Bumpalo-based value arena leaks arrays
-- [ ] Bumpalo arena should be per evaluation, and reset between evaluations
-- [ ] Code is too spaghetti in some places, needs to be more Rust-idiomatic
-- [ ] There's a lot of code that's not very efficient, lots of opportunities for optimization
-- [ ] Function signature code is not very good, both the parsing and the macro
+- I've tried to implement structural sharing of the input and the output values, with the minimal number of heap allocations. This was a lot of effort working out the lifetimes, but I'm not actually sure it was worth it.
+- Currently using the same JsonAta for performing multiple evaluations will be additive in terms of memory - the original result and input are tied to the lifetime of JsonAta, so reusing it just keeps using memory in the arena.
+- Code is too spaghetti in some places, needs to be more Rust-idiomatic
+- There's a lot of code that's not very efficient, lots of opportunities for optimization
+- Function signature code is not very good, both the parsing and the macro - I had never written a proc-macro before and just ended up emitting a lot of strings of code, which is probably bad form.
 
 ### Tests
 
-There's a couple of missing things in the test suite tests which run the JSONata test suite:
+There's a couple of missing things in the testsuite tests which run the JSONata test suite, namely the time limit and depth test case options.
 
-- [ ] Implement time limit
-- [ ] Implement depth
+That being said, it passes over 400 of the JSONata tests, you can run them like this:
+
+```bash
+cargo test testsuite
+```
+
+In `tests/testsuite/groups` are the tests groups that are passing, while `tests/testsuite/skip` contains the groups that still require feature implementation.
 
 ### Benchmarks
 
@@ -75,7 +79,7 @@ In particular, I would like to make use of [criterion](https://docs.rs/criterion
 
 It would also be good to benchmark against Javascript JSONata, but I fear this version will never
 compete in the browser environment because of the JSON parsing/stringification on the way in and out.
-However, it might be possible to compare the evaluation time directly without that.
+However, it might be possible to compare the evaluation time directly in Node, if we make sure to give Node some JIT warmup to make it fair.
 
 ## License
 
