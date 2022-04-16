@@ -675,12 +675,12 @@ impl<'a> Evaluator<'a> {
         frame: &Frame<'a>,
     ) -> Result<&'a Value<'a>> {
         let result = Value::array(self.arena, ArrayFlags::SEQUENCE);
-        let input = Value::wrap_in_array_if_needed(self.arena, input, ArrayFlags::empty()).as_ptr();
+        let input = Value::wrap_in_array_if_needed(self.arena, input, ArrayFlags::empty());
 
         let get_index = |n: f64| {
             let mut index = n.floor() as isize;
-            let length = if input.as_ref(self.arena).is_array() {
-                input.as_ref(self.arena).len() as isize
+            let length = if input.is_array() {
+                input.len() as isize
             } else {
                 1
             };
@@ -695,7 +695,7 @@ impl<'a> Evaluator<'a> {
             AstKind::Filter(ref filter) => match filter.kind {
                 AstKind::Number(n) => {
                     let index = get_index(n.into());
-                    let item = input.as_ref(self.arena).get_member(index as usize);
+                    let item = input.get_member(index as usize);
                     if !item.is_undefined() {
                         if item.is_array() {
                             return Ok(item);
@@ -705,7 +705,7 @@ impl<'a> Evaluator<'a> {
                     }
                 }
                 _ => {
-                    for (i, item) in input.as_ref(self.arena).members().enumerate() {
+                    for (i, item) in input.members().enumerate() {
                         let mut index = self.evaluate(filter, item, frame)?;
                         if index.is_number() && !index.is_nan() {
                             index = Value::wrap_in_array(self.arena, index, ArrayFlags::empty());

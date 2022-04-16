@@ -1,6 +1,5 @@
 use std::io;
 use std::io::Write;
-use std::ptr;
 
 use super::number::Number;
 use super::util::print_dec;
@@ -203,7 +202,7 @@ impl Generator for DumpGenerator {
     type T = Vec<u8>;
 
     fn write(&mut self, slice: &[u8]) -> io::Result<()> {
-        extend_from_slice(&mut self.code, slice);
+        self.code.extend_from_slice(slice);
         Ok(())
     }
 
@@ -251,7 +250,7 @@ impl Generator for PrettyGenerator {
 
     #[inline(always)]
     fn write(&mut self, slice: &[u8]) -> io::Result<()> {
-        extend_from_slice(&mut self.code, slice);
+        self.code.extend_from_slice(slice);
         Ok(())
     }
 
@@ -268,7 +267,7 @@ impl Generator for PrettyGenerator {
 
     #[inline(always)]
     fn write_min(&mut self, slice: &[u8], _: u8) -> io::Result<()> {
-        extend_from_slice(&mut self.code, slice);
+        self.code.extend_from_slice(slice);
         Ok(())
     }
 
@@ -370,25 +369,6 @@ where
 
     fn dedent(&mut self) {
         self.dent -= 1;
-    }
-}
-
-// From: https://github.com/dtolnay/fastwrite/blob/master/src/lib.rs#L68
-//
-// LLVM is not able to lower `Vec::extend_from_slice` into a memcpy, so this
-// helps eke out that last bit of performance.
-#[inline]
-fn extend_from_slice(dst: &mut Vec<u8>, src: &[u8]) {
-    let dst_len = dst.len();
-    let src_len = src.len();
-
-    dst.reserve(src_len);
-
-    unsafe {
-        // We would have failed if `reserve` overflowed
-        dst.set_len(dst_len + src_len);
-
-        ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr().add(dst_len), src_len);
     }
 }
 

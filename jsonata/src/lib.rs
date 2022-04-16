@@ -10,7 +10,7 @@ pub mod tokenizer;
 pub mod value;
 
 pub use jsonata_errors::{Error, Result};
-pub use value::{Value, ValuePtr};
+pub use value::Value;
 
 use bumpalo::Bump;
 

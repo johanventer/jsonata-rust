@@ -312,7 +312,7 @@ fn process_order_by(char_index: usize, lhs: &mut Box<Ast>, rhs: &mut SortTerms) 
     Ok(result)
 }
 
-fn process_function(proc: &mut Box<Ast>, args: &mut Vec<Ast>) -> Result<()> {
+fn process_function(proc: &mut Box<Ast>, args: &mut [Ast]) -> Result<()> {
     *proc = Box::new(process_ast(std::mem::take(&mut *proc))?);
     for arg in args.iter_mut() {
         *arg = process_ast(std::mem::take(arg))?;

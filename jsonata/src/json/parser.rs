@@ -371,7 +371,7 @@ impl<'source, 'arena> Parser<'source, 'arena> {
 
     // Check if we are at the end of the source.
     #[inline(always)]
-    fn is_eof(&mut self) -> bool {
+    fn is_eof(&self) -> bool {
         self.index == self.length
     }
 

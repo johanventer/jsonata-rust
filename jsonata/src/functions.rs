@@ -90,7 +90,7 @@ pub fn fn_append_internal<'a, 'e>(
         context.arena,
         arg1_len + arg2_len,
         if arg1.is_array() {
-            arg1.as_ptr().as_ref(context.arena).get_flags()
+            arg1.get_flags()
         } else {
             ArrayFlags::SEQUENCE
         },

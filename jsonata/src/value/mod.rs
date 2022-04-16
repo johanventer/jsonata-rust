@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::fmt;
 use std::ops::Index;
 
 use bitflags::bitflags;
@@ -59,10 +58,6 @@ pub enum Value<'a> {
 
 #[allow(clippy::mut_from_ref)]
 impl<'a> Value<'a> {
-    pub fn as_ptr(&'a self) -> ValuePtr {
-        ValuePtr(unsafe { std::mem::transmute::<&'a Value<'a>, &'static Value<'static>>(self) })
-    }
-
     pub fn undefined() -> &'a Value<'a> {
         unsafe { std::mem::transmute::<&Value<'static>, &'a Value<'a>>(&UNDEFINED) }
     }
@@ -514,7 +509,7 @@ impl std::fmt::Debug for Value<'_> {
         match self {
             Self::Undefined => write!(f, "undefined"),
             Self::Null => write!(f, "null"),
-            Self::Number(n) => write!(f, "{}", n.to_string()),
+            Self::Number(n) => write!(f, "{}", n),
             Self::Bool(b) => write!(f, "{}", if *b { "true" } else { "false" }),
             Self::String(s) => write!(f, "\"{}\"", s),
             Self::Array(a, _) => write!(f, "<array({})>", a.len()),
@@ -533,45 +528,3 @@ impl std::fmt::Debug for Value<'_> {
         }
     }
 }
-
-#[derive(Clone, Copy)]
-pub struct ValuePtr(*const Value<'static>);
-
-impl ValuePtr {
-    pub fn as_ref<'a>(&self, _arena: &'a Bump) -> &'a Value<'a> {
-        unsafe { std::mem::transmute::<&'a Value<'static>, &'a Value<'a>>(&*self.0) }
-    }
-}
-
-impl std::fmt::Debug for ValuePtr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unsafe { (*self.0).fmt(f) }
-    }
-}
-
-// impl PartialEq<ValuePtr> for ValuePtr {
-//     fn eq(&self, other: &ValuePtr) -> bool {
-//         match unsafe { &*self.0 } {
-//             Value::Array(..) => {
-//                 if other.as_ref().is_array() && other.as_ref().len() == self.as_ref().len() {
-//                     self.as_ref()
-//                         .members()
-//                         .zip(other.as_ref().members())
-//                         .all(|(l, r)| l == r)
-//                 } else {
-//                     false
-//                 }
-//             }
-//             Value::Object(..) => {
-//                 if other.as_ref().is_object() {
-//                     self.as_ref()
-//                         .entries()
-//                         .all(|(k, v)| *v == other.as_ref().get_entry(k))
-//                 } else {
-//                     false
-//                 }
-//             }
-//             _ => unsafe { self.as_ref() == other.as_ref() },
-//         }
-//     }
-// }
