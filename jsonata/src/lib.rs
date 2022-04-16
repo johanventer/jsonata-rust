@@ -20,14 +20,14 @@ use frame::Frame;
 use functions::*;
 use value::ArrayFlags;
 
-pub struct JsonAta {
+pub struct JsonAta<'a> {
     ast: Ast,
-    frame: Frame,
+    frame: Frame<'a>,
     arena: Bump,
 }
 
-impl JsonAta {
-    pub fn new(expr: &str) -> Result<JsonAta> {
+impl<'a> JsonAta<'a> {
+    pub fn new(expr: &str) -> Result<JsonAta<'a>> {
         Ok(Self {
             ast: parser::parse(expr)?,
             frame: Frame::new(),
@@ -39,11 +39,14 @@ impl JsonAta {
         &self.ast
     }
 
-    pub fn assign_var(&self, name: &str, value: ValuePtr) {
+    pub fn assign_var<'other>(&'other self, name: &str, value: &'other Value<'other>)
+    where
+        'other: 'a,
+    {
         self.frame.bind(name, value)
     }
 
-    pub fn evaluate<'a>(&'a self, input: Option<&str>) -> Result<&'a Value<'a>> {
+    pub fn evaluate(&'a self, input: Option<&str>) -> Result<&'a Value<'a>> {
         let input = match input {
             Some(input) => json::parse(input, &self.arena).unwrap(),
             None => Value::undefined(),
@@ -58,12 +61,11 @@ impl JsonAta {
 
         macro_rules! bind {
             ($name:literal, $new:ident, $fn:ident) => {
-                self.frame
-                    .bind($name, Value::$new(&self.arena, $name, $fn).as_ptr());
+                self.frame.bind($name, Value::$new(&self.arena, $name, $fn));
             };
         }
 
-        self.frame.bind("$", input.as_ptr());
+        self.frame.bind("$", input);
         bind!("lookup", nativefn2, fn_lookup);
         bind!("append", nativefn2, fn_append);
         bind!("boolean", nativefn1, fn_boolean);

@@ -13,7 +13,7 @@ pub struct FunctionContext<'a, 'e> {
     pub name: &'a str,
     pub char_index: usize,
     pub input: &'a Value<'a>,
-    pub frame: Frame,
+    pub frame: Frame<'a>,
     pub evaluator: &'e Evaluator<'a>,
     pub arena: &'a Bump,
 }

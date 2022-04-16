@@ -23,7 +23,7 @@ impl<'a> Evaluator<'a> {
         name: &'a str,
         char_index: usize,
         input: &'a Value<'a>,
-        frame: &Frame,
+        frame: &Frame<'a>,
     ) -> FunctionContext<'a, 'e> {
         FunctionContext {
             name,
@@ -39,7 +39,7 @@ impl<'a> Evaluator<'a> {
         &self,
         node: &Ast,
         input: &'a Value<'a>,
-        frame: &Frame,
+        frame: &Frame<'a>,
     ) -> Result<&'a Value<'a>> {
         let mut result = match node.kind {
             AstKind::Null => Value::null(self.arena),
@@ -104,7 +104,7 @@ impl<'a> Evaluator<'a> {
         &self,
         exprs: &[Ast],
         input: &'a Value<'a>,
-        frame: &Frame,
+        frame: &Frame<'a>,
     ) -> Result<&'a Value<'a>> {
         let frame = Frame::new_with_parent(frame);
         if exprs.is_empty() {
@@ -123,7 +123,7 @@ impl<'a> Evaluator<'a> {
         &self,
         name: &str,
         input: &'a Value<'a>,
-        frame: &Frame,
+        frame: &Frame<'a>,
     ) -> Result<&'a Value<'a>> {
         Ok(if name.is_empty() {
             if input.has_flags(ArrayFlags::WRAPPED) {
@@ -132,7 +132,7 @@ impl<'a> Evaluator<'a> {
                 input
             }
         } else if let Some(value) = frame.lookup(name) {
-            value.as_ref(self.arena)
+            value
         } else {
             Value::undefined()
         })
@@ -143,7 +143,7 @@ impl<'a> Evaluator<'a> {
         node: &Ast,
         op: &UnaryOp,
         input: &'a Value<'a>,
-        frame: &Frame,
+        frame: &Frame<'a>,
     ) -> Result<&'a Value<'a>> {
         match *op {
             UnaryOp::Minus(ref value) => {
@@ -191,7 +191,7 @@ impl<'a> Evaluator<'a> {
         char_index: usize,
         object: &[(Ast, Ast)],
         input: &'a Value<'a>,
-        frame: &Frame,
+        frame: &Frame<'a>,
     ) -> Result<&'a Value<'a>> {
         struct Group<'a> {
             pub data: &'a Value<'a>,
@@ -260,12 +260,12 @@ impl<'a> Evaluator<'a> {
         lhs_ast: &Ast,
         rhs_ast: &Ast,
         input: &'a Value<'a>,
-        frame: &Frame,
+        frame: &Frame<'a>,
     ) -> Result<&'a Value<'a>> {
         if *op == BinaryOp::Bind {
             if let AstKind::Var(ref name) = lhs_ast.kind {
                 let rhs = self.evaluate(rhs_ast, input, frame)?;
-                frame.bind(name, rhs.as_ptr());
+                frame.bind(name, rhs);
                 return Ok(rhs);
             }
             unreachable!()
@@ -533,7 +533,7 @@ impl<'a> Evaluator<'a> {
         truthy: &Ast,
         falsy: Option<&Ast>,
         input: &'a Value<'a>,
-        frame: &Frame,
+        frame: &Frame<'a>,
     ) -> Result<&'a Value<'a>> {
         let cond = self.evaluate(cond, input, frame)?;
         if cond.is_truthy() {
@@ -550,7 +550,7 @@ impl<'a> Evaluator<'a> {
         node: &Ast,
         steps: &[Ast],
         input: &'a Value<'a>,
-        frame: &Frame,
+        frame: &Frame<'a>,
     ) -> Result<&'a Value<'a>> {
         let mut input = if input.is_array() && !matches!(steps[0].kind, AstKind::Var(..)) {
             input
@@ -599,7 +599,7 @@ impl<'a> Evaluator<'a> {
         &self,
         step: &Ast,
         input: &'a Value<'a>,
-        frame: &Frame,
+        frame: &Frame<'a>,
         last_step: bool,
     ) -> Result<&'a Value<'a>> {
         if let AstKind::Sort(ref sorts) = step.kind {
@@ -654,7 +654,7 @@ impl<'a> Evaluator<'a> {
         &self,
         _sorts: &[(Ast, bool)],
         _inputt: &'a Value<'a>,
-        _frame: &Frame,
+        _frame: &Frame<'a>,
     ) -> Result<&'a Value<'a>> {
         unimplemented!("Sorts not yet implemented")
     }
@@ -663,7 +663,7 @@ impl<'a> Evaluator<'a> {
         &self,
         _stages: &[Ast],
         _input: &'a Value<'a>,
-        _frame: &Frame,
+        _frame: &Frame<'a>,
     ) -> Result<&'a Value<'a>> {
         unimplemented!("Stages not yet implemented")
     }
@@ -672,7 +672,7 @@ impl<'a> Evaluator<'a> {
         &self,
         node: &Ast,
         input: &'a Value<'a>,
-        frame: &Frame,
+        frame: &Frame<'a>,
     ) -> Result<&'a Value<'a>> {
         let result = Value::array(self.arena, ArrayFlags::SEQUENCE);
         let input = Value::wrap_in_array_if_needed(self.arena, input, ArrayFlags::empty()).as_ptr();
@@ -736,7 +736,7 @@ impl<'a> Evaluator<'a> {
         proc: &Ast,
         args: &[Ast],
         _is_partial: bool,
-        frame: &Frame,
+        frame: &Frame<'a>,
         context: Option<&'a Value<'a>>,
     ) -> Result<&'a Value<'a>> {
         let evaluated_proc = self.evaluate(proc, input, frame)?;
@@ -820,7 +820,7 @@ impl<'a> Evaluator<'a> {
         input: &'a Value<'a>,
         evaluated_proc: &'a Value<'a>,
         evaluated_args: &'a Value<'a>,
-        frame: &Frame,
+        frame: &Frame<'a>,
     ) -> Result<&'a Value<'a>> {
         match evaluated_proc {
             Value::Lambda {
@@ -836,7 +836,7 @@ impl<'a> Evaluator<'a> {
                     // Bind the arguments to their respective names
                     for (index, arg) in args.iter().enumerate() {
                         if let AstKind::Var(ref name) = arg.kind {
-                            frame.bind(name, evaluated_args.get_member(index).as_ptr());
+                            frame.bind(name, evaluated_args.get_member(index));
                         } else {
                             unreachable!()
                         }

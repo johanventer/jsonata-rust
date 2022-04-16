@@ -64,7 +64,7 @@ fn t(resource: &str) {
             Ok(jsonata) => {
                 if case["bindings"].is_object() {
                     for (key, value) in case["bindings"].entries() {
-                        jsonata.assign_var(key, value.as_ptr());
+                        jsonata.assign_var(key, from(value, &arena));
                     }
                 }
 
@@ -78,7 +78,6 @@ fn t(resource: &str) {
 
                 match result {
                     Ok(result) => {
-                        // TODO: Figure out why this from method is necessary. Lifetimes, oh lifetimes...
                         let expected_result = from(&case["result"], &arena);
 
                         if case["undefinedResult"] == true {

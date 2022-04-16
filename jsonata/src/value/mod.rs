@@ -35,7 +35,7 @@ pub enum Value<'a> {
     Lambda {
         ast: *const Ast,
         input: &'a Value<'a>,
-        frame: Frame,
+        frame: Frame<'a>,
     },
     NativeFn0(String, fn(FunctionContext<'a, '_>) -> Result<&'a Value<'a>>),
     NativeFn1(
@@ -103,7 +103,7 @@ impl<'a> Value<'a> {
         arena: &'a Bump,
         node: &Ast,
         input: &'a Value<'a>,
-        frame: Frame,
+        frame: Frame<'a>,
     ) -> &'a mut Value<'a> {
         arena.alloc(Value::Lambda {
             ast: node,
