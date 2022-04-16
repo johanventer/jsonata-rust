@@ -55,8 +55,7 @@ There are a number of JSONata features which are not yet implemented:
 
 There's a bunch of issues with the code - I'm learning Rust as I go, so as I learn more, the code improves. However, here's some issues I know about:
 
-- [ ] Bumpalo-based value arena leaks arrays
-- [ ] Bumpalo arena should be per evaluation, and reset between evaluations
+- [ ] Currently using the same JsonAta for performing multiple evaluations will be additive in terms of memory - the original result and input are tied to the lifetime of JsonAta, so reusing it just keeps using memory in the arena.
 - [ ] Code is too spaghetti in some places, needs to be more Rust-idiomatic
 - [ ] There's a lot of code that's not very efficient, lots of opportunities for optimization
 - [ ] Function signature code is not very good, both the parsing and the macro

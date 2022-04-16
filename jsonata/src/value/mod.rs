@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::ops::Index;
 
 use bitflags::bitflags;
+use bumpalo::boxed::Box;
 use bumpalo::Bump;
 use hashbrown::HashMap;
 
@@ -35,8 +36,8 @@ pub enum Value<'a> {
     Number(Number),
     Bool(bool),
     String(String),
-    Array(Vec<&'a Value<'a>>, ArrayFlags),
-    Object(HashMap<String, &'a Value<'a>>),
+    Array(Box<'a, Vec<&'a Value<'a>>>, ArrayFlags),
+    Object(Box<'a, HashMap<String, &'a Value<'a>>>),
     Lambda {
         ast: Ast,
         input: &'a Value<'a>,
@@ -87,19 +88,25 @@ impl<'a> Value<'a> {
     }
 
     pub fn array(arena: &Bump, flags: ArrayFlags) -> &mut Value {
-        arena.alloc(Value::Array(Vec::new(), flags))
+        arena.alloc(Value::Array(Box::new_in(Vec::new(), arena), flags))
     }
 
     pub fn array_with_capacity(arena: &Bump, capacity: usize, flags: ArrayFlags) -> &mut Value {
-        arena.alloc(Value::Array(Vec::with_capacity(capacity), flags))
+        arena.alloc(Value::Array(
+            Box::new_in(Vec::with_capacity(capacity), arena),
+            flags,
+        ))
     }
 
     pub fn object(arena: &Bump) -> &mut Value {
-        arena.alloc(Value::Object(HashMap::new()))
+        arena.alloc(Value::Object(Box::new_in(HashMap::new(), arena)))
     }
 
     pub fn object_with_capacity(arena: &Bump, capacity: usize) -> &mut Value {
-        arena.alloc(Value::Object(HashMap::with_capacity(capacity)))
+        arena.alloc(Value::Object(Box::new_in(
+            HashMap::with_capacity(capacity),
+            arena,
+        )))
     }
 
     pub fn lambda(
@@ -368,7 +375,7 @@ impl<'a> Value<'a> {
         value: &'a Value<'a>,
         flags: ArrayFlags,
     ) -> &'a Value<'a> {
-        arena.alloc(Value::Array(vec![value], flags))
+        arena.alloc(Value::Array(Box::new_in(vec![value], arena), flags))
     }
 
     pub fn wrap_in_array_if_needed(
@@ -399,7 +406,10 @@ impl<'a> Value<'a> {
 
     pub fn clone_array_with_flags(&self, arena: &'a Bump, flags: ArrayFlags) -> &'a Value<'a> {
         match *self {
-            Value::Array(ref array, _) => arena.alloc(Value::Array(array.clone(), flags)),
+            Value::Array(ref array, _) => arena.alloc(Value::Array(
+                Box::new_in(array.as_ref().clone(), arena),
+                flags,
+            )),
             _ => panic!("Not an array"),
         }
     }
