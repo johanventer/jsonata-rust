@@ -84,8 +84,6 @@ impl<'a> JsonAta<'a> {
         bind!("sum", nativefn1, fn_sum);
 
         let chain_ast = parser::parse("function($f, $g) { function($x){ $g($f($x)) } }")?;
-
-        // TODO: FIX THIS CRAP
         let evaluator = Evaluator::new(chain_ast, &self.arena);
         evaluator.evaluate(&self.ast, input, &self.frame)
     }
