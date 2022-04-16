@@ -778,15 +778,17 @@ impl<'a> Evaluator<'a> {
         // Trampoline loop for tail-call optimization
         // TODO: This loop needs help
         while let Value::Lambda {
-            ast,
+            ref ast,
             input: lambda_input,
             frame: ref lambda_frame,
             ..
         } = result
         {
             if let AstKind::Lambda {
-                body, thunk: true, ..
-            } = unsafe { &(**ast).kind }
+                ref body,
+                thunk: true,
+                ..
+            } = ast.kind
             {
                 if let AstKind::Function {
                     ref proc, ref args, ..
@@ -824,12 +826,15 @@ impl<'a> Evaluator<'a> {
     ) -> Result<&'a Value<'a>> {
         match evaluated_proc {
             Value::Lambda {
-                ast,
+                ref ast,
                 ref frame,
                 input,
                 ..
             } => {
-                if let AstKind::Lambda { body, args, .. } = unsafe { &(**ast).kind } {
+                if let AstKind::Lambda {
+                    ref body, ref args, ..
+                } = ast.kind
+                {
                     // Create a new frame for use in the lambda, so it can have locals
                     let frame = Frame::new_with_parent(frame);
 

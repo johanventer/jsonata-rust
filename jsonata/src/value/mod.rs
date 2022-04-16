@@ -23,6 +23,12 @@ bitflags! {
 
 pub const UNDEFINED: Value = Value::Undefined;
 
+/// The core value type for input, output and evaluation. There's a lot of lifetimes here to avoid
+/// cloning any part of the input that should be kept in the output, avoiding heap allocations for
+/// every Value, and allowing structural sharing.
+///
+/// Values are all allocated in a Bump arena, making them contiguous in memory and further avoiding
+/// heap allocations for every one.
 pub enum Value<'a> {
     Undefined,
     Null,
@@ -32,7 +38,7 @@ pub enum Value<'a> {
     Array(Vec<&'a Value<'a>>, ArrayFlags),
     Object(HashMap<String, &'a Value<'a>>),
     Lambda {
-        ast: *const Ast,
+        ast: Ast,
         input: &'a Value<'a>,
         frame: Frame<'a>,
     },
@@ -59,6 +65,8 @@ pub enum Value<'a> {
 #[allow(clippy::mut_from_ref)]
 impl<'a> Value<'a> {
     pub fn undefined() -> &'a Value<'a> {
+        // TODO: SAFETY: The UNDEFINED const is Value<'static>, and doesn't reference any other Values,
+        // so there shouldn't be an issue casting it Value<'a>, right?
         unsafe { std::mem::transmute::<&Value<'static>, &'a Value<'a>>(&UNDEFINED) }
     }
 
@@ -101,7 +109,7 @@ impl<'a> Value<'a> {
         frame: Frame<'a>,
     ) -> &'a mut Value<'a> {
         arena.alloc(Value::Lambda {
-            ast: node,
+            ast: node.clone(),
             input,
             frame,
         })
@@ -259,7 +267,7 @@ impl<'a> Value<'a> {
     pub fn arity(&self) -> usize {
         match *self {
             Value::Lambda { ref ast, .. } => {
-                if let AstKind::Lambda { args, .. } = unsafe { &(**ast).kind } {
+                if let AstKind::Lambda { ref args, .. } = ast.kind {
                     args.len()
                 } else {
                     0
