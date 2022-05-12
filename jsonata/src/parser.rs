@@ -265,7 +265,7 @@ mod tests {
         )
     "# ; "complex expression"
     )]
-    fn parser_tests(source: &str) -> Result<Ast> {
-        parse(source)
+    fn parser_tests(source: &str) {
+        let _ = parse(source);
     }
 }
