@@ -20,7 +20,7 @@ const NAN_MASK: u8 = !1;
 /// equality operator with another number type.
 ///
 /// ```
-/// # use json::number::Number;
+/// # use jsonata::json::number::Number;
 /// let foo: Number = 3.14.into();
 /// let bar: f64 = foo.into();
 ///
@@ -50,7 +50,7 @@ impl Number {
     /// Construct a new `Number` from parts. This can't create a NaN value.
     ///
     /// ```
-    /// # use json::number::Number;
+    /// # use jsonata::json::number::Number;
     /// let pi = unsafe { Number::from_parts_unchecked(true, 3141592653589793, -15) };
     ///
     /// assert_eq!(pi, 3.141592653589793);
@@ -73,7 +73,7 @@ impl Number {
     /// This can't create a NaN value.
     ///
     /// ```
-    /// # use json::number::Number;
+    /// # use jsonata::json::number::Number;
     /// let one = Number::from_parts(true, 1000, -3);
     /// let (positive, mantissa, exponent) = one.as_parts();
     ///
@@ -93,7 +93,7 @@ impl Number {
     /// Reverse to `from_parts` - obtain parts from an existing `Number`.
     ///
     /// ```
-    /// # use json::number::Number;
+    /// # use jsonata::json::number::Number;
     /// let pi = Number::from(3.141592653589793);
     /// let (positive, mantissa, exponent) = pi.as_parts();
     ///
@@ -134,7 +134,7 @@ impl Number {
     /// Will return `None` if `Number` is negative or a NaN.
     ///
     /// ```
-    /// # use json::number::Number;
+    /// # use jsonata::json::number::Number;
     /// let price_a = Number::from(5.99);
     /// let price_b = Number::from(7);
     /// let price_c = Number::from(10.2);
@@ -164,7 +164,7 @@ impl Number {
     /// `i64`, properly handling negative numbers.
     ///
     /// ```
-    /// # use json::number::Number;
+    /// # use jsonata::json::number::Number;
     /// let balance_a = Number::from(-1.49);
     /// let balance_b = Number::from(42);
     ///

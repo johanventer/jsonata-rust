@@ -88,6 +88,22 @@ fn t(resource: &str) {
                                 f64::abs(expected_result.as_f64() - result.as_f64())
                                     <= f64::EPSILON
                             );
+                        } else if case["unordered"] == true {
+                            // Some test cases specify that the expected array result can be unordered
+                            // because the order is implementation dependent. To implement that here
+                            // we do a pretty bad O(n^2) just to see if the test passes.
+                            assert!(expected_result.is_array());
+                            assert!(result.is_array());
+                            for expected_member in expected_result.members() {
+                                let mut found = false;
+                                for member in result.members() {
+                                    if member == expected_member {
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                                assert!(found);
+                            }
                         } else {
                             assert_eq!(result, expected_result);
                         }

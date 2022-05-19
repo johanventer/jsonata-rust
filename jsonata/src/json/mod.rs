@@ -1,5 +1,5 @@
 pub mod codegen;
-mod number;
+pub mod number;
 mod parser;
 mod util;
 

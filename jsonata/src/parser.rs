@@ -202,39 +202,39 @@ mod tests {
     #[test_case(
         "Customer.Email ~> $substringAfter(\"@\") ~> $substringBefore(\".\") ~> $uppercase()" ; "function application"
     )]
-    #[test_case(
-        r#"
-        Account.Order.Product.{
-          'Product': `Product Name`,
-          'Order': %.OrderID,
-          'Account': %.%.`Account Name`
-        }
-    "# ; "parent operator"
-    )]
-    #[test_case(
-        r#"
-        library.books#$i['Kernighan' in authors].{
-          'title': title,
-          'index': $i
-        }
-    "# ; "context variables 1"
-    )]
-    #[test_case(
-        r#"
-        library.loans@$l.books@$b[$l.isbn=$b.isbn].{
-          'title': $b.title,
-          'customer': $l.customer
-        }
-    "# ; "context variables 2"
-    )]
-    #[test_case(
-        r#"
-        (library.loans)@$l.(catalog.books)@$b[$l.isbn=$b.isbn].{
-          'title': $b.title,
-          'customer': $l.customer
-        }
-    "# ; "context variables 3"
-    )]
+    // #[test_case(
+    //     r#"
+    //     Account.Order.Product.{
+    //       'Product': `Product Name`,
+    //       'Order': %.OrderID,
+    //       'Account': %.%.`Account Name`
+    //     }
+    // "# ; "parent operator"
+    // )]
+    // #[test_case(
+    //     r#"
+    //     library.books#$i['Kernighan' in authors].{
+    //       'title': title,
+    //       'index': $i
+    //     }
+    // "# ; "context variables 1"
+    // )]
+    // #[test_case(
+    //     r#"
+    //     library.loans@$l.books@$b[$l.isbn=$b.isbn].{
+    //       'title': $b.title,
+    //       'customer': $l.customer
+    //     }
+    // "# ; "context variables 2"
+    // )]
+    // #[test_case(
+    //     r#"
+    //     (library.loans)@$l.(catalog.books)@$b[$l.isbn=$b.isbn].{
+    //       'title': $b.title,
+    //       'customer': $l.customer
+    //     }
+    // "# ; "context variables 3"
+    // )]
     #[test_case("payload ~> |Account.Order.Product|{'Price': Price * 1.2}|" ; "object transform 1")]
     #[test_case("$ ~> |Account.Order.Product|{'Total': Price * Quantity}, ['Price', 'Quantity']|" ; "object transform 2")]
     #[test_case(
