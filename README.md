@@ -25,11 +25,11 @@ Currently, the implementation passes over 400 of the tests from the JSONata test
 
 This crate implements JSONata in Rust, and as such can take JSON input, parse it, evaluate it against a JSONata expression. There's a few other ideas in here that are in semi-baked state or non-existent:
 
-- A command line utility and REPL
-- WASM bindings to run directly in the browser
-- Function signature declarative macro supporting JSONata's signature syntax
-- Native Rust function binding and signature support
-- JSONata-compatible JSON output for the AST, as it's often useful to feed the AST of one expression back into another, particularly for tooling like [jsonata-visual-editor](https://github.com/jsonata-ui/jsonata-visual-editor) and being compatible here would help.
+- A command line utility and REPL (semi-baked)
+- WASM bindings to run directly in the browser (semi-baked)
+- Function signature declarative macro supporting JSONata's signature syntax (semi-baked)
+- Native Rust function binding and signature support (semi-baked)
+- JSONata-compatible JSON output for the AST, as it's often useful to feed the AST of one expression back into another, particularly for tooling like [jsonata-visual-editor](https://github.com/jsonata-ui/jsonata-visual-editor) and being compatible here would help (non-existent)
 
 It would be cool if we could transform the AST to bytecode which can be compiled to WASM or perhaps LLVM IR, so that specific JSONata expressions could be run as native code outside of the evaluator to provide high-performance and scale.
 
@@ -41,7 +41,7 @@ There's still a lot left to do.
 
 There are a number of JSONata features which are not yet implemented:
 
-- Descendents, parents, wildcards - requires ancestory algorithm
+- Descendents and parents which require implementing the compile-time static analysis ancestory algorithm
 - Context and index bind variables
 - Regular expressions
 - Lots of functions remain unimplemented
