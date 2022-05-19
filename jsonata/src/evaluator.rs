@@ -70,6 +70,7 @@ impl<'a> Evaluator<'a> {
                 is_partial,
                 ..
             } => self.evaluate_function(input, proc, args, is_partial, frame, None)?,
+            AstKind::Wildcard => self.evaluate_wildcard(node, input, frame)?,
             _ => unimplemented!("TODO: node kind not yet supported: {:#?}", node.kind),
         };
 
@@ -726,6 +727,39 @@ impl<'a> Evaluator<'a> {
             },
             _ => unimplemented!("Filters other than numbers are not yet supported"),
         };
+
+        Ok(result)
+    }
+
+    pub fn evaluate_wildcard(
+        &self,
+        node: &Ast,
+        input: &'a Value<'a>,
+        frame: &Frame<'a>,
+    ) -> Result<&'a Value<'a>> {
+        let mut result = Value::array(self.arena, ArrayFlags::SEQUENCE);
+
+        let input = if input.is_array() && input.has_flags(ArrayFlags::WRAPPED) && !input.is_empty()
+        {
+            input.get_member(0)
+        } else {
+            input
+        };
+
+        if input.is_object() {
+            for (_key, value) in input.entries() {
+                if value.is_array() {
+                    let value = value.flatten(self.arena);
+                    result = fn_append_internal(
+                        self.fn_context("append", node.char_index, input, frame),
+                        result,
+                        value,
+                    );
+                } else {
+                    result.push(value)
+                }
+            }
+        }
 
         Ok(result)
     }
