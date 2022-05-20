@@ -582,3 +582,33 @@ pub fn fn_sum<'a, 'e>(
     }
     Ok(Value::number(context.arena, sum))
 }
+
+pub fn fn_number<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    let arg = args[0];
+
+    match arg {
+        Value::Undefined => Ok(Value::undefined()),
+        Value::Number(..) => Ok(arg),
+        Value::Bool(true) => Ok(Value::number(context.arena, 1)),
+        Value::Bool(false) => Ok(Value::number(context.arena, 0)),
+        Value::String(s) => {
+            let result: f64 = s
+                .parse()
+                .map_err(|_e| Error::D3030NonNumericCast(context.char_index, arg.dump()))?;
+
+            if !result.is_nan() && !result.is_infinite() {
+                Ok(Value::number(context.arena, result))
+            } else {
+                Ok(Value::undefined())
+            }
+        }
+        _ => Err(Error::T0410ArgumentNotValid(
+            context.char_index,
+            1,
+            context.name.to_string(),
+        )),
+    }
+}

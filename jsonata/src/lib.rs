@@ -89,10 +89,12 @@ impl<'a> JsonAta<'a> {
         bind_native!("max", 1, fn_max);
         bind_native!("min", 1, fn_min);
         bind_native!("not", 1, fn_not);
+        bind_native!("number", 1, fn_number);
         bind_native!("string", 1, fn_string);
         bind_native!("substring", 3, fn_substring);
         bind_native!("sum", 1, fn_sum);
         bind_native!("uppercase", 1, fn_uppercase);
+        
 
         let chain_ast = Some(parser::parse(
             "function($f, $g) { function($x){ $g($f($x)) } }",

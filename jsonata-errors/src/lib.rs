@@ -28,6 +28,7 @@ pub enum Error {
     D1002NegatingNonNumeric(usize, String),
     D1009MultipleKeys(usize, String),
     D2014RangeOutOfBounds(usize, usize),
+    D3030NonNumericCast(usize, String),
 
     // Type errors
     T0410ArgumentNotValid(usize, usize, String),
@@ -90,6 +91,7 @@ impl Error {
             Error::D1002NegatingNonNumeric(..) => "D1002",
             Error::D1009MultipleKeys(..) => "D1009",
             Error::D2014RangeOutOfBounds(..) => "D2014",
+            Error::D3030NonNumericCast(..) => "D3030",
 
             // Type errors
             Error::T0410ArgumentNotValid(..) => "T0410",
@@ -165,6 +167,9 @@ impl fmt::Display for Error {
             D2014RangeOutOfBounds(ref p, ref s) =>
                 write!(f, "{}: The size of the sequence allocated by the range operator (..) must not exceed 1e7.  Attempted to allocate {}", p, s),
                 
+            D3030NonNumericCast(ref p, ref n) =>
+                write!(f, "{}: Unable to cast value to a number: {}", p, n),
+            
             // Type errors
             T0410ArgumentNotValid(ref p, ref i, ref t) =>
                 write!(f, "{}: Argument {} of function {} does not match function signature", p, i, t),
@@ -232,7 +237,6 @@ impl fmt::Display for Error {
 // "D3011": "Fourth argument of replace function must evaluate to a positive number",
 // "D3012": "Attempted to replace a matched string with a non-string value",
 // "D3020": "Third argument of split function must evaluate to a positive number",
-// "D3030": "Unable to cast value to a number: {{value}}",
 // "D3040": "Third argument of match function must evaluate to a positive number",
 // "D3050": "The second argument of reduce function must be a function with at least two arguments",
 // "D3060": "The sqrt function cannot be applied to a negative number: {{value}}",
