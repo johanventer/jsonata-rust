@@ -732,7 +732,7 @@ impl<'a> Evaluator<'a> {
         Ok(result)
     }
 
-    pub fn evaluate_wildcard(
+    fn evaluate_wildcard(
         &self,
         node: &Ast,
         input: &'a Value<'a>,
@@ -765,7 +765,7 @@ impl<'a> Evaluator<'a> {
         Ok(result)
     }
 
-    pub fn evaluate_descendants(&self, input: &'a Value<'a>) -> Result<&'a Value<'a>> {
+    fn evaluate_descendants(&self, input: &'a Value<'a>) -> Result<&'a Value<'a>> {
         Ok(if !input.is_undefined() {
             let result_sequence =
                 self.recurse_descendants(input, Value::array(self.arena, ArrayFlags::SEQUENCE));
@@ -804,7 +804,7 @@ impl<'a> Evaluator<'a> {
         result_sequence
     }
 
-    pub fn evaluate_function(
+    fn evaluate_function(
         &self,
         input: &'a Value<'a>,
         proc: &Ast,
