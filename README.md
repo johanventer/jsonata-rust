@@ -41,7 +41,7 @@ There's still a lot left to do.
 
 There are a number of JSONata features which are not yet implemented:
 
-- Parent operato
+- Parent operator
 - Context and index bind variables
 - Regular expressions
 - Lots of functions remain unimplemented
