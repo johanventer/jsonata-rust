@@ -776,7 +776,7 @@ impl<'a> Evaluator<'a> {
                 result_sequence
             }
         } else {
-            Value::undefined()
+            input
         })
     }
 
