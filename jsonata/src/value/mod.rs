@@ -372,13 +372,15 @@ impl<'a> Value<'a> {
 
     pub fn flatten(&'a self, arena: &'a Bump) -> &'a mut Value<'a> {
         let flattened = Self::array(arena, ArrayFlags::empty());
+        self._flatten(flattened)
+    }
+
+    fn _flatten(&'a self, flattened: &'a mut Value<'a>) -> &'a mut Value<'a> {
+        let mut flattened = flattened;
 
         if self.is_array() {
             for member in self.members() {
-                let inner_flattened = member.flatten(arena);
-                for member in inner_flattened.members() {
-                    flattened.push(member)
-                }
+                flattened = member._flatten(flattened);
             }
         } else {
             flattened.push(self)

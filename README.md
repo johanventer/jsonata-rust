@@ -41,7 +41,7 @@ There's still a lot left to do.
 
 There are a number of JSONata features which are not yet implemented:
 
-- Descendents and parents which require implementing the compile-time static analysis ancestory algorithm
+- Parent operato
 - Context and index bind variables
 - Regular expressions
 - Lots of functions remain unimplemented

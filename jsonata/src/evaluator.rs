@@ -71,6 +71,7 @@ impl<'a> Evaluator<'a> {
                 ..
             } => self.evaluate_function(input, proc, args, is_partial, frame, None)?,
             AstKind::Wildcard => self.evaluate_wildcard(node, input, frame)?,
+            AstKind::Descendent => self.evaluate_descendants(input)?,
             _ => unimplemented!("TODO: node kind not yet supported: {:#?}", node.kind),
         };
 
@@ -731,7 +732,7 @@ impl<'a> Evaluator<'a> {
         Ok(result)
     }
 
-    pub fn evaluate_wildcard(
+    fn evaluate_wildcard(
         &self,
         node: &Ast,
         input: &'a Value<'a>,
@@ -764,7 +765,46 @@ impl<'a> Evaluator<'a> {
         Ok(result)
     }
 
-    pub fn evaluate_function(
+    fn evaluate_descendants(&self, input: &'a Value<'a>) -> Result<&'a Value<'a>> {
+        Ok(if !input.is_undefined() {
+            let result_sequence =
+                self.recurse_descendants(input, Value::array(self.arena, ArrayFlags::SEQUENCE));
+
+            if result_sequence.len() == 1 {
+                result_sequence.get_member(0)
+            } else {
+                result_sequence
+            }
+        } else {
+            input
+        })
+    }
+
+    fn recurse_descendants(
+        &self,
+        input: &'a Value<'a>,
+        result_sequence: &'a mut Value<'a>,
+    ) -> &'a mut Value<'a> {
+        if !input.is_array() {
+            result_sequence.push(input);
+        }
+
+        let mut result_sequence = result_sequence;
+
+        if input.is_array() {
+            for member in input.members() {
+                result_sequence = self.recurse_descendants(member, result_sequence);
+            }
+        } else if input.is_object() {
+            for (_key, value) in input.entries() {
+                result_sequence = self.recurse_descendants(value, result_sequence);
+            }
+        }
+
+        result_sequence
+    }
+
+    fn evaluate_function(
         &self,
         input: &'a Value<'a>,
         proc: &Ast,
