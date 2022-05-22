@@ -828,8 +828,9 @@ impl<'a> Tokenizer<'a> {
                     } else {
                         let flags_start_byte_index = self.byte_index;
                         self.eat_while(|c| c == 'i' || c == 'm');
-                        let flags =
+                        let mut flags =
                             String::from(&self.input[flags_start_byte_index..self.byte_index]);
+                        flags.push('g');
                         return Ok(TokenKind::Regex { pattern, flags });
                     }
                 }
