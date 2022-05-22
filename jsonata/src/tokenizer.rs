@@ -836,9 +836,15 @@ impl<'a> Tokenizer<'a> {
                     } else {
                         let mut flags = RegexFlags::empty();
                         loop {
-                            match self.bump() {
-                                'i' => flags.set(RegexFlags::CASE_INSENSITIVE, true),
-                                'm' => flags.set(RegexFlags::MULTILINE, true),
+                            match self.peek() {
+                                'i' => {
+                                    self.bump();
+                                    flags.set(RegexFlags::CASE_INSENSITIVE, true);
+                                }
+                                'm' => {
+                                    self.bump();
+                                    flags.set(RegexFlags::MULTILINE, true);
+                                }
                                 _ => break,
                             }
                         }

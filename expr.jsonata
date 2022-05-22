@@ -1,0 +1,4 @@
+(
+    $matcher := /[a-z]*an[a-z]*/i;
+    $matcher('A man, a plan, a canal, Panama!')
+)
