@@ -52,13 +52,10 @@ impl Symbol for Token {
             TokenKind::Asterisk => Ok(Ast::new(AstKind::Wildcard, self.char_index)),
             TokenKind::Descendent => Ok(Ast::new(AstKind::Descendent, self.char_index)),
             TokenKind::PercentSign => Ok(Ast::new(AstKind::Parent, self.char_index)),
-            TokenKind::Regex {
-                ref pattern,
-                ref flags,
-            } => Ok(Ast::new(
+            TokenKind::Regex { ref pattern, flags } => Ok(Ast::new(
                 AstKind::Regex {
                     pattern: pattern.clone(),
-                    flags: flags.clone(),
+                    flags,
                 },
                 self.char_index,
             )),

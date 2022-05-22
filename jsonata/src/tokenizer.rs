@@ -1,3 +1,4 @@
+use bitflags::bitflags;
 use std::char::decode_utf16;
 use std::str::Chars;
 use std::{char, str};
@@ -5,6 +6,13 @@ use std::{char, str};
 use jsonata_errors::{Error, Result};
 
 use super::json::Number;
+
+bitflags! {
+    pub struct RegexFlags: u8 {
+        const CASE_INSENSITIVE = 0b00000001;
+        const MULTILINE        = 0b00000010;
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
@@ -69,7 +77,7 @@ pub enum TokenKind {
 
     // Special scanners
     Signature(String),
-    Regex { pattern: String, flags: String },
+    Regex { pattern: String, flags: RegexFlags },
 }
 
 impl std::fmt::Display for TokenKind {
@@ -826,11 +834,14 @@ impl<'a> Tokenizer<'a> {
                     if pattern.is_empty() {
                         return Err(Error::S0301EmptyRegex(self.start_char_index));
                     } else {
-                        let flags_start_byte_index = self.byte_index;
-                        self.eat_while(|c| c == 'i' || c == 'm');
-                        let mut flags =
-                            String::from(&self.input[flags_start_byte_index..self.byte_index]);
-                        flags.push('g');
+                        let mut flags = RegexFlags::empty();
+                        loop {
+                            match self.bump() {
+                                'i' => flags.set(RegexFlags::CASE_INSENSITIVE, true),
+                                'm' => flags.set(RegexFlags::MULTILINE, true),
+                                _ => break,
+                            }
+                        }
                         return Ok(TokenKind::Regex { pattern, flags });
                     }
                 }

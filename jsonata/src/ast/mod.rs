@@ -3,6 +3,7 @@ mod process;
 use jsonata_signatures::Arg;
 
 use super::json::Number;
+use super::tokenizer::RegexFlags;
 
 // Object constructor, represented by tuples of (key, value)
 pub type Object = Vec<(Ast, Ast)>;
@@ -91,7 +92,7 @@ pub enum AstKind {
     Parent,
     Regex {
         pattern: String,
-        flags: String,
+        flags: RegexFlags,
     },
     Function {
         name: String,
