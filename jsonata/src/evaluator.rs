@@ -72,6 +72,7 @@ impl<'a> Evaluator<'a> {
             } => self.evaluate_function(input, proc, args, is_partial, frame, None)?,
             AstKind::Wildcard => self.evaluate_wildcard(node, input, frame)?,
             AstKind::Descendent => self.evaluate_descendants(input)?,
+            AstKind::Regex { .. } => self.evaluate_regex(node)?,
             _ => unimplemented!("TODO: node kind not yet supported: {:#?}", node.kind),
         };
 
@@ -980,5 +981,9 @@ impl<'a> Evaluator<'a> {
             }
             _ => Err(Error::T1006InvokedNonFunction(char_index)),
         }
+    }
+
+    fn evaluate_regex(&self, regex: &Ast) -> Result<&'a Value<'a>> {
+        unimplemented!("Regex evaluation not implemented yet")
     }
 }
