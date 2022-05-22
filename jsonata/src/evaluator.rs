@@ -59,30 +59,37 @@ impl<'a> Evaluator<'a> {
         }
     }
 
+    fn check_limits(&self, inc_or_dec: bool) -> Result<()> {
+        let mut internal = self.internal.borrow_mut();
+        internal.depth = if inc_or_dec {
+            internal.depth + 1
+        } else {
+            internal.depth - 1
+        };
+        if let Some(started_at) = internal.started_at {
+            if let Some(time_limit) = internal.time_limit {
+                if started_at.elapsed().as_millis() >= time_limit as u128 {
+                    return Err(Error::U1001Timeout);
+                }
+            }
+        } else {
+            internal.started_at = Some(Instant::now());
+        }
+        if let Some(max_depth) = internal.max_depth {
+            if internal.depth > max_depth {
+                return Err(Error::U1001StackOverflow);
+            }
+        }
+        Ok(())
+    }
+
     pub fn evaluate(
         &self,
         node: &Ast,
         input: &'a Value<'a>,
         frame: &Frame<'a>,
     ) -> Result<&'a Value<'a>> {
-        {
-            let mut internal = self.internal.borrow_mut();
-            if let Some(started_at) = internal.started_at {
-                if let Some(time_limit) = internal.time_limit {
-                    if started_at.elapsed().as_millis() >= time_limit as u128 {
-                        return Err(Error::U1001Timeout);
-                    }
-                }
-            } else {
-                internal.started_at = Some(Instant::now());
-            }
-            internal.depth += 1;
-            if let Some(max_depth) = internal.max_depth {
-                if internal.depth > max_depth {
-                    return Err(Error::U1001StackOverflow);
-                }
-            }
-        }
+        self.check_limits(true)?;
 
         let mut result = match node.kind {
             AstKind::Null => Value::null(self.arena),
@@ -123,6 +130,8 @@ impl<'a> Evaluator<'a> {
                 result = self.evaluate_filter(filter, result, frame)?
             }
         }
+
+        self.check_limits(false)?;
 
         Ok(if result.has_flags(ArrayFlags::SEQUENCE) {
             if node.keep_array {
@@ -457,8 +466,7 @@ impl<'a> Evaluator<'a> {
 
                 let size = rhs - lhs + 1;
                 if size > 10_000_000 {
-                    // TODO: D2014
-                    unreachable!()
+                    return Err(Error::D2014RangeOutOfBounds(node.char_index, size));
                 }
 
                 let result = Value::array_with_capacity(self.arena, size, ArrayFlags::SEQUENCE);
