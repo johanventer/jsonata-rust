@@ -178,6 +178,7 @@ pub fn fn_boolean<'a, 'e>(
             }
         },
         Value::Lambda { .. }
+        | Value::Regex { .. }
         | Value::NativeFn0 { .. }
         | Value::NativeFn1 { .. }
         | Value::NativeFn2 { .. }

@@ -5,6 +5,7 @@ use bitflags::bitflags;
 use bumpalo::boxed::Box;
 use bumpalo::Bump;
 use hashbrown::HashMap;
+use regex::Regex;
 
 use crate::ast::{Ast, AstKind};
 use crate::frame::Frame;
@@ -42,6 +43,9 @@ pub enum Value<'a> {
         ast: Ast,
         input: &'a Value<'a>,
         frame: Frame<'a>,
+    },
+    Regex {
+        regex: Regex,
     },
     NativeFn0(String, fn(FunctionContext<'a, '_>) -> Result<&'a Value<'a>>),
     NativeFn1(
@@ -120,6 +124,10 @@ impl<'a> Value<'a> {
             input,
             frame,
         })
+    }
+
+    pub fn regex(arena: &'a Bump, regex: Regex) -> &'a mut Value<'a> {
+        arena.alloc(Value::Regex { regex })
     }
 
     pub fn nativefn0(
@@ -240,6 +248,7 @@ impl<'a> Value<'a> {
             },
             Value::Object(ref o) => !o.is_empty(),
             Value::Lambda { .. }
+            | Value::Regex { .. }
             | Value::NativeFn0(..)
             | Value::NativeFn1(..)
             | Value::NativeFn2(..)
@@ -556,6 +565,7 @@ impl std::fmt::Debug for Value<'_> {
                 o.keys().cloned().collect::<Vec<String>>().join(", ")
             ),
             Self::Lambda { .. } => write!(f, "<lambda>"),
+            Self::Regex { .. } => write!(f, "<regex>"),
             Self::NativeFn0(..)
             | Self::NativeFn1(..)
             | Self::NativeFn2(..)

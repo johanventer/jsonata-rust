@@ -1,4 +1,5 @@
 use bumpalo::Bump;
+use regex::Regex;
 use std::collections::{hash_map, HashMap};
 
 use jsonata_errors::{Error, Result};
@@ -6,6 +7,7 @@ use jsonata_errors::{Error, Result};
 use super::ast::*;
 use super::frame::Frame;
 use super::functions::*;
+use super::tokenizer::RegexFlags;
 use super::value::{ArrayFlags, Value};
 
 pub struct Evaluator<'a> {
@@ -72,7 +74,7 @@ impl<'a> Evaluator<'a> {
             } => self.evaluate_function(input, proc, args, is_partial, frame, None)?,
             AstKind::Wildcard => self.evaluate_wildcard(node, input, frame)?,
             AstKind::Descendent => self.evaluate_descendants(input)?,
-            AstKind::Regex { .. } => self.evaluate_regex(node)?,
+            AstKind::Regex { ref pattern, flags } => self.evaluate_regex(pattern, flags)?,
             _ => unimplemented!("TODO: node kind not yet supported: {:#?}", node.kind),
         };
 
@@ -979,11 +981,37 @@ impl<'a> Evaluator<'a> {
                     )
                 }
             }
+            Value::Regex { ref regex } => {
+                if evaluated_args.len() == 1 && evaluated_args.get_member(0).is_string() {
+                    match regex.find(&evaluated_args.get_member(0).as_str()) {
+                        Some(match_result) => {
+                            let result = Value::object(self.arena);
+                            result
+                                .insert("match", Value::string(self.arena, match_result.as_str()));
+                            result.insert("start", Value::number(self.arena, match_result.start()));
+                            result.insert("end", Value::number(self.arena, match_result.end()));
+
+                            let groups = Value::array(self.arena, ArrayFlags::empty());
+                            result.insert("groups", groups);
+                            Ok(result)
+                        }
+                        None => Ok(Value::undefined()),
+                    }
+                } else {
+                    Err(Error::T0410ArgumentNotValid(
+                        char_index,
+                        1,
+                        "(regex)".to_owned(),
+                    ))
+                }
+            }
             _ => Err(Error::T1006InvokedNonFunction(char_index)),
         }
     }
 
-    fn evaluate_regex(&self, regex: &Ast) -> Result<&'a Value<'a>> {
-        unimplemented!("Regex evaluation not implemented yet")
+    fn evaluate_regex(&self, pattern: &str, flags: RegexFlags) -> Result<&'a Value<'a>> {
+        // TODO: Do something about errors here
+        let regex = Regex::new(pattern).unwrap();
+        Ok(Value::regex(self.arena, regex))
     }
 }
