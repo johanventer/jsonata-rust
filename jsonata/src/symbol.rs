@@ -1,5 +1,4 @@
 use jsonata_errors::{Error, Result};
-use jsonata_signatures;
 
 use super::ast::*;
 use super::parser::Parser;
