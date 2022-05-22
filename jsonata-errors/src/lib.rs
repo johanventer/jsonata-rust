@@ -54,6 +54,7 @@ pub enum Error {
     D1001NumberOfOutRange(f64),
     D1002NegatingNonNumeric(usize, String),
     D1009MultipleKeys(usize, String),
+    D2014RangeOutOfBounds(usize, usize),
 
     // Type errors
     T0410ArgumentNotValid(usize, usize, String),
@@ -140,6 +141,7 @@ impl Error {
             Error::D1001NumberOfOutRange(..) => "D1001",
             Error::D1002NegatingNonNumeric(..) => "D1002",
             Error::D1009MultipleKeys(..) => "D1009",
+            Error::D2014RangeOutOfBounds(..) => "D2014",
 
             // Type errors
             Error::T0410ArgumentNotValid(..) => "T0410",
@@ -253,8 +255,10 @@ impl fmt::Display for Error {
             D1002NegatingNonNumeric(ref p, ref v) =>
                 write!(f, "{}: Cannot negate a non-numeric value `{}`", p, v),
             D1009MultipleKeys(ref p, ref k) =>
-                write!( f, "{}: Multiple key definitions evaluate to same key: {}", p, k),
-            
+                write!(f, "{}: Multiple key definitions evaluate to same key: {}", p, k),
+            D2014RangeOutOfBounds(ref p, ref s) =>
+                write!(f, "{}: The size of the sequence allocated by the range operator (..) must not exceed 1e7.  Attempted to allocate {}", p, s),
+                
             // Type errors
             T0410ArgumentNotValid(ref p, ref i, ref t) =>
                 write!(f, "{}: Argument {} of function {} does not match function signature", p, i, t),
