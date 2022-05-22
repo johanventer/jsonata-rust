@@ -1,5 +1,7 @@
 use bumpalo::Bump;
+use std::cell::RefCell;
 use std::collections::{hash_map, HashMap};
+use std::time::Instant;
 
 use jsonata_errors::{Error, Result};
 
@@ -8,14 +10,36 @@ use super::frame::Frame;
 use super::functions::*;
 use super::value::{ArrayFlags, Value};
 
+struct EvaluatorInternal {
+    depth: usize,
+    started_at: Option<Instant>,
+    max_depth: Option<usize>,
+    time_limit: Option<usize>,
+}
+
 pub struct Evaluator<'a> {
     chain_ast: Ast,
     arena: &'a Bump,
+    internal: RefCell<EvaluatorInternal>,
 }
 
 impl<'a> Evaluator<'a> {
-    pub fn new(chain_ast: Ast, arena: &'a Bump) -> Self {
-        Evaluator { chain_ast, arena }
+    pub fn new(
+        chain_ast: Ast,
+        arena: &'a Bump,
+        max_depth: Option<usize>,
+        time_limit: Option<usize>,
+    ) -> Self {
+        Evaluator {
+            chain_ast,
+            arena,
+            internal: RefCell::new(EvaluatorInternal {
+                depth: 0,
+                started_at: None,
+                max_depth,
+                time_limit,
+            }),
+        }
     }
 
     fn fn_context<'e>(
@@ -41,6 +65,25 @@ impl<'a> Evaluator<'a> {
         input: &'a Value<'a>,
         frame: &Frame<'a>,
     ) -> Result<&'a Value<'a>> {
+        {
+            let mut internal = self.internal.borrow_mut();
+            if let Some(started_at) = internal.started_at {
+                if let Some(time_limit) = internal.time_limit {
+                    if started_at.elapsed().as_millis() >= time_limit as u128 {
+                        return Err(Error::U1001Timeout);
+                    }
+                }
+            } else {
+                internal.started_at = Some(Instant::now());
+            }
+            internal.depth += 1;
+            if let Some(max_depth) = internal.max_depth {
+                if internal.depth > max_depth {
+                    return Err(Error::U1001StackOverflow);
+                }
+            }
+        }
+
         let mut result = match node.kind {
             AstKind::Null => Value::null(self.arena),
             AstKind::Bool(b) => Value::bool(self.arena, b),

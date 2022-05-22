@@ -67,6 +67,10 @@ pub enum Error {
     T2004RightSideNotInteger(usize),
     T2009BinaryOpMismatch(usize, String, String, String),
     T2010BinaryOpTypes(usize, String),
+    
+    // Expression timebox/depth errors
+    U1001StackOverflow,
+    U1001Timeout
 }
 
 impl error::Error for Error {}
@@ -149,6 +153,10 @@ impl Error {
             Error::T2004RightSideNotInteger(..) => "T2004",
             Error::T2009BinaryOpMismatch(..) => "T2009",
             Error::T2010BinaryOpTypes(..) => "T2010",
+            
+            // Expression timebox/depth errors
+            Error::U1001StackOverflow => "U1001",
+            Error::U1001Timeout => "U1001"
         }
     }
 }  
@@ -270,6 +278,12 @@ impl fmt::Display for Error {
                 write!(f, "{}: The values {} and {} either side of operator {} must be of the same data type", p, l, r, o),
             T2010BinaryOpTypes(ref p, ref o) =>
                 write!(f, "{}: The expressions either side of operator `{}` must evaluate to numeric or string values", p, o),
+    
+            // Expression timebox/depth errors
+            U1001StackOverflow => 
+                write!(f, "0: Stack overflow error: Check for non-terminating recursive function.  Consider rewriting as tail-recursive."),
+            U1001Timeout => 
+                write!(f, "0: Expression evaluation timeout: Check for infinite loop")
         }
     }
 }
