@@ -14,51 +14,47 @@ impl<'a> Parser<'a> {
     fn new(source: &'a str) -> Result<Self> {
         let mut tokenizer = Tokenizer::new(source);
         Ok(Self {
-            token: tokenizer.next_token()?,
+            token: tokenizer.next_token(false)?,
             tokenizer,
         })
     }
 
-    pub fn token(&self) -> &Token {
-        &self.token
-    }
+    pub fn advance(&mut self, expected: Option<TokenKind>, infix: bool) -> Result<()> {
+        if let Some(expected) = expected {
+            if self.token.kind == TokenKind::End {
+                return Err(Error::S0203ExpectedTokenBeforeEnd(
+                    self.token.byte_index,
+                    expected.to_string(),
+                ));
+            }
 
-    pub fn next_token(&mut self) -> Result<()> {
-        self.token = self.tokenizer.next_token()?;
+            if self.token.kind != expected {
+                return Err(Error::S0202UnexpectedToken(
+                    self.token.char_index,
+                    expected.to_string(),
+                    self.token.kind.to_string(),
+                ));
+            }
+        }
+
+        self.token = self.tokenizer.next_token(infix)?;
+
         Ok(())
     }
 
-    pub fn expect(&mut self, expected: TokenKind) -> Result<()> {
-        if self.token.kind == TokenKind::End {
-            return Err(Error::S0203ExpectedTokenBeforeEnd(
-                self.token.byte_index,
-                expected.to_string(),
-            ));
-        }
-
-        if self.token.kind != expected {
-            eprintln!("HELLO");
-            return Err(Error::S0202UnexpectedToken(
-                self.token.char_index,
-                expected.to_string(),
-                self.token.kind.to_string(),
-            ));
-        }
-
-        self.next_token()?;
-
-        Ok(())
+    pub fn expect(&mut self, expected: TokenKind, infix: bool) -> Result<()> {
+        self.advance(Some(expected), infix)
     }
 
     pub fn expression(&mut self, bp: u32) -> Result<Ast> {
         let mut last = self.token.clone();
-        self.next_token()?;
+        self.advance(None, true)?;
 
         let mut left = last.null_denotation(self)?;
 
         while bp < self.token.left_binding_power() {
             last = self.token.clone();
-            self.next_token()?;
+            self.advance(None, false)?;
             left = last.left_denotation(self, left)?;
         }
 
@@ -69,10 +65,10 @@ impl<'a> Parser<'a> {
 pub fn parse(source: &str) -> Result<Ast> {
     let mut parser = Parser::new(source)?;
     let ast = parser.expression(0)?;
-    if !matches!(parser.token().kind, TokenKind::End) {
+    if !matches!(parser.token.kind, TokenKind::End) {
         return Err(Error::S0201SyntaxError(
-            parser.token().byte_index,
-            parser.tokenizer.string_from_token(parser.token()),
+            parser.token.byte_index,
+            parser.tokenizer.string_from_token(&parser.token),
         ));
     }
     ast.process()

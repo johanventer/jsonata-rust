@@ -89,6 +89,10 @@ pub enum AstKind {
     Wildcard,
     Descendent,
     Parent,
+    Regex {
+        pattern: String,
+        flags: String,
+    },
     Function {
         name: String,
         proc: Box<Ast>,

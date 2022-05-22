@@ -66,7 +66,10 @@ pub enum TokenKind {
     // Identifiers
     Name(String),
     Var(String),
+
+    // Special scanners
     Signature(String),
+    Regex { pattern: String, flags: String },
 }
 
 impl std::fmt::Display for TokenKind {
@@ -74,7 +77,8 @@ impl std::fmt::Display for TokenKind {
         match self {
             TokenKind::End => write!(f, "(end)"),
             TokenKind::Whitespace => write!(f, "(whitespace)"),
-            TokenKind::Comment => write!(f, "(comment"),
+            TokenKind::Comment => write!(f, "(comment)"),
+            TokenKind::Regex { .. } => write!(f, "(regex)"),
             TokenKind::Period => write!(f, "."),
             TokenKind::LeftBracket => write!(f, "["),
             TokenKind::RightBracket => write!(f, "]"),
@@ -151,13 +155,13 @@ pub struct Tokenizer<'a> {
     /// The current bytes index into the input
     byte_index: usize,
 
-    /// The current char index into the input (used for errors)
+    /// The current char index into the input
     char_index: usize,
 
-    /// The starting byte index of the current token being generated (used for errors)
+    /// The starting byte index of the current token
     start_byte_index: usize,
 
-    /// The starting char index of the current token being generated (used for errors)
+    /// The starting char index of the current token
     start_char_index: usize,
 
     /// Indicates whether the next `<` should lex as a function signature
@@ -292,7 +296,7 @@ impl<'a> Tokenizer<'a> {
             | self.get_hex_digit()?)
     }
 
-    pub fn next_token(&mut self) -> Result<Token> {
+    pub fn next_token(&mut self, infix: bool) -> Result<Token> {
         use TokenKind::*;
 
         let kind = loop {
@@ -307,34 +311,16 @@ impl<'a> Tokenizer<'a> {
                     Whitespace
                 }
 
-                // Comments, forward-slashes or regexp
-                // TODO: Regexp
+                // Comments, forward-slashes or regex
                 '/' => match self.peek() {
-                    '*' => {
-                        // Skip the *
-                        self.bump();
-
-                        loop {
-                            // Eat until the next *
-                            self.eat_while(|c| c != '*');
-
-                            // Skip the *
-                            self.bump();
-
-                            // Check for unterminated comments
-                            if self.eof() {
-                                return Err(Error::S0106UnterminatedComment(self.start_char_index));
-                            }
-
-                            // Is this the end of the comment?
-                            if self.bump() == '/' {
-                                break;
-                            }
+                    '*' => self.skip_comment()?,
+                    _ => {
+                        if infix {
+                            ForwardSlash
+                        } else {
+                            self.scan_regex()?
                         }
-
-                        Comment
                     }
-                    _ => ForwardSlash,
                 },
 
                 '.' => match self.peek() {
@@ -391,39 +377,8 @@ impl<'a> Tokenizer<'a> {
                         LessEqual
                     }
                     _ => {
-                        // Scan a function signature if we've been flagged that this might happen
                         if self.expect_signature {
-                            let mut depth = 1;
-
-                            while depth > 0 && !self.eof() {
-                                match self.bump() {
-                                    '<' => depth += 1,
-                                    '>' => depth -= 1,
-                                    'b' | 'n' | 's' | 'l' | 'a' | 'o' | 'f' | 'u' | 'j' | 'x'
-                                    | '(' | ')' => {}
-                                    c => {
-                                        return Err(Error::S0202UnexpectedToken(
-                                            self.char_index,
-                                            '>'.to_string(),
-                                            c.to_string(),
-                                        ));
-                                    }
-                                }
-                            }
-
-                            if self.eof() {
-                                return Err(Error::S0201SyntaxError(
-                                    self.start_byte_index,
-                                    self.peek().to_string(),
-                                ));
-                            }
-
-                            let sig =
-                                String::from(&self.input[self.start_byte_index..self.byte_index]);
-
-                            self.expect_signature = false;
-
-                            Signature(sig)
+                            self.scan_signature()?
                         } else {
                             LeftAngleBracket
                         }
@@ -453,113 +408,10 @@ impl<'a> Tokenizer<'a> {
                 '&' => Ampersand,
 
                 // Backtick identifiers like a.`b`.c
-                '`' => {
-                    let start_byte_index = self.byte_index;
-
-                    // Eat until the next `
-                    self.eat_while(|c| c != '`');
-
-                    // Check for unterminated quotes
-                    if self.eof() {
-                        return Err(Error::S0105UnterminatedQuoteProp(self.start_char_index));
-                    }
-
-                    let token = Name(String::from(&self.input[start_byte_index..self.byte_index]));
-
-                    // Skip the final `
-                    self.bump();
-
-                    token
-                }
+                '`' => self.scan_backtick_ident()?,
 
                 // String literals
-                quote @ ('\'' | '"') => {
-                    loop {
-                        match self.bump() {
-                            // Supported escape sequences
-                            '\\' => match self.bump() {
-                                '\\' => self.buffer.push('\\'),
-                                '"' => self.buffer.push('"'),
-                                'b' => self.buffer.push('\x08'),
-                                'f' => self.buffer.push('\x0c'),
-                                'n' => self.buffer.push('\n'),
-                                'r' => self.buffer.push('\r'),
-                                't' => self.buffer.push('\t'),
-
-                                // 2-byte hex UTF-16 escape like \u0010.
-                                // Note that UTF-16 surrogate pairs (for characters outside of the Basic Multilingual Plane)
-                                // are represented as two escape sequences which can't be directly converted to a UTF-8 char.
-                                // Example: \\uD83D\\uDE02 => 😂
-                                'u' => {
-                                    let codepoint = self.get_codepoint()?;
-
-                                    let unicode = match char::try_from(codepoint as u32) {
-                                        Ok(code) => code,
-                                        Err(_) => match (self.bump(), self.bump()) {
-                                            // The codepoint was not valid UTF-8, look for another one that could be part
-                                            // of a surrogate pair
-                                            ('\\', 'u') => {
-                                                match decode_utf16(
-                                                    [codepoint, self.get_codepoint()?]
-                                                        .iter()
-                                                        .copied(),
-                                                )
-                                                .next()
-                                                {
-                                                    Some(Ok(code)) => code,
-                                                    _ => {
-                                                        return Err(
-                                                            Error::S0104InvalidUnicodeEscape(
-                                                                self.start_char_index,
-                                                            ),
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                            _ => {
-                                                return Err(Error::S0104InvalidUnicodeEscape(
-                                                    self.start_char_index,
-                                                ))
-                                            }
-                                        },
-                                    };
-
-                                    self.buffer.push(unicode);
-                                }
-                                c => {
-                                    return Err(Error::S0103UnsupportedEscape(
-                                        self.start_char_index,
-                                        c,
-                                    ));
-                                }
-                            },
-
-                            // End of string
-                            c if c == quote => {
-                                break;
-                            }
-
-                            c => {
-                                // Check for unterminated strings
-                                if self.eof() {
-                                    return Err(Error::S0101UnterminatedStringLiteral(
-                                        self.start_char_index,
-                                    ));
-                                }
-
-                                self.buffer.push(c);
-                            }
-                        }
-                    }
-
-                    let s = String::from_iter(self.buffer.clone());
-                    let token = Str(s);
-
-                    // The buffer gets cleared for the next string
-                    self.buffer.clear();
-
-                    token
-                }
+                quote @ ('\'' | '"') => self.scan_string(quote)?,
 
                 // Numbers
                 '0' => {
@@ -568,46 +420,17 @@ impl<'a> Tokenizer<'a> {
                     } else {
                         let mut mantissa = 0;
                         let mut exponent = 0;
-                        let num = self.number_extensions(&mut mantissa, &mut exponent)?;
+                        let num = self.scan_number_extensions(&mut mantissa, &mut exponent)?;
                         Num(num)
                     }
                 }
                 c @ '1'..='9' => {
-                    let num = self.number(c)?;
+                    let num = self.scan_number(c)?;
                     Num(num)
                 }
 
                 // Names
-                c if is_name_start(c) => {
-                    self.eat_while(|c| !(is_whitespace(c) || is_operator(c)));
-
-                    if c == '$' {
-                        Var(String::from(
-                            &self.input[self.start_byte_index + 1..self.byte_index],
-                        ))
-                    } else {
-                        match &self.input[self.start_byte_index..self.byte_index] {
-                            "or" => Or,
-                            "in" => In,
-                            "and" => And,
-                            "true" => Bool(true),
-                            "false" => Bool(false),
-                            "null" => Null,
-                            "function" => {
-                                // This is one of those times where JSONata's syntax let's us down.
-                                // Function signatures come directly after the right parentheses in a
-                                // lambda definition, i.e. `function($x)<s>{$x}`. As we have just seen
-                                // a bare `function` we flag the state that we could possibly see a
-                                // a signature.
-                                self.expect_signature = true;
-                                Name("function".to_string())
-                            }
-                            _ => Name(String::from(
-                                &self.input[self.start_byte_index..self.byte_index],
-                            )),
-                        }
-                    }
-                }
+                c if is_name_start(c) => self.scan_name(c),
 
                 _ => {
                     return Err(Error::S0204UnknownOperator(
@@ -635,7 +458,7 @@ impl<'a> Tokenizer<'a> {
     // NOTE: Much of this number parsing was stolen from the json create, and modified
     // as needed. See json/README.md.
 
-    fn number(&mut self, first_char: char) -> Result<Number> {
+    fn scan_number(&mut self, first_char: char) -> Result<Number> {
         let mut mantissa = (first_char as u8 - b'0') as u64;
 
         let result: Number;
@@ -657,7 +480,7 @@ impl<'a> Tokenizer<'a> {
                 }
                 _ => {
                     let mut exponent = 0;
-                    result = self.number_extensions(&mut mantissa, &mut exponent)?;
+                    result = self.scan_number_extensions(&mut mantissa, &mut exponent)?;
                     break;
                 }
             }
@@ -666,7 +489,7 @@ impl<'a> Tokenizer<'a> {
         Ok(result)
     }
 
-    fn number_extensions(&mut self, mantissa: &mut u64, exponent: &mut i16) -> Result<Number> {
+    fn scan_number_extensions(&mut self, mantissa: &mut u64, exponent: &mut i16) -> Result<Number> {
         match self.peek() {
             '.' => match self.peek_second() {
                 // Range operator
@@ -814,7 +637,7 @@ impl<'a> Tokenizer<'a> {
                 | std::num::FpCategory::Nan
                 | std::num::FpCategory::Subnormal => {
                     return Err(Error::S0102LexedNumberOutOfRange(
-                        self.start_byte_index,
+                        self.start_char_index,
                         self.token_string(),
                     ))
                 }
@@ -822,12 +645,239 @@ impl<'a> Tokenizer<'a> {
             },
             _ => {
                 return Err(Error::S0102LexedNumberOutOfRange(
-                    self.start_byte_index,
+                    self.start_char_index,
                     self.token_string(),
                 ))
             }
         }
         Ok(result)
+    }
+
+    fn scan_string(&mut self, quote: char) -> Result<TokenKind> {
+        loop {
+            match self.bump() {
+                // Supported escape sequences
+                '\\' => match self.bump() {
+                    '\\' => self.buffer.push('\\'),
+                    '"' => self.buffer.push('"'),
+                    'b' => self.buffer.push('\x08'),
+                    'f' => self.buffer.push('\x0c'),
+                    'n' => self.buffer.push('\n'),
+                    'r' => self.buffer.push('\r'),
+                    't' => self.buffer.push('\t'),
+
+                    // 2-byte hex UTF-16 escape like \u0010.
+                    // Note that UTF-16 surrogate pairs (for characters outside of the Basic Multilingual Plane)
+                    // are represented as two escape sequences which can't be directly converted to a UTF-8 char.
+                    // Example: \\uD83D\\uDE02 => 😂
+                    'u' => {
+                        let codepoint = self.get_codepoint()?;
+
+                        let unicode = match char::try_from(codepoint as u32) {
+                            Ok(code) => code,
+                            Err(_) => match (self.bump(), self.bump()) {
+                                // The codepoint was not valid UTF-8, look for another one that could be part
+                                // of a surrogate pair
+                                ('\\', 'u') => {
+                                    match decode_utf16(
+                                        [codepoint, self.get_codepoint()?].iter().copied(),
+                                    )
+                                    .next()
+                                    {
+                                        Some(Ok(code)) => code,
+                                        _ => {
+                                            return Err(Error::S0104InvalidUnicodeEscape(
+                                                self.start_char_index,
+                                            ))
+                                        }
+                                    }
+                                }
+                                _ => {
+                                    return Err(Error::S0104InvalidUnicodeEscape(
+                                        self.start_char_index,
+                                    ))
+                                }
+                            },
+                        };
+
+                        self.buffer.push(unicode);
+                    }
+                    c => {
+                        return Err(Error::S0103UnsupportedEscape(self.start_char_index, c));
+                    }
+                },
+
+                // End of string
+                c if c == quote => {
+                    break;
+                }
+
+                c => {
+                    // Check for unterminated strings
+                    if self.eof() {
+                        return Err(Error::S0101UnterminatedStringLiteral(self.start_char_index));
+                    }
+
+                    self.buffer.push(c);
+                }
+            }
+        }
+
+        let s = String::from_iter(self.buffer.clone());
+        let token = TokenKind::Str(s);
+
+        // The buffer gets cleared for the next string
+        self.buffer.clear();
+
+        Ok(token)
+    }
+
+    fn scan_backtick_ident(&mut self) -> Result<TokenKind> {
+        let start_byte_index = self.byte_index;
+
+        // Eat until the next `
+        self.eat_while(|c| c != '`');
+
+        // Check for unterminated quotes
+        if self.eof() {
+            return Err(Error::S0105UnterminatedQuoteProp(self.start_char_index));
+        }
+
+        let token = TokenKind::Name(String::from(&self.input[start_byte_index..self.byte_index]));
+
+        // Skip the final `
+        self.bump();
+
+        Ok(token)
+    }
+
+    fn scan_name(&mut self, first_char: char) -> TokenKind {
+        self.eat_while(|c| !(is_whitespace(c) || is_operator(c)));
+
+        if first_char == '$' {
+            TokenKind::Var(String::from(
+                &self.input[self.start_byte_index + 1..self.byte_index],
+            ))
+        } else {
+            match &self.input[self.start_byte_index..self.byte_index] {
+                "or" => TokenKind::Or,
+                "in" => TokenKind::In,
+                "and" => TokenKind::And,
+                "true" => TokenKind::Bool(true),
+                "false" => TokenKind::Bool(false),
+                "null" => TokenKind::Null,
+                "function" => {
+                    // This is one of those times where JSONata's syntax let's us down.
+                    // Function signatures come directly after the right parentheses in a
+                    // lambda definition, i.e. `function($x)<s>{$x}`. As we have just seen
+                    // a bare `function` we flag the state that we could possibly see a
+                    // a signature.
+                    self.expect_signature = true;
+                    TokenKind::Name("function".to_string())
+                }
+                _ => TokenKind::Name(String::from(
+                    &self.input[self.start_byte_index..self.byte_index],
+                )),
+            }
+        }
+    }
+
+    fn skip_comment(&mut self) -> Result<TokenKind> {
+        // Skip the *
+        self.bump();
+
+        loop {
+            // Eat until the next *
+            self.eat_while(|c| c != '*');
+
+            // Skip the *
+            self.bump();
+
+            // Check for unterminated comments
+            if self.eof() {
+                return Err(Error::S0106UnterminatedComment(self.start_char_index));
+            }
+
+            // Is this the end of the comment?
+            if self.bump() == '/' {
+                break;
+            }
+        }
+
+        Ok(TokenKind::Comment)
+    }
+
+    fn scan_regex(&mut self) -> Result<TokenKind> {
+        let mut depth = 0;
+        let mut escaped = false;
+
+        let start_byte_index = self.start_byte_index + 1;
+
+        while !self.eof() {
+            let prev_byte_index = self.byte_index;
+
+            match self.bump() {
+                '\\' => {
+                    escaped = true;
+                }
+                '/' if !escaped && depth == 0 => {
+                    let pattern = String::from(&self.input[start_byte_index..prev_byte_index]);
+
+                    if pattern.is_empty() {
+                        return Err(Error::S0301EmptyRegex(self.start_char_index));
+                    } else {
+                        let flags_start_byte_index = self.byte_index;
+                        self.eat_while(|c| c == 'i' || c == 'm');
+                        let flags =
+                            String::from(&self.input[flags_start_byte_index..self.byte_index]);
+                        return Ok(TokenKind::Regex { pattern, flags });
+                    }
+                }
+                '(' | '[' | '{' if !escaped => {
+                    depth += 1;
+                }
+                ')' | ']' | '}' if !escaped => {
+                    depth -= 1;
+                }
+                _ => {
+                    escaped = false;
+                }
+            }
+        }
+
+        Err(Error::S0302UnterminatedRegex(self.start_char_index))
+    }
+
+    fn scan_signature(&mut self) -> Result<TokenKind> {
+        let mut depth = 1;
+
+        while depth > 0 && !self.eof() {
+            match self.bump() {
+                '<' => depth += 1,
+                '>' => depth -= 1,
+                'b' | 'n' | 's' | 'l' | 'a' | 'o' | 'f' | 'u' | 'j' | 'x' | '(' | ')' => {}
+                c => {
+                    return Err(Error::S0202UnexpectedToken(
+                        self.char_index,
+                        '>'.to_string(),
+                        c.to_string(),
+                    ));
+                }
+            }
+        }
+
+        if self.eof() {
+            return Err(Error::S0201SyntaxError(
+                self.start_char_index,
+                self.peek().to_string(),
+            ));
+        }
+
+        let sig = String::from(&self.input[self.start_byte_index..self.byte_index]);
+
+        self.expect_signature = false;
+
+        Ok(TokenKind::Signature(sig))
     }
 }
 
@@ -838,78 +888,114 @@ mod tests {
     #[test]
     fn comment() {
         let mut t = Tokenizer::new("/* This is a comment */");
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::End));
+        assert!(matches!(t.next_token(false).unwrap().kind, TokenKind::End));
     }
 
     #[test]
     fn operators() {
         let mut t = Tokenizer::new("@..[]{}()=^&,~>#+<=:=>=!=?-***");
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::At));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Range));
+        assert!(matches!(t.next_token(false).unwrap().kind, TokenKind::At));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
+            TokenKind::Range
+        ));
+        assert!(matches!(
+            t.next_token(false).unwrap().kind,
             TokenKind::LeftBracket
         ));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
             TokenKind::RightBracket
         ));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::LeftBrace));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
+            TokenKind::LeftBrace
+        ));
+        assert!(matches!(
+            t.next_token(false).unwrap().kind,
             TokenKind::RightBrace
         ));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::LeftParen));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
+            TokenKind::LeftParen
+        ));
+        assert!(matches!(
+            t.next_token(false).unwrap().kind,
             TokenKind::RightParen
         ));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Equal));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Caret));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Ampersand));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Comma));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Apply));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Hash));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Plus));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::LessEqual));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Bind));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
+            TokenKind::Equal
+        ));
+        assert!(matches!(
+            t.next_token(false).unwrap().kind,
+            TokenKind::Caret
+        ));
+        assert!(matches!(
+            t.next_token(false).unwrap().kind,
+            TokenKind::Ampersand
+        ));
+        assert!(matches!(
+            t.next_token(false).unwrap().kind,
+            TokenKind::Comma
+        ));
+        assert!(matches!(
+            t.next_token(false).unwrap().kind,
+            TokenKind::Apply
+        ));
+        assert!(matches!(t.next_token(false).unwrap().kind, TokenKind::Hash));
+        assert!(matches!(t.next_token(false).unwrap().kind, TokenKind::Plus));
+        assert!(matches!(
+            t.next_token(false).unwrap().kind,
+            TokenKind::LessEqual
+        ));
+        assert!(matches!(t.next_token(false).unwrap().kind, TokenKind::Bind));
+        assert!(matches!(
+            t.next_token(false).unwrap().kind,
             TokenKind::GreaterEqual
         ));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::NotEqual));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
+            TokenKind::NotEqual
+        ));
+        assert!(matches!(
+            t.next_token(false).unwrap().kind,
             TokenKind::QuestionMark
         ));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Minus));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
+            TokenKind::Minus
+        ));
+        assert!(matches!(
+            t.next_token(false).unwrap().kind,
             TokenKind::Descendent
         ));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Asterisk));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::End));
+        assert!(matches!(
+            t.next_token(false).unwrap().kind,
+            TokenKind::Asterisk
+        ));
+        assert!(matches!(t.next_token(false).unwrap().kind, TokenKind::End));
     }
 
     #[test]
     fn strings() {
         let mut t = Tokenizer::new("\"There's a string here\" 'and another here'");
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
             TokenKind::Str(s) if s == "There's a string here"
         ));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
             TokenKind::Str(s) if s == "and another here"
         ));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::End));
+        assert!(matches!(t.next_token(false).unwrap().kind, TokenKind::End));
     }
 
     #[test]
     fn unicode_escapes() {
         let mut t = Tokenizer::new("\"\\u2d63\\u2d53\\u2d4d\"");
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
             TokenKind::Str(s) if s ==  "ⵣⵓⵍ"
         ));
     }
@@ -918,11 +1004,11 @@ mod tests {
     fn backtick_names() {
         let mut t = Tokenizer::new("  `hello`    `world`");
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
             TokenKind::Name(s) if s == "hello"
         ));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
             TokenKind::Name(s) if s == "world"
         ));
     }
@@ -931,15 +1017,15 @@ mod tests {
     fn variables() {
         let mut t = Tokenizer::new("  $one   $two   $three  ");
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
             TokenKind::Var(s) if s == "one"
         ));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
             TokenKind::Var(s) if s == "two"
         ));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
             TokenKind::Var(s) if s == "three"
         ));
     }
@@ -947,62 +1033,62 @@ mod tests {
     #[test]
     fn name_operators() {
         let mut t = Tokenizer::new("or in and");
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Or));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::In));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::And));
+        assert!(matches!(t.next_token(false).unwrap().kind, TokenKind::Or));
+        assert!(matches!(t.next_token(false).unwrap().kind, TokenKind::In));
+        assert!(matches!(t.next_token(false).unwrap().kind, TokenKind::And));
     }
 
     #[test]
     fn values() {
         let mut t = Tokenizer::new("true false null");
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
             TokenKind::Bool(true)
         ));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
             TokenKind::Bool(false)
         ));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Null));
+        assert!(matches!(t.next_token(false).unwrap().kind, TokenKind::Null));
     }
 
     #[test]
     fn numbers() {
         let mut t = Tokenizer::new("0 1 0.234 5.678 0e0 1e1 1e-1 1e+1 2.234E-2");
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
             TokenKind::Num(n) if (f64::from(n) - 0.0_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
             TokenKind::Num(n) if (f64::from(n) - 1.0_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
             TokenKind::Num(n) if (f64::from(n) - 0.234_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
             TokenKind::Num(n) if (f64::from(n) - 5.678_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
             TokenKind::Num(n) if (f64::from(n) - 0e0_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
             TokenKind::Num(n) if (f64::from(n) - 1e1_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
             TokenKind::Num(n) if (f64::from(n) - 1e-1_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
             TokenKind::Num(n) if (f64::from(n) - 1e+1_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
             TokenKind::Num(n) if (f64::from(n) - 2.234E-2_f64).abs() < f64::EPSILON
         ));
     }
@@ -1011,22 +1097,28 @@ mod tests {
     fn signature() {
         let mut t = Tokenizer::new("function($x)<s>{$x}");
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
             TokenKind::Name(s) if s == "function"
         ));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::LeftParen));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Var(s) if s == "x"));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
+            TokenKind::LeftParen
+        ));
+        assert!(matches!(t.next_token(false).unwrap().kind, TokenKind::Var(s) if s == "x"));
+        assert!(matches!(
+            t.next_token(false).unwrap().kind,
             TokenKind::RightParen
         ));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Signature(s) if s == "<s>"));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::LeftBrace));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Var(s) if s == "x"));
+        assert!(matches!(t.next_token(false).unwrap().kind, TokenKind::Signature(s) if s == "<s>"));
         assert!(matches!(
-            t.next_token().unwrap().kind,
+            t.next_token(false).unwrap().kind,
+            TokenKind::LeftBrace
+        ));
+        assert!(matches!(t.next_token(false).unwrap().kind, TokenKind::Var(s) if s == "x"));
+        assert!(matches!(
+            t.next_token(false).unwrap().kind,
             TokenKind::RightBrace
         ));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::End));
+        assert!(matches!(t.next_token(false).unwrap().kind, TokenKind::End));
     }
 }
