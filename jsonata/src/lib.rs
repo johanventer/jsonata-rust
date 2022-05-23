@@ -48,7 +48,11 @@ impl<'a> JsonAta<'a> {
 
     pub fn evaluate(&'a self, input: Option<&str>) -> Result<&'a Value<'a>> {
         let input = match input {
-            Some(input) => json::parse(input, &self.arena).unwrap(),
+            Some(input) => {
+                let input_ast = parser::parse(input)?;
+                let evaluator = Evaluator::new(None, &self.arena);
+                evaluator.evaluate(&input_ast, Value::undefined(), &Frame::new())?
+            }
             None => Value::undefined(),
         };
 
@@ -84,7 +88,7 @@ impl<'a> JsonAta<'a> {
         bind!("sum", nativefn1, fn_sum);
 
         let chain_ast = parser::parse("function($f, $g) { function($x){ $g($f($x)) } }")?;
-        let evaluator = Evaluator::new(chain_ast, &self.arena);
+        let evaluator = Evaluator::new(Some(chain_ast), &self.arena);
         evaluator.evaluate(&self.ast, input, &self.frame)
     }
 }

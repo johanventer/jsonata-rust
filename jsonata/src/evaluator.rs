@@ -9,12 +9,12 @@ use super::functions::*;
 use super::value::{ArrayFlags, Value};
 
 pub struct Evaluator<'a> {
-    chain_ast: Ast,
+    chain_ast: Option<Ast>,
     arena: &'a Bump,
 }
 
 impl<'a> Evaluator<'a> {
-    pub fn new(chain_ast: Ast, arena: &'a Bump) -> Self {
+    pub fn new(chain_ast: Option<Ast>, arena: &'a Bump) -> Self {
         Evaluator { chain_ast, arena }
     }
 
@@ -491,8 +491,12 @@ impl<'a> Evaluator<'a> {
                     }
 
                     if lhs.is_function() {
-                        // Apply function chaining
-                        let chain = self.evaluate(&self.chain_ast, Value::undefined(), frame)?;
+                        // Apply function chainin
+                        let chain = self.evaluate(
+                            self.chain_ast.as_ref().unwrap(),
+                            Value::undefined(),
+                            frame,
+                        )?;
 
                         let args = Value::array_with_capacity(self.arena, 2, ArrayFlags::empty());
                         args.push(lhs);
