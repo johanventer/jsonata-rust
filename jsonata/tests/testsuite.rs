@@ -81,12 +81,6 @@ fn t(resource: &str) {
 
                         if case["undefinedResult"] == true {
                             assert!(result.is_undefined());
-                        } else if case["result"].is_number() {
-                            assert!(result.is_number());
-                            assert!(
-                                f64::abs(expected_result.as_f64() - result.as_f64())
-                                    <= f64::EPSILON
-                            );
                         } else if case["unordered"] == true {
                             // Some test cases specify that the expected array result can be unordered
                             // because the order is implementation dependent. To implement that here
