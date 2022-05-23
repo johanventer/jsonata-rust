@@ -6,7 +6,6 @@ use std::fs;
 use std::path;
 use test_generator::test_resources;
 
-use jsonata::json;
 use jsonata::value::ArrayFlags;
 use jsonata::{JsonAta, Value};
 
@@ -22,8 +21,8 @@ fn t(resource: &str) {
         .unwrap_or_else(|_| panic!("Failed to read test case: {}", resource));
 
     let arena = Bump::new();
-
-    let test = json::parse(&test, &arena).unwrap();
+    let test_jsonata = JsonAta::new(&test, &arena).unwrap();
+    let test = test_jsonata.evaluate(None).unwrap();
 
     let test = Value::wrap_in_array_if_needed(&arena, test, ArrayFlags::empty());
 
@@ -58,13 +57,13 @@ fn t(resource: &str) {
             data.dump()
         };
 
-        let jsonata = JsonAta::new(&expr);
+        let jsonata = JsonAta::new(&expr, &arena);
 
         match jsonata {
             Ok(jsonata) => {
                 if case["bindings"].is_object() {
                     for (key, value) in case["bindings"].entries() {
-                        jsonata.assign_var(key, from(value, &arena));
+                        jsonata.assign_var(key, value);
                     }
                 }
 
@@ -78,7 +77,7 @@ fn t(resource: &str) {
 
                 match result {
                     Ok(result) => {
-                        let expected_result = from(&case["result"], &arena);
+                        let expected_result = &case["result"];
 
                         if case["undefinedResult"] == true {
                             assert!(result.is_undefined());
@@ -119,28 +118,5 @@ fn t(resource: &str) {
                 assert_eq!(case["code"], error.code());
             }
         }
-    }
-}
-
-pub fn from<'a>(value: &Value, arena: &'a Bump) -> &'a Value<'a> {
-    match value {
-        Value::Undefined => Value::undefined(),
-        Value::Null => Value::null(arena),
-        Value::Unsigned(n) => Value::unsigned(arena, *n),
-        Value::Signed(n) => Value::signed(arena, *n),
-        Value::Float(n) => Value::float(arena, *n),
-        Value::Bool(b) => Value::bool(arena, *b),
-        Value::String(s) => Value::string(arena, s),
-        Value::Array(a, f) => {
-            let array = Value::array_with_capacity(arena, a.len(), *f);
-            a.iter().for_each(|i| array.push(from(i, arena)));
-            array
-        }
-        Value::Object(o) => {
-            let obj = Value::object_with_capacity(arena, o.len());
-            o.iter().for_each(|(k, v)| obj.insert(k, from(v, arena)));
-            obj
-        }
-        _ => panic!("Can't call Value::from on functions"),
     }
 }

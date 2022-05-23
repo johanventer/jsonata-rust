@@ -9,5 +9,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 jsonata = { path = "../jsonata" }
+bumpalo = { version = "3.9.1", features = ["collections", "boxed"] }
 
 wasm-bindgen = "0.2.78"

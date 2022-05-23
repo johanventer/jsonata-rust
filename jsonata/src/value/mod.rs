@@ -9,8 +9,10 @@ use hashbrown::HashMap;
 use crate::ast::{Ast, AstKind};
 use crate::frame::Frame;
 use crate::functions::FunctionContext;
-use crate::json::codegen::{DumpGenerator, Generator, PrettyGenerator};
 use crate::Result;
+
+mod codegen;
+use codegen::{DumpGenerator, Generator, PrettyGenerator};
 
 bitflags! {
     pub struct ArrayFlags: u8 {
@@ -455,8 +457,6 @@ impl<'a> Value<'a> {
         gen.consume()
     }
 
-    /// Pretty prints out the value as JSON string. Takes an argument that's
-    /// number of spaces to indent new blocks with.
     pub fn pretty(&'a self, spaces: u16) -> String {
         let mut gen = PrettyGenerator::new(spaces);
         gen.write_json(self).expect("Can't fail");

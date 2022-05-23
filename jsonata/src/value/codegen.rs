@@ -1,9 +1,13 @@
+// This JSON dumping code was stolen from [Maciej Hirsz's](https://github.com/maciejhirsz) excellent
+// [json crate](https://github.com/maciejhirsz/json-rust), and modified to work on our custom internal
+// value.
+//
+// The original code is licensed in the same way as this crate.
+
 use std::io;
 use std::io::Write;
 
-use super::number::Number;
-use super::util::print_dec;
-use crate::value::Value;
+use super::Value;
 
 const QU: u8 = b'"';
 const BS: u8 = b'\\';
@@ -100,15 +104,6 @@ pub trait Generator {
     }
 
     #[inline(always)]
-    fn write_number(&mut self, num: &Number) -> io::Result<()> {
-        if num.is_nan() {
-            return self.write(b"null");
-        }
-        let (positive, mantissa, exponent) = num.as_parts();
-        unsafe { print_dec::write(self.get_writer(), positive, mantissa, exponent) }
-    }
-
-    #[inline(always)]
     fn write_object<'a>(&mut self, object: &'a Value<'a>) -> io::Result<()> {
         self.write_char(b'{')?;
         let mut iter = object.entries();
@@ -141,9 +136,9 @@ pub trait Generator {
         match *json {
             Value::Null => self.write(b"null"),
             Value::String(ref string) => self.write_string(string),
-            Value::Unsigned(n) => self.write_number(&n.into()),
-            Value::Signed(n) => self.write_number(&n.into()),
-            Value::Float(n) => self.write_number(&n.into()),
+            Value::Unsigned(n) => self.write(n.to_string().as_bytes()),
+            Value::Signed(n) => self.write(n.to_string().as_bytes()),
+            Value::Float(n) => self.write(n.to_string().as_bytes()),
             Value::Bool(true) => self.write(b"true"),
             Value::Bool(false) => self.write(b"false"),
             Value::Array(..) => {
@@ -277,90 +272,6 @@ impl Generator for PrettyGenerator {
         self.code.push(b'\n');
         for _ in 0..(self.dent * self.spaces_per_indent) {
             self.code.push(b' ');
-        }
-        Ok(())
-    }
-
-    fn indent(&mut self) {
-        self.dent += 1;
-    }
-
-    fn dedent(&mut self) {
-        self.dent -= 1;
-    }
-}
-
-/// Writer Generator, this uses a custom writer to store the JSON result.
-pub struct WriterGenerator<'a, W: 'a + Write> {
-    writer: &'a mut W,
-}
-
-impl<'a, W> WriterGenerator<'a, W>
-where
-    W: 'a + Write,
-{
-    pub fn new(writer: &'a mut W) -> Self {
-        WriterGenerator { writer }
-    }
-}
-
-impl<'a, W> Generator for WriterGenerator<'a, W>
-where
-    W: Write,
-{
-    type T = W;
-
-    #[inline(always)]
-    fn get_writer(&mut self) -> &mut W {
-        &mut self.writer
-    }
-
-    #[inline(always)]
-    fn write_min(&mut self, _: &[u8], min: u8) -> io::Result<()> {
-        self.writer.write_all(&[min])
-    }
-}
-
-/// Pretty Writer Generator, this uses a custom writer to store the JSON result and add indent.
-pub struct PrettyWriterGenerator<'a, W: 'a + Write> {
-    writer: &'a mut W,
-    dent: u16,
-    spaces_per_indent: u16,
-}
-
-impl<'a, W> PrettyWriterGenerator<'a, W>
-where
-    W: 'a + Write,
-{
-    pub fn new(writer: &'a mut W, spaces: u16) -> Self {
-        PrettyWriterGenerator {
-            writer,
-            dent: 0,
-            spaces_per_indent: spaces,
-        }
-    }
-}
-
-impl<'a, W> Generator for PrettyWriterGenerator<'a, W>
-where
-    W: Write,
-{
-    type T = W;
-
-    #[inline(always)]
-    fn get_writer(&mut self) -> &mut W {
-        &mut self.writer
-    }
-
-    #[inline(always)]
-    fn write_min(&mut self, slice: &[u8], _: u8) -> io::Result<()> {
-        self.writer.write_all(slice)
-    }
-
-    fn new_line(&mut self) -> io::Result<()> {
-        self.write_char(b'\n')?;
-        for _ in 0..(self.dent * self.spaces_per_indent) {
-            self.write_char(b' ')?;
         }
         Ok(())
     }

@@ -3,7 +3,6 @@ pub mod ast;
 pub mod evaluator;
 pub mod frame;
 pub mod functions;
-pub mod json;
 pub mod parser;
 pub mod symbol;
 pub mod tokenizer;
@@ -23,15 +22,15 @@ use value::ArrayFlags;
 pub struct JsonAta<'a> {
     ast: Ast,
     frame: Frame<'a>,
-    arena: Bump,
+    arena: &'a Bump,
 }
 
 impl<'a> JsonAta<'a> {
-    pub fn new(expr: &str) -> Result<JsonAta<'a>> {
+    pub fn new(expr: &str, arena: &'a Bump) -> Result<JsonAta<'a>> {
         Ok(Self {
             ast: parser::parse(expr)?,
             frame: Frame::new(),
-            arena: Bump::new(),
+            arena,
         })
     }
 
@@ -39,18 +38,15 @@ impl<'a> JsonAta<'a> {
         &self.ast
     }
 
-    pub fn assign_var<'other>(&'other self, name: &str, value: &'other Value<'other>)
-    where
-        'other: 'a,
-    {
+    pub fn assign_var(&self, name: &str, value: &'a Value<'a>) {
         self.frame.bind(name, value)
     }
 
-    pub fn evaluate(&'a self, input: Option<&str>) -> Result<&'a Value<'a>> {
+    pub fn evaluate(&self, input: Option<&str>) -> Result<&'a Value<'a>> {
         let input = match input {
             Some(input) => {
                 let input_ast = parser::parse(input)?;
-                let evaluator = Evaluator::new(None, &self.arena);
+                let evaluator = Evaluator::new(None, self.arena);
                 evaluator.evaluate(&input_ast, Value::undefined(), &Frame::new())?
             }
             None => Value::undefined(),
@@ -58,14 +54,14 @@ impl<'a> JsonAta<'a> {
 
         // If the input is an array, wrap it in an array so that it gets treated as a single input
         let input = if input.is_array() {
-            Value::wrap_in_array(&self.arena, input, ArrayFlags::WRAPPED)
+            Value::wrap_in_array(self.arena, input, ArrayFlags::WRAPPED)
         } else {
             input
         };
 
         macro_rules! bind {
             ($name:literal, $new:ident, $fn:ident) => {
-                self.frame.bind($name, Value::$new(&self.arena, $name, $fn));
+                self.frame.bind($name, Value::$new(self.arena, $name, $fn));
             };
         }
 
@@ -88,7 +84,7 @@ impl<'a> JsonAta<'a> {
         bind!("sum", nativefn1, fn_sum);
 
         let chain_ast = parser::parse("function($f, $g) { function($x){ $g($f($x)) } }")?;
-        let evaluator = Evaluator::new(Some(chain_ast), &self.arena);
+        let evaluator = Evaluator::new(Some(chain_ast), self.arena);
         evaluator.evaluate(&self.ast, input, &self.frame)
     }
 }
