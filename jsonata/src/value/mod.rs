@@ -10,7 +10,6 @@ use crate::ast::{Ast, AstKind};
 use crate::frame::Frame;
 use crate::functions::FunctionContext;
 use crate::json::codegen::{DumpGenerator, Generator, PrettyGenerator};
-use crate::json::Number;
 use crate::Result;
 
 bitflags! {
@@ -33,7 +32,9 @@ pub const UNDEFINED: Value = Value::Undefined;
 pub enum Value<'a> {
     Undefined,
     Null,
-    Number(Number),
+    Unsigned(u64),
+    Signed(i64),
+    Float(f64),
     Bool(bool),
     String(String),
     Array(Box<'a, Vec<&'a Value<'a>>>, ArrayFlags),
@@ -79,8 +80,16 @@ impl<'a> Value<'a> {
         arena.alloc(Value::Bool(value))
     }
 
-    pub fn number(arena: &Bump, value: impl Into<Number>) -> &mut Value {
-        arena.alloc(Value::Number(value.into()))
+    pub fn unsigned(arena: &Bump, value: impl Into<u64>) -> &mut Value {
+        arena.alloc(Value::Unsigned(value.into()))
+    }
+
+    pub fn signed(arena: &Bump, value: impl Into<i64>) -> &mut Value {
+        arena.alloc(Value::Signed(value.into()))
+    }
+
+    pub fn float(arena: &Bump, value: impl Into<f64>) -> &mut Value {
+        arena.alloc(Value::Float(value.into()))
     }
 
     pub fn string(arena: &Bump, value: impl Into<String>) -> &mut Value {
@@ -172,13 +181,16 @@ impl<'a> Value<'a> {
     }
 
     pub fn is_number(&self) -> bool {
-        matches!(&self, Value::Number(..))
+        matches!(
+            &self,
+            Value::Unsigned(..) | Value::Signed(..) | Value::Float(..)
+        )
     }
 
     pub fn is_integer(&self) -> bool {
-        if let Value::Number(ref n) = *self {
-            let n = f64::from(*n);
-            match n.classify() {
+        match self {
+            Value::Unsigned(..) | Value::Signed(..) => true,
+            Value::Float(n) => match n.classify() {
                 std::num::FpCategory::Nan
                 | std::num::FpCategory::Infinite
                 | std::num::FpCategory::Subnormal => false,
@@ -186,14 +198,13 @@ impl<'a> Value<'a> {
                     let mantissa = n.trunc();
                     n - mantissa == 0.0
                 }
-            }
-        } else {
-            false
+            },
+            _ => false,
         }
     }
 
     pub fn is_nan(&self) -> bool {
-        matches!(*self, Value::Number(n) if n.is_nan())
+        matches!(*self, Value::Float(n) if n.is_nan())
     }
 
     pub fn is_string(&self) -> bool {
@@ -223,7 +234,9 @@ impl<'a> Value<'a> {
         match *self {
             Value::Undefined => false,
             Value::Null => false,
-            Value::Number(ref n) => *n != 0.0,
+            Value::Unsigned(n) => n != 0,
+            Value::Signed(n) => n != 0,
+            Value::Float(n) => n != 0.0,
             Value::Bool(ref b) => *b,
             Value::String(ref s) => !s.is_empty(),
             Value::Array(ref a, _) => match a.len() {
@@ -295,30 +308,32 @@ impl<'a> Value<'a> {
         }
     }
 
-    pub fn as_f32(&self) -> f32 {
-        match *self {
-            Value::Number(ref n) => f32::from(*n),
-            _ => panic!("Not a number"),
-        }
-    }
-
+    // TODO(math): Completely unchecked, audit usage
     pub fn as_f64(&self) -> f64 {
         match *self {
-            Value::Number(ref n) => f64::from(*n),
+            Value::Float(n) => n,
+            Value::Unsigned(n) => n as f64,
+            Value::Signed(n) => n as f64,
             _ => panic!("Not a number"),
         }
     }
 
+    // TODO(math): Completely unchecked, audit usage
     pub fn as_usize(&self) -> usize {
         match *self {
-            Value::Number(ref n) => f64::from(*n) as usize,
+            Value::Float(n) => n as usize,
+            Value::Unsigned(n) => n as usize,
+            Value::Signed(n) => n as usize,
             _ => panic!("Not a number"),
         }
     }
 
+    // TODO(math): Completely unchecked, audit usage
     pub fn as_isize(&self) -> isize {
         match *self {
-            Value::Number(ref n) => f64::from(*n) as isize,
+            Value::Float(n) => n as isize,
+            Value::Unsigned(n) => n as isize,
+            Value::Signed(n) => n as isize,
             _ => panic!("Not a number"),
         }
     }
@@ -454,47 +469,32 @@ impl<'a> PartialEq<Value<'a>> for Value<'a> {
         match (self, other) {
             (Value::Undefined, Value::Undefined) => true,
             (Value::Null, Value::Null) => true,
-            (Value::Number(l), Value::Number(r)) => *l == *r,
+
+            (Value::Unsigned(l), Value::Unsigned(r)) => *l == *r,
+            (Value::Signed(l), Value::Signed(r)) => *l == *r,
+            (Value::Float(l), Value::Float(r)) => *l == *r,
+
+            // Float to non-float promotes to float comparison
+            (Value::Float(f), Value::Unsigned(u)) | (Value::Unsigned(u), Value::Float(f)) => {
+                *f == (*u as f64)
+            }
+            (Value::Float(f), Value::Signed(s)) | (Value::Signed(s), Value::Float(f)) => {
+                *f == (*s as f64)
+            }
+
+            // Signed vs unsigned comparison, promote the unsigned to signed
+            (Value::Signed(s), Value::Unsigned(u)) | (Value::Unsigned(u), Value::Signed(s)) => {
+                if *u > i64::MAX as u64 || *s < 0 {
+                    false
+                } else {
+                    (*s as u64) == *u
+                }
+            }
+
             (Value::Bool(l), Value::Bool(r)) => *l == *r,
             (Value::String(l), Value::String(r)) => *l == *r,
             (Value::Array(l, ..), Value::Array(r, ..)) => *l == *r,
             (Value::Object(l), Value::Object(r)) => *l == *r,
-            _ => false,
-        }
-    }
-}
-
-impl PartialEq<i32> for Value<'_> {
-    fn eq(&self, other: &i32) -> bool {
-        match *self {
-            Value::Number(ref n) => *n == *other,
-            _ => false,
-        }
-    }
-}
-
-impl PartialEq<i64> for Value<'_> {
-    fn eq(&self, other: &i64) -> bool {
-        match *self {
-            Value::Number(ref n) => *n == *other,
-            _ => false,
-        }
-    }
-}
-
-impl PartialEq<f32> for Value<'_> {
-    fn eq(&self, other: &f32) -> bool {
-        match *self {
-            Value::Number(ref n) => *n == *other,
-            _ => false,
-        }
-    }
-}
-
-impl PartialEq<f64> for Value<'_> {
-    fn eq(&self, other: &f64) -> bool {
-        match *self {
-            Value::Number(ref n) => *n == *other,
             _ => false,
         }
     }
@@ -513,15 +513,6 @@ impl PartialEq<&str> for Value<'_> {
     fn eq(&self, other: &&str) -> bool {
         match *self {
             Value::String(ref s) => s == *other,
-            _ => false,
-        }
-    }
-}
-
-impl PartialEq<String> for Value<'_> {
-    fn eq(&self, other: &String) -> bool {
-        match *self {
-            Value::String(ref s) => *s == *other,
             _ => false,
         }
     }
@@ -546,7 +537,9 @@ impl std::fmt::Debug for Value<'_> {
         match self {
             Self::Undefined => write!(f, "undefined"),
             Self::Null => write!(f, "null"),
-            Self::Number(n) => write!(f, "{}", n),
+            Self::Unsigned(n) => write!(f, "{}", n),
+            Self::Signed(n) => write!(f, "{}", n),
+            Self::Float(n) => write!(f, "{}", n),
             Self::Bool(b) => write!(f, "{}", if *b { "true" } else { "false" }),
             Self::String(s) => write!(f, "\"{}\"", s),
             Self::Array(a, _) => write!(f, "<array({})>", a.len()),
@@ -563,5 +556,42 @@ impl std::fmt::Debug for Value<'_> {
                 write!(f, "<nativefn>")
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn float_eq_float() {
+        let arena = Bump::new();
+        let v1 = Value::float(&arena, 123.0);
+        let v2 = Value::float(&arena, 123.0);
+        assert_eq!(v1, v2)
+    }
+
+    #[test]
+    fn float_eq_unsigned() {
+        let arena = Bump::new();
+        let v1 = Value::float(&arena, 123.0);
+        let v2 = Value::unsigned(&arena, 123_u64);
+        assert_eq!(v1, v2)
+    }
+
+    #[test]
+    fn float_eq_signed() {
+        let arena = Bump::new();
+        let v1 = Value::float(&arena, 123.0);
+        let v2 = Value::signed(&arena, 123_i64);
+        assert_eq!(v1, v2)
+    }
+
+    #[test]
+    fn signed_eq_unsigned() {
+        let arena = Bump::new();
+        let v1 = Value::signed(&arena, 123_i64);
+        let v2 = Value::unsigned(&arena, 123_u64);
+        assert_eq!(v1, v2)
     }
 }

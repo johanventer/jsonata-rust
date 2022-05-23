@@ -667,11 +667,11 @@ impl<'source, 'arena> Parser<'source, 'arena> {
                     Value::object(self.arena)
                 }
                 b'"' => Value::string(self.arena, String::from(expect_string!(self))),
-                b'0' => Value::number(self.arena, allow_number_extensions!(self)),
-                b'1'..=b'9' => Value::number(self.arena, expect_number!(self, ch)),
+                b'0' => Value::float(self.arena, allow_number_extensions!(self)),
+                b'1'..=b'9' => Value::float(self.arena, expect_number!(self, ch)),
                 b'-' => {
                     let ch = expect_byte!(self);
-                    Value::number(
+                    Value::float(
                         self.arena,
                         -match ch {
                             b'0' => allow_number_extensions!(self),

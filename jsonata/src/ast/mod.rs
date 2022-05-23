@@ -2,8 +2,6 @@ mod process;
 
 use jsonata_signatures::Arg;
 
-use super::json::Number;
-
 // Object constructor, represented by tuples of (key, value)
 pub type Object = Vec<(Ast, Ast)>;
 
@@ -78,7 +76,9 @@ pub enum AstKind {
     Null,
     Bool(bool),
     String(String),
-    Number(Number),
+    Unsigned(u64),
+    Signed(i64),
+    Float(f64),
     Name(String),
     Var(String),
     Unary(UnaryOp),

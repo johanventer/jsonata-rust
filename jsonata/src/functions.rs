@@ -162,7 +162,9 @@ pub fn fn_boolean<'a, 'e>(
         Value::Undefined => Value::undefined(),
         Value::Null => Value::bool(context.arena, false),
         Value::Bool(b) => Value::bool(context.arena, *b),
-        Value::Number(num) => Value::bool(context.arena, *num != 0.0),
+        Value::Unsigned(n) => Value::bool(context.arena, *n != 0),
+        Value::Signed(n) => Value::bool(context.arena, *n != 0),
+        Value::Float(n) => Value::bool(context.arena, *n != 0.0),
         Value::String(ref str) => Value::bool(context.arena, !str.is_empty()),
         Value::Object(ref obj) => Value::bool(context.arena, !obj.is_empty()),
         Value::Array { .. } => match arg.len() {
@@ -213,7 +215,7 @@ pub fn fn_filter<'a, 'e>(
 
         args.push(item);
         if arity >= 2 {
-            args.push(Value::number(context.arena, index));
+            args.push(Value::unsigned(context.arena, index as u64));
         }
         if arity >= 3 {
             args.push(&*arr);
@@ -259,12 +261,12 @@ pub fn fn_count<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     arg: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
-    Ok(Value::number(
+    Ok(Value::unsigned(
         context.arena,
         if arg.is_undefined() {
             0
         } else if arg.is_array() {
-            arg.len()
+            arg.len() as u64
         } else {
             1
         },
@@ -400,7 +402,7 @@ pub fn fn_abs<'a, 'e>(
             context.name.to_string(),
         ))
     } else {
-        Ok(Value::number(context.arena, arg.as_f64().abs()))
+        Ok(Value::float(context.arena, arg.as_f64().abs()))
     }
 }
 
@@ -418,7 +420,7 @@ pub fn fn_floor<'a, 'e>(
             context.name.to_string(),
         ))
     } else {
-        Ok(Value::number(context.arena, arg.as_f64().floor()))
+        Ok(Value::float(context.arena, arg.as_f64().floor()))
     }
 }
 
@@ -436,7 +438,7 @@ pub fn fn_ceil<'a, 'e>(
             context.name.to_string(),
         ))
     } else {
-        Ok(Value::number(context.arena, arg.as_f64().ceil()))
+        Ok(Value::float(context.arena, arg.as_f64().ceil()))
     }
 }
 
@@ -461,7 +463,7 @@ pub fn fn_max<'a, 'e>(
         }
         max = f64::max(max, arg.as_f64());
     }
-    Ok(Value::number(context.arena, max))
+    Ok(Value::float(context.arena, max))
 }
 
 #[signature("<a<n>:n>")]
@@ -485,7 +487,7 @@ pub fn fn_min<'a, 'e>(
         }
         min = f64::min(min, arg.as_f64());
     }
-    Ok(Value::number(context.arena, min))
+    Ok(Value::float(context.arena, min))
 }
 
 #[signature("<a<n>:n>")]
@@ -509,5 +511,5 @@ pub fn fn_sum<'a, 'e>(
         }
         sum += arg.as_f64();
     }
-    Ok(Value::number(context.arena, sum))
+    Ok(Value::float(context.arena, sum))
 }

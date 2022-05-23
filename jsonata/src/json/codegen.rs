@@ -141,7 +141,9 @@ pub trait Generator {
         match *json {
             Value::Null => self.write(b"null"),
             Value::String(ref string) => self.write_string(string),
-            Value::Number(ref number) => self.write_number(number),
+            Value::Unsigned(n) => self.write_number(&n.into()),
+            Value::Signed(n) => self.write_number(&n.into()),
+            Value::Float(n) => self.write_number(&n.into()),
             Value::Bool(true) => self.write(b"true"),
             Value::Bool(false) => self.write(b"false"),
             Value::Array(..) => {

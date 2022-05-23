@@ -45,7 +45,9 @@ impl<'a> Evaluator<'a> {
             AstKind::Null => Value::null(self.arena),
             AstKind::Bool(b) => Value::bool(self.arena, b),
             AstKind::String(ref s) => Value::string(self.arena, String::from(s)),
-            AstKind::Number(n) => Value::number(self.arena, n),
+            AstKind::Unsigned(n) => Value::unsigned(self.arena, n),
+            AstKind::Signed(n) => Value::signed(self.arena, n),
+            AstKind::Float(n) => Value::float(self.arena, n),
             AstKind::Block(ref exprs) => self.evaluate_block(exprs, input, frame)?,
             AstKind::Unary(ref op) => self.evaluate_unary_op(node, op, input, frame)?,
             AstKind::Binary(ref op, ref lhs, ref rhs) => {
@@ -150,13 +152,20 @@ impl<'a> Evaluator<'a> {
         match *op {
             UnaryOp::Minus(ref value) => {
                 let result = self.evaluate(value, input, frame)?;
-                match result {
-                    Value::Undefined => Ok(Value::undefined()),
-                    Value::Number(num) if !num.is_nan() => Ok(Value::number(self.arena, -*num)),
-                    _ => Err(Error::D1002NegatingNonNumeric(
+                if result.is_undefined() {
+                    Ok(Value::undefined())
+                } else if result.is_number() {
+                    match result {
+                        Value::Unsigned(n) => Ok(Value::signed(self.arena, -(*n as i64))),
+                        Value::Signed(n) => Ok(Value::signed(self.arena, -n)),
+                        Value::Float(n) => Ok(Value::float(self.arena, -n)),
+                        _ => unreachable!(),
+                    }
+                } else {
+                    Err(Error::D1002NegatingNonNumeric(
                         node.char_index,
                         result.dump(),
-                    )),
+                    ))
                 }
             }
             UnaryOp::ArrayConstructor(ref array) => {
@@ -285,26 +294,28 @@ impl<'a> Evaluator<'a> {
             | BinaryOp::Modulus => {
                 let rhs = self.evaluate(rhs_ast, input, frame)?;
 
-                let lhs = match lhs {
-                    Value::Undefined => return Ok(Value::undefined()),
-                    Value::Number(n) if !n.is_nan() => f64::from(*n),
-                    _ => {
-                        return Err(Error::T2001LeftSideNotNumber(
-                            node.char_index,
-                            op.to_string(),
-                        ))
-                    }
+                // TODO(math): Do the operation in integer math if possible
+
+                let lhs = if lhs.is_undefined() {
+                    return Ok(Value::undefined());
+                } else if lhs.is_number() {
+                    lhs.as_f64()
+                } else {
+                    return Err(Error::T2001LeftSideNotNumber(
+                        node.char_index,
+                        op.to_string(),
+                    ));
                 };
 
-                let rhs = match rhs {
-                    Value::Undefined => return Ok(Value::undefined()),
-                    Value::Number(n) if !n.is_nan() => f64::from(*n),
-                    _ => {
-                        return Err(Error::T2002RightSideNotNumber(
-                            node.char_index,
-                            op.to_string(),
-                        ))
-                    }
+                let rhs = if rhs.is_undefined() {
+                    return Ok(Value::undefined());
+                } else if rhs.is_number() {
+                    rhs.as_f64()
+                } else {
+                    return Err(Error::T2002RightSideNotNumber(
+                        node.char_index,
+                        op.to_string(),
+                    ));
                 };
 
                 let result = match op {
@@ -319,7 +330,7 @@ impl<'a> Evaluator<'a> {
                 if result.is_infinite() {
                     Err(Error::D1001NumberOfOutRange(result))
                 } else {
-                    Ok(Value::number(self.arena, result))
+                    Ok(Value::float(self.arena, result))
                 }
             }
 
@@ -337,9 +348,10 @@ impl<'a> Evaluator<'a> {
                     return Err(Error::T2010BinaryOpTypes(node.char_index, op.to_string()));
                 }
 
-                if let (Value::Number(ref lhs), Value::Number(ref rhs)) = (lhs, rhs) {
-                    let lhs = f64::from(*lhs);
-                    let rhs = f64::from(*rhs);
+                // TODO(math): Does it hurt to do these comparisons in float?
+                if lhs.is_number() && rhs.is_number() {
+                    let lhs = lhs.as_f64();
+                    let rhs = rhs.as_f64();
                     return Ok(Value::bool(
                         self.arena,
                         match op {
@@ -419,8 +431,8 @@ impl<'a> Evaluator<'a> {
                 }
 
                 let result = Value::array_with_capacity(self.arena, size, ArrayFlags::SEQUENCE);
-                for index in lhs..rhs + 1 {
-                    result.push(Value::number(self.arena, index));
+                for index in lhs..=rhs {
+                    result.push(Value::unsigned(self.arena, index as u64));
                 }
 
                 Ok(result)
@@ -695,8 +707,15 @@ impl<'a> Evaluator<'a> {
 
         match node.kind {
             AstKind::Filter(ref filter) => match filter.kind {
-                AstKind::Number(n) => {
-                    let index = get_index(n.into());
+                AstKind::Unsigned(..) | AstKind::Signed(..) | AstKind::Float(..) => {
+                    //TODO(math): Do this in integers
+                    let n: f64 = match filter.kind {
+                        AstKind::Unsigned(n) => n as f64,
+                        AstKind::Signed(n) => n as f64,
+                        AstKind::Float(n) => n,
+                        _ => unreachable!(),
+                    };
+                    let index = get_index(n);
                     let item = input.get_member(index as usize);
                     if !item.is_undefined() {
                         if item.is_array() {

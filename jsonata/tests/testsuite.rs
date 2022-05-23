@@ -126,7 +126,9 @@ pub fn from<'a>(value: &Value, arena: &'a Bump) -> &'a Value<'a> {
     match value {
         Value::Undefined => Value::undefined(),
         Value::Null => Value::null(arena),
-        Value::Number(n) => Value::number(arena, *n),
+        Value::Unsigned(n) => Value::unsigned(arena, *n),
+        Value::Signed(n) => Value::signed(arena, *n),
+        Value::Float(n) => Value::float(arena, *n),
         Value::Bool(b) => Value::bool(arena, *b),
         Value::String(s) => Value::string(arena, s),
         Value::Array(a, f) => {
