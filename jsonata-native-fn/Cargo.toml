@@ -1,0 +1,19 @@
+[package]
+name = "jsonata-native-fn"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+jsonata-errors = { path = "../jsonata-errors" }
+jsonata-signatures = { path = "../jsonata-signatures" }
+
+proc-macro2 = "1"
+proc-macro-error = "1"
+quote = "1"
+syn = { version = "1", features = ["full"] }
+
+[dev-dependencies]
+trybuild = "1"

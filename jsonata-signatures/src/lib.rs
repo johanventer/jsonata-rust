@@ -29,6 +29,8 @@ pub struct Arg {
     pub flags: Flags,
 }
 
+pub type Signature = Vec<Arg>;
+
 impl Arg {
     fn new(kind: ArgKind) -> Self {
         Self {
