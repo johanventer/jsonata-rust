@@ -1,7 +1,5 @@
 mod process;
 
-use jsonata_signatures::Arg;
-
 use super::json::Number;
 
 // Object constructor, represented by tuples of (key, value)
@@ -100,7 +98,6 @@ pub enum AstKind {
         name: String,
         args: Vec<Ast>,
         body: Box<Ast>,
-        signature: Option<Vec<Arg>>,
         thunk: bool,
     },
     Ternary {

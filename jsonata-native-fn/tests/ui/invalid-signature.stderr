@@ -1,8 +1,0 @@
-error: F0402 @ Signature does not start with '<'
-
-         = help: Signature parsing failed, check the signature syntax
-
- --> tests/ui/invalid-signature.rs:3:11
-  |
-3 | #[jsonata("yyyy")]
-  |           ^^^^^^

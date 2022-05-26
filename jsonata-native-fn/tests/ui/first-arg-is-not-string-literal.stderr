@@ -1,8 +1,0 @@
-error: the first argument should be a signature string
-
-         = help: The first argument should be a signature string, e.g. `#[jsonata("<b>")]`
-
- --> tests/ui/first-arg-is-not-string-literal.rs:3:11
-  |
-3 | #[jsonata(1)]
-  |           ^

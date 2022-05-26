@@ -9,6 +9,7 @@ pub mod symbol;
 pub mod tokenizer;
 pub mod value;
 
+pub use functions::FunctionContext;
 pub use jsonata_errors::{Error, Result};
 pub use value::Value;
 

@@ -1,8 +1,6 @@
 use bumpalo::Bump;
-use lazy_static;
 
 use jsonata_errors::{Error, Result};
-use jsonata_signature_macro::signature;
 
 use super::evaluator::Evaluator;
 use super::frame::Frame;
@@ -56,7 +54,6 @@ pub fn fn_lookup_internal<'a, 'e>(
     }
 }
 
-#[signature("<x-s:x>")]
 pub fn fn_lookup<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     input: &'a Value<'a>,
@@ -111,7 +108,6 @@ pub fn fn_append_internal<'a, 'e>(
     result
 }
 
-#[signature("<xx:a>")]
 pub fn fn_append<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     arg1: &'a Value<'a>,
@@ -153,7 +149,6 @@ pub fn fn_append<'a, 'e>(
     Ok(result)
 }
 
-#[signature("<x-:b>")]
 pub fn fn_boolean<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     arg: &'a Value<'a>,
@@ -185,7 +180,6 @@ pub fn fn_boolean<'a, 'e>(
     })
 }
 
-#[signature("<af>")]
 pub fn fn_filter<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     arr: &'a Value<'a>,
@@ -229,7 +223,6 @@ pub fn fn_filter<'a, 'e>(
     Ok(result)
 }
 
-#[signature("<x-b?:s>")]
 pub fn fn_string<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     arg: &'a Value<'a>,
@@ -254,7 +247,6 @@ pub fn fn_string<'a, 'e>(
     }
 }
 
-#[signature("<a:n>")]
 pub fn fn_count<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     arg: &'a Value<'a>,
@@ -271,7 +263,6 @@ pub fn fn_count<'a, 'e>(
     ))
 }
 
-#[signature("<x-:b>")]
 pub fn fn_not<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     arg: &'a Value<'a>,
@@ -283,7 +274,6 @@ pub fn fn_not<'a, 'e>(
     })
 }
 
-#[signature("<s-:s>")]
 pub fn fn_lowercase<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     arg: &'a Value<'a>,
@@ -295,7 +285,6 @@ pub fn fn_lowercase<'a, 'e>(
     })
 }
 
-#[signature("<s-:s>")]
 pub fn fn_uppercase<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     arg: &'a Value<'a>,
@@ -307,7 +296,6 @@ pub fn fn_uppercase<'a, 'e>(
     }
 }
 
-#[signature("<s-nn?:s>")]
 pub fn fn_substring<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     string: &'a Value<'a>,
@@ -386,7 +374,6 @@ pub fn fn_substring<'a, 'e>(
     }
 }
 
-#[signature("<n-:n>")]
 pub fn fn_abs<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     arg: &'a Value<'a>,
@@ -404,7 +391,6 @@ pub fn fn_abs<'a, 'e>(
     }
 }
 
-#[signature("<n-:n>")]
 pub fn fn_floor<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     arg: &'a Value<'a>,
@@ -422,7 +408,6 @@ pub fn fn_floor<'a, 'e>(
     }
 }
 
-#[signature("<n-:n>")]
 pub fn fn_ceil<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     arg: &'a Value<'a>,
@@ -440,7 +425,6 @@ pub fn fn_ceil<'a, 'e>(
     }
 }
 
-#[signature("<a<n>:n>")]
 pub fn fn_max<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     args: &'a Value<'a>,
@@ -464,7 +448,6 @@ pub fn fn_max<'a, 'e>(
     Ok(Value::number(context.arena, max))
 }
 
-#[signature("<a<n>:n>")]
 pub fn fn_min<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     args: &'a Value<'a>,
@@ -488,7 +471,6 @@ pub fn fn_min<'a, 'e>(
     Ok(Value::number(context.arena, min))
 }
 
-#[signature("<a<n>:n>")]
 pub fn fn_sum<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     args: &'a Value<'a>,
