@@ -6,7 +6,7 @@ use super::evaluator::Evaluator;
 use super::frame::Frame;
 use super::value::{ArrayFlags, Value};
 
-// macro_rules! assert_min_args {
+// macro_rules! min_args {
 //     ($context:ident, $args:ident, $min:literal) => {
 //         if $args.len() < $min {
 //             return Err(Error::T0410ArgumentNotValid(
@@ -18,7 +18,7 @@ use super::value::{ArrayFlags, Value};
 //     };
 // }
 
-macro_rules! assert_max_args {
+macro_rules! max_args {
     ($context:ident, $args:ident, $max:literal) => {
         if $args.len() > $max {
             return Err(Error::T0410ArgumentNotValid(
@@ -30,17 +30,23 @@ macro_rules! assert_max_args {
     };
 }
 
-// macro_rules! assert_arg {
-//     ($condition:expr, $context:ident, $index:literal) => {
-//         if !($condition) {
-//             return Err(Error::T0410ArgumentNotValid(
-//                 $context.char_index,
-//                 $index,
-//                 $context.name.to_string(),
-//             ));
-//         }
-//     };
-// }
+macro_rules! bad_arg {
+    ($context:ident, $index:literal) => {
+        return Err(Error::T0410ArgumentNotValid(
+            $context.char_index,
+            $index,
+            $context.name.to_string(),
+        ))
+    };
+}
+
+macro_rules! assert_arg {
+    ($condition: expr, $context:ident, $index:literal) => {
+        if !($condition) {
+            bad_arg!($context, $index);
+        }
+    };
+}
 
 macro_rules! assert_array_of_type {
     ($condition:expr, $context:ident, $index:literal, $t:literal) => {
@@ -161,7 +167,7 @@ pub fn fn_boolean<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
-    assert_max_args!(context, args, 1);
+    max_args!(context, args, 1);
 
     let arg = &args[0];
     Ok(match arg {
@@ -208,13 +214,7 @@ pub fn fn_filter<'a, 'e>(
 
     let arr = Value::wrap_in_array_if_needed(context.arena, arr, ArrayFlags::empty());
 
-    if !func.is_function() {
-        return Err(Error::T0410ArgumentNotValid(
-            context.char_index,
-            2,
-            context.name.to_string(),
-        ));
-    }
+    assert_arg!(func.is_function(), context, 2);
 
     let result = Value::array(context.arena, ArrayFlags::SEQUENCE);
 
@@ -321,21 +321,8 @@ pub fn fn_substring<'a, 'e>(
         return Ok(Value::undefined());
     }
 
-    if !string.is_string() {
-        return Err(Error::T0410ArgumentNotValid(
-            context.char_index,
-            1,
-            context.name.to_string(),
-        ));
-    }
-
-    if !start.is_number() {
-        return Err(Error::T0410ArgumentNotValid(
-            context.char_index,
-            2,
-            context.name.to_string(),
-        ));
-    }
+    assert_arg!(string.is_string(), context, 1);
+    assert_arg!(start.is_number(), context, 2);
 
     let string = string.as_str();
 
@@ -360,13 +347,7 @@ pub fn fn_substring<'a, 'e>(
             string[start as usize..].to_string(),
         ))
     } else {
-        if !length.is_number() {
-            return Err(Error::T0410ArgumentNotValid(
-                context.char_index,
-                3,
-                context.name.to_string(),
-            ));
-        }
+        assert_arg!(length.is_number(), context, 3);
 
         let length = length.as_isize();
         if length < 0 {
@@ -396,16 +377,12 @@ pub fn fn_abs<'a, 'e>(
     let arg = &args[0];
 
     if arg.is_undefined() {
-        Ok(Value::undefined())
-    } else if !arg.is_number() {
-        Err(Error::T0410ArgumentNotValid(
-            context.char_index,
-            1,
-            context.name.to_string(),
-        ))
-    } else {
-        Ok(Value::number(context.arena, arg.as_f64().abs()))
+        return Ok(Value::undefined());
     }
+
+    assert_arg!(arg.is_number(), context, 1);
+
+    Ok(Value::number(context.arena, arg.as_f64().abs()))
 }
 
 pub fn fn_floor<'a, 'e>(
@@ -415,16 +392,12 @@ pub fn fn_floor<'a, 'e>(
     let arg = &args[0];
 
     if arg.is_undefined() {
-        Ok(Value::undefined())
-    } else if !arg.is_number() {
-        Err(Error::T0410ArgumentNotValid(
-            context.char_index,
-            1,
-            context.name.to_string(),
-        ))
-    } else {
-        Ok(Value::number(context.arena, arg.as_f64().floor()))
+        return Ok(Value::undefined());
     }
+
+    assert_arg!(arg.is_number(), context, 1);
+
+    Ok(Value::number(context.arena, arg.as_f64().floor()))
 }
 
 pub fn fn_ceil<'a, 'e>(
@@ -434,16 +407,12 @@ pub fn fn_ceil<'a, 'e>(
     let arg = &args[0];
 
     if arg.is_undefined() {
-        Ok(Value::undefined())
-    } else if !arg.is_number() {
-        Err(Error::T0410ArgumentNotValid(
-            context.char_index,
-            1,
-            context.name.to_string(),
-        ))
-    } else {
-        Ok(Value::number(context.arena, arg.as_f64().ceil()))
+        return Ok(Value::undefined());
     }
+
+    assert_arg!(arg.is_number(), context, 1);
+
+    Ok(Value::number(context.arena, arg.as_f64().ceil()))
 }
 
 pub fn fn_lookup_internal<'a, 'e>(
@@ -479,23 +448,15 @@ pub fn fn_lookup<'a, 'e>(
 ) -> Result<&'a Value<'a>> {
     let input = &args[0];
     let key = &args[1];
-
-    if !key.is_string() {
-        Err(Error::T0410ArgumentNotValid(
-            context.char_index,
-            1,
-            context.name.to_string(),
-        ))
-    } else {
-        Ok(fn_lookup_internal(context.clone(), input, &key.as_str()))
-    }
+    assert_arg!(key.is_string(), context, 2);
+    Ok(fn_lookup_internal(context.clone(), input, &key.as_str()))
 }
 
 pub fn fn_count<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
-    assert_max_args!(context, args, 1);
+    max_args!(context, args, 1);
 
     let arg = &args[0];
 
@@ -515,7 +476,7 @@ pub fn fn_max<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
-    assert_max_args!(context, args, 1);
+    max_args!(context, args, 1);
 
     let arg = &args[0];
 
@@ -539,7 +500,7 @@ pub fn fn_min<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
-    assert_max_args!(context, args, 1);
+    max_args!(context, args, 1);
 
     let arg = &args[0];
 
@@ -563,7 +524,7 @@ pub fn fn_sum<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
-    assert_max_args!(context, args, 1);
+    max_args!(context, args, 1);
 
     let arg = &args[0];
 
@@ -587,7 +548,7 @@ pub fn fn_number<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
-    assert_max_args!(context, args, 1);
+    max_args!(context, args, 1);
 
     let arg = &args[0];
 
@@ -607,10 +568,6 @@ pub fn fn_number<'a, 'e>(
                 Ok(Value::undefined())
             }
         }
-        _ => Err(Error::T0410ArgumentNotValid(
-            context.char_index,
-            1,
-            context.name.to_string(),
-        )),
+        _ => bad_arg!(context, 1),
     }
 }
