@@ -587,7 +587,9 @@ pub fn fn_number<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
-    let arg = args[0];
+    assert_max_args!(context, args, 1);
+
+    let arg = &args[0];
 
     match arg {
         Value::Undefined => Ok(Value::undefined()),
