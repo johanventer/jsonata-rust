@@ -204,8 +204,9 @@ impl<'a> Evaluator<'a> {
                 let result = self.evaluate(value, input, frame)?;
                 match result {
                     Value::Undefined => Ok(Value::undefined()),
-                    Value::Number(n) => Ok(Value::number(self.arena, -n)),
-                    _ => Err(Error::D1002NegatingNonNumeric(
+                    Value::Number(n) if result.is_valid_number()? => {
+                        Ok(Value::number(self.arena, -n))
+                    }
                         node.char_index,
                         result.dump(),
                     )),
@@ -760,10 +761,10 @@ impl<'a> Evaluator<'a> {
                 _ => {
                     for (i, item) in input.members().enumerate() {
                         let mut index = self.evaluate(filter, item, frame)?;
-                        if index.is_number() && !index.is_nan() {
+                        if index.is_valid_number()? {
                             index = Value::wrap_in_array(self.arena, index, ArrayFlags::empty());
                         }
-                        if index.is_array() && index.members().all(|v| v.is_number() && !v.is_nan())
+                        if index.is_array_of_valid_numbers()? {
                         {
                             index.members().for_each(|v| {
                                 let index = get_index(v.as_f64());
