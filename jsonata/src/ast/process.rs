@@ -111,6 +111,7 @@ fn process_unary(node: Ast) -> Result<Ast> {
             let mut result = process_ast(*value)?;
             match result.kind {
                 AstKind::Unsigned(ref v) => {
+                    // TODO(math): Handle i64 overflow
                     let v = -(*v as i64);
                     Ok(Ast::new(AstKind::Signed(v), node.char_index))
                 }

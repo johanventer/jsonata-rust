@@ -208,6 +208,7 @@ impl<'a> Evaluator<'a> {
                     Ok(Value::undefined())
                 } else if result.is_number() {
                     match result {
+                        // TODO(math): Handle i64 overflow
                         Value::Unsigned(n) => Ok(Value::signed(self.arena, -(*n as i64))),
                         Value::Signed(n) => Ok(Value::signed(self.arena, -n)),
                         Value::Float(n) => Ok(Value::float(self.arena, -n)),
