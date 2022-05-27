@@ -6,17 +6,17 @@ use super::evaluator::Evaluator;
 use super::frame::Frame;
 use super::value::{ArrayFlags, Value};
 
-macro_rules! assert_min_args {
-    ($context:ident, $args:ident, $min:literal) => {
-        if $args.len() < $min {
-            return Err(Error::T0410ArgumentNotValid(
-                $context.char_index,
-                $min,
-                $context.name.to_string(),
-            ));
-        }
-    };
-}
+// macro_rules! assert_min_args {
+//     ($context:ident, $args:ident, $min:literal) => {
+//         if $args.len() < $min {
+//             return Err(Error::T0410ArgumentNotValid(
+//                 $context.char_index,
+//                 $min,
+//                 $context.name.to_string(),
+//             ));
+//         }
+//     };
+// }
 
 macro_rules! assert_max_args {
     ($context:ident, $args:ident, $max:literal) => {
@@ -30,17 +30,17 @@ macro_rules! assert_max_args {
     };
 }
 
-macro_rules! assert_arg {
-    ($condition:expr, $context:ident, $index:literal) => {
-        if !($condition) {
-            return Err(Error::T0410ArgumentNotValid(
-                $context.char_index,
-                $index,
-                $context.name.to_string(),
-            ));
-        }
-    };
-}
+// macro_rules! assert_arg {
+//     ($condition:expr, $context:ident, $index:literal) => {
+//         if !($condition) {
+//             return Err(Error::T0410ArgumentNotValid(
+//                 $context.char_index,
+//                 $index,
+//                 $context.name.to_string(),
+//             ));
+//         }
+//     };
+// }
 
 macro_rules! assert_array_of_type {
     ($condition:expr, $context:ident, $index:literal, $t:literal) => {
