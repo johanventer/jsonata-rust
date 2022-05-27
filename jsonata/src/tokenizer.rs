@@ -66,7 +66,6 @@ pub enum TokenKind {
     // Identifiers
     Name(String),
     Var(String),
-    Signature(String),
 }
 
 impl std::fmt::Display for TokenKind {
@@ -117,7 +116,6 @@ impl std::fmt::Display for TokenKind {
             TokenKind::Num(v) => write!(f, "{}", v),
             TokenKind::Name(v) => write!(f, "{}", v),
             TokenKind::Var(v) => write!(f, "${}", v),
-            TokenKind::Signature(v) => write!(f, "{}", v),
         }
     }
 }
@@ -131,15 +129,6 @@ pub struct Token {
 }
 
 /// Tokenizer for JSONata syntax.
-///
-/// Unfortunately JSONata's grammar is not 100% context free. The two cases where lexing
-/// becomes difficult are:
-///
-/// * Function signatures, e.g. `function($x)<s> { $x }`
-/// * Regular expressions, e.g. `/some regex/`
-///
-/// The tokenizer can work out when a signature is expected, but not when a regular expression
-/// is, which is why the `infix` parameter to `next_token()` exists.
 #[derive(Debug)]
 pub struct Tokenizer<'a> {
     input: &'a str,
@@ -159,9 +148,6 @@ pub struct Tokenizer<'a> {
 
     /// The starting char index of the current token being generated (used for errors)
     start_char_index: usize,
-
-    /// Indicates whether the next `<` should lex as a function signature
-    expect_signature: bool,
 }
 
 const NULL: char = '\0';
@@ -231,7 +217,6 @@ impl<'a> Tokenizer<'a> {
             char_index: 0,
             start_byte_index: 0,
             start_char_index: 0,
-            expect_signature: false,
         }
     }
 
@@ -390,52 +375,12 @@ impl<'a> Tokenizer<'a> {
                         self.bump();
                         LessEqual
                     }
-                    _ => {
-                        // Scan a function signature if we've been flagged that this might happen
-                        if self.expect_signature {
-                            let mut depth = 1;
-
-                            while depth > 0 && !self.eof() {
-                                match self.bump() {
-                                    '<' => depth += 1,
-                                    '>' => depth -= 1,
-                                    'b' | 'n' | 's' | 'l' | 'a' | 'o' | 'f' | 'u' | 'j' | 'x'
-                                    | '(' | ')' => {}
-                                    c => {
-                                        return Err(Error::S0202UnexpectedToken(
-                                            self.char_index,
-                                            '>'.to_string(),
-                                            c.to_string(),
-                                        ));
-                                    }
-                                }
-                            }
-
-                            if self.eof() {
-                                return Err(Error::S0201SyntaxError(
-                                    self.start_byte_index,
-                                    self.peek().to_string(),
-                                ));
-                            }
-
-                            let sig =
-                                String::from(&self.input[self.start_byte_index..self.byte_index]);
-
-                            self.expect_signature = false;
-
-                            Signature(sig)
-                        } else {
-                            LeftAngleBracket
-                        }
-                    }
+                    _ => LeftAngleBracket,
                 },
 
                 '[' => LeftBracket,
                 ']' => RightBracket,
-                '{' => {
-                    self.expect_signature = false;
-                    LeftBrace
-                }
+                '{' => LeftBrace,
                 '}' => RightBrace,
                 '(' => LeftParen,
                 ')' => RightParen,
@@ -593,15 +538,6 @@ impl<'a> Tokenizer<'a> {
                             "true" => Bool(true),
                             "false" => Bool(false),
                             "null" => Null,
-                            "function" => {
-                                // This is one of those times where JSONata's syntax let's us down.
-                                // Function signatures come directly after the right parentheses in a
-                                // lambda definition, i.e. `function($x)<s>{$x}`. As we have just seen
-                                // a bare `function` we flag the state that we could possibly see a
-                                // a signature.
-                                self.expect_signature = true;
-                                Name("function".to_string())
-                            }
                             _ => Name(String::from(
                                 &self.input[self.start_byte_index..self.byte_index],
                             )),
@@ -1005,28 +941,5 @@ mod tests {
             t.next_token().unwrap().kind,
             TokenKind::Num(n) if (f64::from(n) - 2.234E-2_f64).abs() < f64::EPSILON
         ));
-    }
-
-    #[test]
-    fn signature() {
-        let mut t = Tokenizer::new("function($x)<s>{$x}");
-        assert!(matches!(
-            t.next_token().unwrap().kind,
-            TokenKind::Name(s) if s == "function"
-        ));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::LeftParen));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Var(s) if s == "x"));
-        assert!(matches!(
-            t.next_token().unwrap().kind,
-            TokenKind::RightParen
-        ));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Signature(s) if s == "<s>"));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::LeftBrace));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::Var(s) if s == "x"));
-        assert!(matches!(
-            t.next_token().unwrap().kind,
-            TokenKind::RightBrace
-        ));
-        assert!(matches!(t.next_token().unwrap().kind, TokenKind::End));
     }
 }
