@@ -43,12 +43,12 @@ impl<'a> JsonAta<'a> {
         self.frame.bind(name, value)
     }
 
-    pub fn evaluate(&'a self, input: Option<&str>) -> Result<&'a Value<'a>> {
+    pub fn evaluate(&self, input: Option<&str>) -> Result<&'a Value<'a>> {
         self.evaluate_timeboxed(input, None, None)
     }
 
     pub fn evaluate_timeboxed(
-        &'a self,
+        &self,
         input: Option<&str>,
         max_depth: Option<usize>,
         time_limit: Option<usize>,
@@ -56,7 +56,7 @@ impl<'a> JsonAta<'a> {
         let input = match input {
             Some(input) => {
                 let input_ast = parser::parse(input)?;
-                let evaluator = Evaluator::new(None, self.arena);
+                let evaluator = Evaluator::new(None, self.arena, None, None);
                 evaluator.evaluate(&input_ast, Value::undefined(), &Frame::new())?
             }
             None => Value::undefined(),
@@ -94,8 +94,10 @@ impl<'a> JsonAta<'a> {
         bind_native!("sum", 1, fn_sum);
         bind_native!("uppercase", 1, fn_uppercase);
 
-        let chain_ast = Some(parser::parse("function($f, $g) { function($x){ $g($f($x)) } }")?);
-        let evaluator = Evaluator::new(chain_ast, &self.arena, max_depth, time_limit);
+        let chain_ast = Some(parser::parse(
+            "function($f, $g) { function($x){ $g($f($x)) } }",
+        )?);
+        let evaluator = Evaluator::new(chain_ast, self.arena, max_depth, time_limit);
         evaluator.evaluate(&self.ast, input, &self.frame)
     }
 }

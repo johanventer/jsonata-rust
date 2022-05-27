@@ -501,14 +501,14 @@ pub fn fn_count<'a, 'e>(
 
     let arg = &args[0];
 
-    Ok(Value::number(
+    Ok(Value::unsigned(
         context.arena,
         if arg.is_undefined() {
-            0
+            0_u64
         } else if arg.is_array() {
-            arg.len()
+            arg.len() as u64
         } else {
-            1
+            1_u64
         },
     ))
 }

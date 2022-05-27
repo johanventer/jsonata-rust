@@ -23,11 +23,14 @@ fn t(resource: &str) {
 
 fn test_case(resource: &str) {
     let arena = Bump::new();
-    let test_jsonata = JsonAta::new(&test, &arena).unwrap();
+    let test_jsonata = JsonAta::new(
+        &fs::read_to_string(path::Path::new(resource)).unwrap(),
+        &arena,
+    )
+    .unwrap();
     let test = test_jsonata.evaluate(None).unwrap();
-
     let test = Value::wrap_in_array_if_needed(&arena, test, ArrayFlags::empty());
-    
+
     for case in test.members() {
         let timelimit = &case["timelimit"];
         let timelimit = if timelimit.is_integer() {

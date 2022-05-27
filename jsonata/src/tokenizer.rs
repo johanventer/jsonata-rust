@@ -117,7 +117,6 @@ impl std::fmt::Display for TokenKind {
             Float(v) => write!(f, "{}", v),
             Name(v) => write!(f, "{}", v),
             Var(v) => write!(f, "${}", v),
-            Signature(v) => write!(f, "{}", v),
         }
     }
 }
