@@ -10,6 +10,7 @@ use crate::ast::{Ast, AstKind};
 use crate::frame::Frame;
 use crate::functions::FunctionContext;
 use crate::Result;
+use jsonata_errors::Error;
 
 mod codegen;
 use codegen::{DumpGenerator, Generator, PrettyGenerator};
@@ -151,6 +152,35 @@ impl<'a> Value<'a> {
                 }
             },
             _ => false,
+        }
+    }
+
+    pub fn is_array_of_valid_numbers(&self) -> Result<bool> {
+        match self {
+            Value::Array(ref a, _) => {
+                for member in a.iter() {
+                    if !member.is_valid_number()? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    pub fn is_valid_number(&self) -> Result<bool> {
+        match self {
+            Value::Number(n) => {
+                if n.is_nan() {
+                    Ok(false)
+                } else if n.is_infinite() {
+                    Err(Error::D1001NumberOfOutRange(*n))
+                } else {
+                    Ok(true)
+                }
+            }
+            _ => Ok(false),
         }
     }
 
