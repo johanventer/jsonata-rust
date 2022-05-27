@@ -389,7 +389,6 @@ impl<'a> Evaluator<'a> {
                     return Err(Error::T2010BinaryOpTypes(node.char_index, op.to_string()));
                 }
 
-                // TODO(math): Does it hurt to do these comparisons in float?
                 if lhs.is_number() && rhs.is_number() {
                     let lhs = lhs.as_f64();
                     let rhs = rhs.as_f64();
@@ -531,7 +530,7 @@ impl<'a> Evaluator<'a> {
                     }
 
                     if lhs.is_function() {
-                        // Apply function chainin
+                        // Apply function chaining
                         let chain = self.evaluate(
                             self.chain_ast.as_ref().unwrap(),
                             Value::undefined(),

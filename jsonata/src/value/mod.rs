@@ -178,7 +178,7 @@ impl<'a> Value<'a> {
         match *self {
             Value::Undefined => false,
             Value::Null => false,
-            Value::Number(n) => n != 0.0 && n != -0.0,
+            Value::Number(n) => n != 0.0,
             Value::Bool(ref b) => *b,
             Value::String(ref s) => !s.is_empty(),
             Value::Array(ref a, _) => match a.len() {

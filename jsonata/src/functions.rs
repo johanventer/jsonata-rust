@@ -168,7 +168,7 @@ pub fn fn_boolean<'a, 'e>(
         Value::Undefined => Value::undefined(),
         Value::Null => Value::bool(context.arena, false),
         Value::Bool(b) => Value::bool(context.arena, *b),
-        Value::Number(n) => Value::bool(context.arena, *n != 0.0 && *n != -0.0),
+        Value::Number(n) => Value::bool(context.arena, *n != 0.0),
         Value::String(ref str) => Value::bool(context.arena, !str.is_empty()),
         Value::Object(ref obj) => Value::bool(context.arena, !obj.is_empty()),
         Value::Array { .. } => match arg.len() {
