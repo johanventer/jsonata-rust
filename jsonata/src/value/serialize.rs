@@ -41,7 +41,7 @@ static ESCAPED: [u8; 256] = [
 ];
 
 /// Default trait for serializing JSONValue into string.
-pub trait Generator {
+pub trait Serializer {
     type T: Write;
 
     fn get_writer(&mut self) -> &mut Self::T;
@@ -219,13 +219,13 @@ pub trait Generator {
 }
 
 /// In-Memory Generator, this uses a Vec to store the JSON result.
-pub struct DumpGenerator {
+pub struct DumpSerializer {
     code: Vec<u8>,
 }
 
-impl DumpGenerator {
+impl DumpSerializer {
     pub fn new() -> Self {
-        DumpGenerator {
+        DumpSerializer {
             code: Vec::with_capacity(1024),
         }
     }
@@ -237,13 +237,13 @@ impl DumpGenerator {
     }
 }
 
-impl Default for DumpGenerator {
+impl Default for DumpSerializer {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Generator for DumpGenerator {
+impl Serializer for DumpSerializer {
     type T = Vec<u8>;
 
     fn write(&mut self, slice: &[u8]) -> io::Result<()> {
@@ -270,15 +270,15 @@ impl Generator for DumpGenerator {
 }
 
 /// Pretty In-Memory Generator, this uses a Vec to store the JSON result and add indent.
-pub struct PrettyGenerator {
+pub struct PrettySerializer {
     code: Vec<u8>,
     dent: u16,
     spaces_per_indent: u16,
 }
 
-impl PrettyGenerator {
+impl PrettySerializer {
     pub fn new(spaces: u16) -> Self {
-        PrettyGenerator {
+        PrettySerializer {
             code: Vec::with_capacity(1024),
             dent: 0,
             spaces_per_indent: spaces,
@@ -290,7 +290,7 @@ impl PrettyGenerator {
     }
 }
 
-impl Generator for PrettyGenerator {
+impl Serializer for PrettySerializer {
     type T = Vec<u8>;
 
     #[inline(always)]
@@ -343,7 +343,7 @@ mod tests {
         let data = [0, 12, 128, 88, 64, 99].to_vec();
         let s = unsafe { String::from_utf8_unchecked(data) };
 
-        let mut generator = DumpGenerator::new();
+        let mut generator = DumpSerializer::new();
         generator.write_string(&s).unwrap();
     }
 
@@ -352,7 +352,7 @@ mod tests {
         let data = b"\x48\x48\x48\x57\x03\xE8\x48\x48\xE8\x03\x8F\x48\x29\x48\x48";
         let s = unsafe { String::from_utf8_unchecked(data.to_vec()) };
 
-        let mut generator = DumpGenerator::new();
+        let mut generator = DumpSerializer::new();
         generator.write_string(&s).unwrap();
     }
 }

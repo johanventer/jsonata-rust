@@ -12,8 +12,8 @@ use crate::functions::FunctionContext;
 use crate::Result;
 use jsonata_errors::Error;
 
-mod codegen;
-use codegen::{DumpGenerator, Generator, PrettyGenerator};
+mod serialize;
+use serialize::{DumpSerializer, PrettySerializer, Serializer};
 
 bitflags! {
     pub struct ArrayFlags: u8 {
@@ -415,13 +415,13 @@ impl<'a> Value<'a> {
 
     // Prints out the value as JSON string.
     pub fn dump(&'a self) -> String {
-        let mut gen = DumpGenerator::new();
+        let mut gen = DumpSerializer::new();
         gen.write_json(self).expect("Can't fail");
         gen.consume()
     }
 
     pub fn pretty(&'a self, spaces: u16) -> String {
-        let mut gen = PrettyGenerator::new(spaces);
+        let mut gen = PrettySerializer::new(spaces);
         gen.write_json(self).expect("Can't fail");
         gen.consume()
     }
