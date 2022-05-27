@@ -38,6 +38,7 @@ pub enum Error {
     D1001NumberOfOutRange(f64),
     D1002NegatingNonNumeric(usize, String),
     D1009MultipleKeys(usize, String),
+    D2014RangeOutOfBounds(usize, usize),
 
     // Type errors
     T0410ArgumentNotValid(usize, usize, String),
@@ -51,6 +52,10 @@ pub enum Error {
     T2004RightSideNotInteger(usize),
     T2009BinaryOpMismatch(usize, String, String, String),
     T2010BinaryOpTypes(usize, String),
+    
+    // Expression timebox/depth errors
+    U1001StackOverflow,
+    U1001Timeout
 }
 
 impl error::Error for Error {}
@@ -103,6 +108,7 @@ impl Error {
             Error::D1001NumberOfOutRange(..) => "D1001",
             Error::D1002NegatingNonNumeric(..) => "D1002",
             Error::D1009MultipleKeys(..) => "D1009",
+            Error::D2014RangeOutOfBounds(..) => "D2014",
 
             // Type errors
             Error::T0410ArgumentNotValid(..) => "T0410",
@@ -116,6 +122,10 @@ impl Error {
             Error::T2004RightSideNotInteger(..) => "T2004",
             Error::T2009BinaryOpMismatch(..) => "T2009",
             Error::T2010BinaryOpTypes(..) => "T2010",
+            
+            // Expression timebox/depth errors
+            Error::U1001StackOverflow => "U1001",
+            Error::U1001Timeout => "U1001"
         }
     }
 }  
@@ -182,8 +192,10 @@ impl fmt::Display for Error {
             D1002NegatingNonNumeric(ref p, ref v) =>
                 write!(f, "{}: Cannot negate a non-numeric value `{}`", p, v),
             D1009MultipleKeys(ref p, ref k) =>
-                write!( f, "{}: Multiple key definitions evaluate to same key: {}", p, k),
-            
+                write!(f, "{}: Multiple key definitions evaluate to same key: {}", p, k),
+            D2014RangeOutOfBounds(ref p, ref s) =>
+                write!(f, "{}: The size of the sequence allocated by the range operator (..) must not exceed 1e7.  Attempted to allocate {}", p, s),
+                
             // Type errors
             T0410ArgumentNotValid(ref p, ref i, ref t) =>
                 write!(f, "{}: Argument {} of function {} does not match function signature", p, i, t),
@@ -207,6 +219,12 @@ impl fmt::Display for Error {
                 write!(f, "{}: The values {} and {} either side of operator {} must be of the same data type", p, l, r, o),
             T2010BinaryOpTypes(ref p, ref o) =>
                 write!(f, "{}: The expressions either side of operator `{}` must evaluate to numeric or string values", p, o),
+    
+            // Expression timebox/depth errors
+            U1001StackOverflow => 
+                write!(f, "Stack overflow error: Check for non-terminating recursive function.  Consider rewriting as tail-recursive."),
+            U1001Timeout => 
+                write!(f, "Expression evaluation timeout: Check for infinite loop")
         }
     }
 }

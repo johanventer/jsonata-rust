@@ -1,5 +1,7 @@
 use bumpalo::Bump;
+use std::cell::RefCell;
 use std::collections::{hash_map, HashMap};
+use std::time::Instant;
 
 use jsonata_errors::{Error, Result};
 
@@ -8,14 +10,36 @@ use super::frame::Frame;
 use super::functions::*;
 use super::value::{ArrayFlags, Value};
 
+struct EvaluatorInternal {
+    depth: usize,
+    started_at: Option<Instant>,
+    max_depth: Option<usize>,
+    time_limit: Option<usize>,
+}
+
 pub struct Evaluator<'a> {
     chain_ast: Ast,
     arena: &'a Bump,
+    internal: RefCell<EvaluatorInternal>,
 }
 
 impl<'a> Evaluator<'a> {
-    pub fn new(chain_ast: Ast, arena: &'a Bump) -> Self {
-        Evaluator { chain_ast, arena }
+    pub fn new(
+        chain_ast: Ast,
+        arena: &'a Bump,
+        max_depth: Option<usize>,
+        time_limit: Option<usize>,
+    ) -> Self {
+        Evaluator {
+            chain_ast,
+            arena,
+            internal: RefCell::new(EvaluatorInternal {
+                depth: 0,
+                started_at: None,
+                max_depth,
+                time_limit,
+            }),
+        }
     }
 
     fn fn_context<'e>(
@@ -35,12 +59,38 @@ impl<'a> Evaluator<'a> {
         }
     }
 
+    fn check_limits(&self, inc_or_dec: bool) -> Result<()> {
+        let mut internal = self.internal.borrow_mut();
+        internal.depth = if inc_or_dec {
+            internal.depth + 1
+        } else {
+            internal.depth - 1
+        };
+        if let Some(started_at) = internal.started_at {
+            if let Some(time_limit) = internal.time_limit {
+                if started_at.elapsed().as_millis() >= time_limit as u128 {
+                    return Err(Error::U1001Timeout);
+                }
+            }
+        } else {
+            internal.started_at = Some(Instant::now());
+        }
+        if let Some(max_depth) = internal.max_depth {
+            if internal.depth > max_depth {
+                return Err(Error::U1001StackOverflow);
+            }
+        }
+        Ok(())
+    }
+
     pub fn evaluate(
         &self,
         node: &Ast,
         input: &'a Value<'a>,
         frame: &Frame<'a>,
     ) -> Result<&'a Value<'a>> {
+        self.check_limits(true)?;
+
         let mut result = match node.kind {
             AstKind::Null => Value::null(self.arena),
             AstKind::Bool(b) => Value::bool(self.arena, b),
@@ -80,6 +130,8 @@ impl<'a> Evaluator<'a> {
                 result = self.evaluate_filter(filter, result, frame)?
             }
         }
+
+        self.check_limits(false)?;
 
         Ok(if result.has_flags(ArrayFlags::SEQUENCE) {
             if node.keep_array {
@@ -414,8 +466,7 @@ impl<'a> Evaluator<'a> {
 
                 let size = rhs - lhs + 1;
                 if size > 10_000_000 {
-                    // TODO: D2014
-                    unreachable!()
+                    return Err(Error::D2014RangeOutOfBounds(node.char_index, size));
                 }
 
                 let result = Value::array_with_capacity(self.arena, size, ArrayFlags::SEQUENCE);

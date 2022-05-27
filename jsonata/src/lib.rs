@@ -48,6 +48,15 @@ impl<'a> JsonAta<'a> {
     }
 
     pub fn evaluate(&'a self, input: Option<&str>) -> Result<&'a Value<'a>> {
+        self.evaluate_timeboxed(input, None, None)
+    }
+
+    pub fn evaluate_timeboxed(
+        &'a self,
+        input: Option<&str>,
+        max_depth: Option<usize>,
+        time_limit: Option<usize>,
+    ) -> Result<&'a Value<'a>> {
         let input = match input {
             Some(input) => json::parse(input, &self.arena).unwrap(),
             None => Value::undefined(),
@@ -86,7 +95,7 @@ impl<'a> JsonAta<'a> {
         bind_native!("uppercase", 1, fn_uppercase);
 
         let chain_ast = parser::parse("function($f, $g) { function($x){ $g($f($x)) } }")?;
-        let evaluator = Evaluator::new(chain_ast, &self.arena);
+        let evaluator = Evaluator::new(chain_ast, &self.arena, max_depth, time_limit);
         evaluator.evaluate(&self.ast, input, &self.frame)
     }
 }
