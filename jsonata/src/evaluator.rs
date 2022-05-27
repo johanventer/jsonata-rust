@@ -281,11 +281,11 @@ impl<'a> Evaluator<'a> {
                         if group.index != index {
                             return Err(Error::D1009MultipleKeys(char_index, key.to_string()));
                         }
-                        group.data = fn_append(
-                            self.fn_context("append", char_index, input, frame),
-                            group.data,
-                            item,
-                        )?;
+                        let args = Value::array_with_capacity(self.arena, 2, ArrayFlags::empty());
+                        args.push(group.data);
+                        args.push(item);
+                        group.data =
+                            fn_append(self.fn_context("append", char_index, input, frame), args)?;
                     }
                     hash_map::Entry::Vacant(entry) => {
                         entry.insert(Group { data: item, index });
@@ -484,7 +484,7 @@ impl<'a> Evaluator<'a> {
                     result.push_str(
                         &fn_string(
                             self.fn_context("string", node.char_index, input, frame),
-                            lhs,
+                            Value::wrap_in_array(self.arena, lhs, ArrayFlags::empty()),
                         )?
                         .as_str(),
                     );
@@ -493,7 +493,7 @@ impl<'a> Evaluator<'a> {
                     result.push_str(
                         &fn_string(
                             self.fn_context("string", node.char_index, input, frame),
-                            rhs,
+                            Value::wrap_in_array(self.arena, rhs, ArrayFlags::empty()),
                         )?
                         .as_str(),
                     );
@@ -978,56 +978,11 @@ impl<'a> Evaluator<'a> {
                     unreachable!()
                 }
             }
-            Value::NativeFn0(ref name, ref func) => {
-                func(self.fn_context(name, char_index, input, frame))
-            }
-            Value::NativeFn1(ref name, ref func) => {
+            Value::NativeFn {
+                ref name, ref func, ..
+            } => {
                 let context = self.fn_context(name, char_index, input, frame);
-                if evaluated_args.len() > 1 {
-                    Err(Error::T0410ArgumentNotValid(
-                        context.char_index,
-                        2,
-                        context.name.to_string(),
-                    ))
-                } else if evaluated_args.is_empty() {
-                    // Some functions take the input as the first argument if one was not provided
-                    func(context, input)
-                } else {
-                    func(context, evaluated_args.get_member(0))
-                }
-            }
-            Value::NativeFn2(ref name, ref func) => {
-                let context = self.fn_context(name, char_index, input, frame);
-                if evaluated_args.len() > 2 {
-                    Err(Error::T0410ArgumentNotValid(
-                        context.char_index,
-                        3,
-                        context.name.to_string(),
-                    ))
-                } else {
-                    func(
-                        context,
-                        evaluated_args.get_member(0),
-                        evaluated_args.get_member(1),
-                    )
-                }
-            }
-            Value::NativeFn3(ref name, ref func) => {
-                let context = self.fn_context(name, char_index, input, frame);
-                if evaluated_args.len() > 3 {
-                    Err(Error::T0410ArgumentNotValid(
-                        context.char_index,
-                        4,
-                        context.name.to_string(),
-                    ))
-                } else {
-                    func(
-                        context,
-                        evaluated_args.get_member(0),
-                        evaluated_args.get_member(1),
-                        evaluated_args.get_member(2),
-                    )
-                }
+                func(context, evaluated_args)
             }
             _ => Err(Error::T1006InvokedNonFunction(char_index)),
         }

@@ -15,22 +15,6 @@ pub enum Error {
     I0204FailedUtf8Parsing,
     I0205WrongType(String),
 
-    // Signature parsing errors
-    F0401UnexpectedEndOfSignature,
-    F0402SignatureStartInvalid,
-    F0403SignatureEndInvalid,
-    F0404UnexpectedCharsAtEndOfSignature,
-    F0405OptionalShouldComeAfterType,
-    F0406AllowContextShouldComeAfterType,
-    F0407OneOrMoreShouldComeAfterType,
-    F0408NoTypeBetweenCarets,
-    F0409MultipleTypesInArray,
-    F0410UnterminatedCaret,
-    F0411NoTypeBetweenParens,
-    F0412UnterminatedParen,
-    F0413ExpectedInSignature(String),
-    F0414UnexpectedCharInSignature(String),
-
     // Compile time errors
     S0101UnterminatedStringLiteral(usize),
     S0102LexedNumberOutOfRange(usize, String),
@@ -81,7 +65,6 @@ impl Error {
      * Error codes
      *
      * Ixxxx    - JSON parsing errors
-     * Fxxxx    - Function signature parsing errors
      * Sxxxx    - Static errors (compile time)
      * Txxxx    - Type errors
      * Dxxxx    - Dynamic errors (evaluate time)
@@ -101,22 +84,6 @@ impl Error {
             Error::I0203ExceededDepthLimit => "I0203",
             Error::I0204FailedUtf8Parsing => "I0204",
             Error::I0205WrongType(..) => "I0205",
-
-            // Signature parsing errors
-            Error::F0401UnexpectedEndOfSignature => "F0401",
-            Error::F0402SignatureStartInvalid => "F0402",
-            Error::F0403SignatureEndInvalid => "F0403",
-            Error::F0404UnexpectedCharsAtEndOfSignature => "F0404",
-            Error::F0405OptionalShouldComeAfterType => "F0405",
-            Error::F0406AllowContextShouldComeAfterType => "F0406",
-            Error::F0407OneOrMoreShouldComeAfterType => "F0407",
-            Error::F0408NoTypeBetweenCarets => "F0408",
-            Error::F0409MultipleTypesInArray => "F0409",
-            Error::F0410UnterminatedCaret => "F0410",
-            Error::F0411NoTypeBetweenParens => "F0411",
-            Error::F0412UnterminatedParen => "F0412",
-            Error::F0413ExpectedInSignature(..) => "F0413",
-            Error::F0414UnexpectedCharInSignature(..) => "F0414",
 
             // Compile time errors
             Error::S0101UnterminatedStringLiteral(..) => "S0101",
@@ -182,36 +149,6 @@ impl fmt::Display for Error {
                 write!(f, "Failed to parse UTF-8 bytes in input"),
             I0205WrongType(ref s) =>
                 write!(f, "Wrong type in input, expected: {}", s),
-                
-            // Signature parsing errors
-            F0401UnexpectedEndOfSignature => 
-                write!(f, "Unexpected end of signature"),
-            F0402SignatureStartInvalid => 
-                write!(f, "Signature does not start with '<'"),
-            F0403SignatureEndInvalid => 
-                write!(f, "Signature does not end with '>'"),
-            F0404UnexpectedCharsAtEndOfSignature => 
-                write!(f, "Unexpected characters at end of signature"),
-            F0405OptionalShouldComeAfterType => 
-                write!(f, "`?` should come after a type in signature"),
-            F0406AllowContextShouldComeAfterType => 
-                write!(f, "`-` should come after a type in signature"),
-            F0407OneOrMoreShouldComeAfterType => 
-                write!(f, "`+` should come after a type in signature"),
-            F0408NoTypeBetweenCarets => 
-                write!(f, "No type specified between '<' and '>' in signature"),
-            F0409MultipleTypesInArray => 
-                write!(f, "Arrays can only contain a single type in a signature"),
-            F0410UnterminatedCaret => 
-                write!(f, "Unterminated '>' in signature"),
-            F0411NoTypeBetweenParens => 
-                write!(f, "No types specified between '(' and ')' in signature"),
-            F0412UnterminatedParen => 
-                write!(f, "Unterminated ')' in signature"),
-            F0413ExpectedInSignature(ref t) => 
-                write!(f, "Expected '{}' in signature", t),
-            F0414UnexpectedCharInSignature(ref t) =>
-                write!(f, "Unexpected char '{}' in signature", t),
                 
             // Compile time errors
             S0101UnterminatedStringLiteral(ref p) =>

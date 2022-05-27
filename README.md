@@ -15,6 +15,24 @@ From the JSONata website:
 
 Read the full documentation [here](https://docs.jsonata.org/overview.html), and give it a go in the exerciser environment [here](https://try.jsonata.org).
 
+## Differences from reference JSONata
+
+### Function signatures are not supported
+
+Function signatures have their problems as described [here](docs/function-signatures.md), and are not supported by this implementation.
+
+Most of the JSONata functions, however, support being passed the context as the first argument as dictated by their signature, e.g:
+
+```
+["Hello", "world"].$substring(1, 2)
+
+/* Output: ["el", "or"] */
+```
+
+This is implemented in each built-in function itself. For example, if `$string` sees that it is called with no arguments, it will use the current context.
+
+In addition, for all the built-in functions, type checking of arguments is also implemented directly in the functions themselves so that you get eqivalent runtime errors for passing the wrong things to these functions as you would in reference JSONata.
+
 ## Status
 
 This is my first real Rust project, so I'm learning as I go. There's plenty of non-idiomatic code, and currently there's a bunch of core JSONata features that still need to be implemented. There's a TODO section below with a high-level list.
@@ -27,8 +45,6 @@ This crate implements JSONata in Rust, and as such can take JSON input, parse it
 
 - A command line utility and REPL (semi-baked)
 - WASM bindings to run directly in the browser (semi-baked)
-- Function signature declarative macro supporting JSONata's signature syntax (semi-baked)
-- Native Rust function binding and signature support (semi-baked)
 - JSONata-compatible JSON output for the AST, as it's often useful to feed the AST of one expression back into another, particularly for tooling like [jsonata-visual-editor](https://github.com/jsonata-ui/jsonata-visual-editor) and being compatible here would help (non-existent)
 
 It would be cool if we could transform the AST to bytecode which can be compiled to WASM or perhaps LLVM IR, so that specific JSONata expressions could be run as native code outside of the evaluator to provide high-performance and scale.
@@ -45,7 +61,6 @@ There are a number of JSONata features which are not yet implemented:
 - Context and index bind variables
 - Regular expressions
 - Lots of functions remain unimplemented
-- Function signature validation
 - Object transforms
 - Sorting
 - Partial function application
