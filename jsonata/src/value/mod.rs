@@ -503,3 +503,19 @@ impl std::fmt::Debug for Value<'_> {
         }
     }
 }
+
+impl std::string::ToString for Value<'_> {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Undefined => "undefined".to_string(),
+            Self::Null => "null".to_string(),
+            Self::Number(n) => n.to_string(),
+            Self::Bool(b) => b.to_string(),
+            Self::String(s) => s.clone(),
+            Self::Array(..) => "<array>".to_string(),
+            Self::Object(..) => "<object>".to_string(),
+            Self::Lambda { .. } => "<lambda>".to_string(),
+            Self::NativeFn { .. } => "<nativefn>".to_string(),
+        }
+    }
+}

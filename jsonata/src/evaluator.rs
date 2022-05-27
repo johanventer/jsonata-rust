@@ -207,6 +207,7 @@ impl<'a> Evaluator<'a> {
                     Value::Number(n) if result.is_valid_number()? => {
                         Ok(Value::number(self.arena, -n))
                     }
+                    _ => Err(Error::D1002NegatingNonNumeric(
                         node.char_index,
                         result.dump(),
                     )),
@@ -340,7 +341,7 @@ impl<'a> Evaluator<'a> {
 
                 let lhs = if lhs.is_undefined() {
                     return Ok(Value::undefined());
-                } else if lhs.is_number() {
+                } else if lhs.is_valid_number()? {
                     lhs.as_f64()
                 } else {
                     return Err(Error::T2001LeftSideNotNumber(
@@ -351,7 +352,7 @@ impl<'a> Evaluator<'a> {
 
                 let rhs = if rhs.is_undefined() {
                     return Ok(Value::undefined());
-                } else if rhs.is_number() {
+                } else if rhs.is_valid_number()? {
                     rhs.as_f64()
                 } else {
                     return Err(Error::T2002RightSideNotNumber(
@@ -765,7 +766,6 @@ impl<'a> Evaluator<'a> {
                             index = Value::wrap_in_array(self.arena, index, ArrayFlags::empty());
                         }
                         if index.is_array_of_valid_numbers()? {
-                        {
                             index.members().for_each(|v| {
                                 let index = get_index(v.as_f64());
                                 if index == i {
