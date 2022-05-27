@@ -55,8 +55,8 @@ pub enum Value<'a> {
 #[allow(clippy::mut_from_ref)]
 impl<'a> Value<'a> {
     pub fn undefined() -> &'a Value<'a> {
-        // TODO: SAFETY: The UNDEFINED const is Value<'static>, and doesn't reference any other Values,
-        // so there shouldn't be an issue casting it Value<'a>, right?
+        // SAFETY: The UNDEFINED const is Value<'static>, it doesn't reference any other Values,
+        // and there's no Drop implementation, so there shouldn't be an issue casting it to Value<'a>.
         unsafe { std::mem::transmute::<&Value<'static>, &'a Value<'a>>(&UNDEFINED) }
     }
 
