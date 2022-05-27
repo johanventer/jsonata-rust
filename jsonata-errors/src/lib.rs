@@ -28,6 +28,7 @@ pub enum Error {
     D1002NegatingNonNumeric(usize, String),
     D1009MultipleKeys(usize, String),
     D2014RangeOutOfBounds(usize, usize),
+    D3001StringNotFinite(usize),
     D3030NonNumericCast(usize, String),
 
     // Type errors
@@ -91,6 +92,7 @@ impl Error {
             Error::D1002NegatingNonNumeric(..) => "D1002",
             Error::D1009MultipleKeys(..) => "D1009",
             Error::D2014RangeOutOfBounds(..) => "D2014",
+            Error::D3001StringNotFinite(..) => "D3001",
             Error::D3030NonNumericCast(..) => "D3030",
 
             // Type errors
@@ -166,7 +168,8 @@ impl fmt::Display for Error {
                 write!(f, "{}: Multiple key definitions evaluate to same key: {}", p, k),
             D2014RangeOutOfBounds(ref p, ref s) =>
                 write!(f, "{}: The size of the sequence allocated by the range operator (..) must not exceed 1e7.  Attempted to allocate {}", p, s),
-                
+            D3001StringNotFinite(ref p) => 
+                write!(f, "{}: Attempting to invoke string function on Infinity or NaN", p),
             D3030NonNumericCast(ref p, ref n) =>
                 write!(f, "{}: Unable to cast value to a number: {}", p, n),
             
@@ -232,7 +235,6 @@ impl fmt::Display for Error {
 //     "The size of the sequence allocated by the range operator (..) must not exceed 1e7.  Attempted to allocate {}",
 //     value
 // );
-// "D3001": "Attempting to invoke string function on Infinity or NaN",
 // "D3010": "Second argument of replace function cannot be an empty string",
 // "D3011": "Fourth argument of replace function must evaluate to a positive number",
 // "D3012": "Attempted to replace a matched string with a non-string value",

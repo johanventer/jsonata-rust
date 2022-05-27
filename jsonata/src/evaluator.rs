@@ -368,11 +368,7 @@ impl<'a> Evaluator<'a> {
                     _ => unreachable!(),
                 };
 
-                if result.is_infinite() {
-                    Err(Error::D1001NumberOfOutRange(result))
-                } else {
-                    Ok(Value::number(self.arena, result))
-                }
+                Ok(Value::number(self.arena, result))
             }
 
             BinaryOp::LessThan

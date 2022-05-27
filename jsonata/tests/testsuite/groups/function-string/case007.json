@@ -2,5 +2,5 @@
     "expr": "$string(1e21)",
     "dataset": null,
     "bindings": {},
-    "result": "1e+21"
+    "result": "1e21"
 }

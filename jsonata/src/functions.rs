@@ -244,29 +244,35 @@ pub fn fn_string<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
-    let arg = if args.is_empty() {
-        context.input
+    max_args!(context, args, 2);
+
+    let input = if args.is_empty() {
+        if context.input.is_array() && context.input.has_flags(ArrayFlags::WRAPPED) {
+            &context.input[0]
+        } else {
+            context.input
+        }
     } else {
         &args[0]
     };
 
-    if arg.is_undefined() {
+    if input.is_undefined() {
         return Ok(Value::undefined());
     }
 
-    if arg.is_string() {
-        Ok(arg)
-    } else if arg.is_function() {
+    let pretty = &args[1];
+    assert_arg!(pretty.is_undefined() || pretty.is_bool(), context, 2);
+
+    if input.is_string() {
+        Ok(input)
+    } else if input.is_function() {
         Ok(Value::string(context.arena, String::from("")))
-
-    // TODO: Check for infinite numbers
-    // } else if arg.is_number() && arg.is_infinite() {
-    //     // TODO: D3001
-    //     unreachable!()
-
-    // TODO: pretty printing
+    } else if input.is_number() && !input.is_finite() {
+        Err(Error::D3001StringNotFinite(context.char_index))
+    } else if *pretty == true {
+        Ok(Value::string(context.arena, input.pretty(2)))
     } else {
-        Ok(Value::string(context.arena, arg.dump()))
+        Ok(Value::string(context.arena, input.dump()))
     }
 }
 

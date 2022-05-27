@@ -158,6 +158,13 @@ impl<'a> Value<'a> {
         matches!(*self, Value::Number(n) if n.is_nan())
     }
 
+    pub fn is_finite(&self) -> bool {
+        match self {
+            Value::Number(n) => n.is_finite(),
+            _ => false,
+        }
+    }
+
     pub fn is_string(&self) -> bool {
         matches!(*self, Value::String(..))
     }
@@ -456,15 +463,11 @@ impl std::fmt::Debug for Value<'_> {
         match self {
             Self::Undefined => write!(f, "undefined"),
             Self::Null => write!(f, "null"),
-            Self::Number(n) => write!(f, "{}", n),
-            Self::Bool(b) => write!(f, "{}", if *b { "true" } else { "false" }),
-            Self::String(s) => write!(f, "\"{}\"", s),
-            Self::Array(a, _) => write!(f, "<array({})>", a.len()),
-            Self::Object(o) => write!(
-                f,
-                "<object{{{}}}>",
-                o.keys().cloned().collect::<Vec<String>>().join(", ")
-            ),
+            Self::Number(n) => n.fmt(f),
+            Self::Bool(b) => b.fmt(f),
+            Self::String(s) => s.fmt(f),
+            Self::Array(a, _) => a.fmt(f),
+            Self::Object(o) => o.fmt(f),
             Self::Lambda { .. } => write!(f, "<lambda>"),
             Self::NativeFn { .. } => write!(f, "<nativefn>"),
         }

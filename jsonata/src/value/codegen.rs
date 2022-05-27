@@ -40,13 +40,6 @@ static ESCAPED: [u8; 256] = [
     __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // F
 ];
 
-fn float_precision(value: f64, digits: usize) -> usize {
-    match value {
-        v if v <= 0_f64 => digits,
-        _ => digits.saturating_sub(value.abs().log10() as usize + 1),
-    }
-}
-
 /// Default trait for serializing JSONValue into string.
 pub trait Generator {
     type T: Write;
@@ -111,6 +104,55 @@ pub trait Generator {
     }
 
     #[inline(always)]
+    fn write_number(&mut self, number: f64) -> io::Result<()> {
+        const MAX_SIGNIFICANT_DIGITS: usize = 15;
+
+        if number.is_finite() {
+            let mut buffer = dtoa::Buffer::new();
+            let formatted = buffer.format_finite(number).as_bytes();
+
+            // JSONata uses JSON.stringify with Number.toPrecision(15) to format numbers.
+            //
+            // dtoa gets us close to the behaviour of JSON.stringify, in particular for
+            // switching to scientific notation (which Rust format! doesn't do), but dtoa
+            // doesn't support specifying a number of significant digits.
+            //
+            // This craziness limits the number of significant digits and trims off trailing
+            // zeroes in the fraction by doing string manipulation.
+            //
+            // It's not pretty, and I'm sure there's a better way to do this.
+            let mut split_iter = formatted.split(|b| *b == b'.');
+            let whole = split_iter.next();
+            let fraction = split_iter.next();
+            if let Some(whole) = whole {
+                self.write(whole)?;
+                if whole.len() < MAX_SIGNIFICANT_DIGITS {
+                    if let Some(fraction) = fraction {
+                        let fraction_length =
+                            usize::min(MAX_SIGNIFICANT_DIGITS - whole.len(), fraction.len());
+                        if fraction_length > 0 {
+                            let fraction = unsafe {
+                                std::str::from_utf8_unchecked(&fraction[0..fraction_length])
+                                    .trim_end_matches('0')
+                            };
+                            if !fraction.is_empty() {
+                                self.write_char(b'.')?;
+                                self.write(fraction.as_bytes())?;
+                            }
+                        }
+                    }
+                }
+            } else {
+                self.write(formatted)?;
+            }
+
+            Ok(())
+        } else {
+            self.write(b"null")
+        }
+    }
+
+    #[inline(always)]
     fn write_object<'a>(&mut self, object: &'a Value<'a>) -> io::Result<()> {
         self.write_char(b'{')?;
         let mut iter = object.entries();
@@ -141,15 +183,10 @@ pub trait Generator {
 
     fn write_json<'a>(&mut self, json: &'a Value<'a>) -> io::Result<()> {
         match *json {
+            Value::Undefined => Ok(()),
             Value::Null => self.write(b"null"),
             Value::String(ref string) => self.write_string(string),
-            Value::Number(n) => {
-                if n.is_finite() {
-                    self.write(format!("{:.*}", float_precision(n, 15), n).as_bytes())
-                } else {
-                    self.write(b"null")
-                }
-            }
+            Value::Number(n) => self.write_number(n),
             Value::Bool(true) => self.write(b"true"),
             Value::Bool(false) => self.write(b"false"),
             Value::Array(..) => {
@@ -176,7 +213,7 @@ pub trait Generator {
                 self.write_char(b']')
             }
             Value::Object(..) => self.write_object(json),
-            _ => Ok(()),
+            Value::Lambda { .. } | Value::NativeFn { .. } => self.write(b"\"\""),
         }
     }
 }
