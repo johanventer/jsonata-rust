@@ -222,9 +222,9 @@ impl fmt::Display for Error {
     
             // Expression timebox/depth errors
             U1001StackOverflow => 
-                write!(f, "0: Stack overflow error: Check for non-terminating recursive function.  Consider rewriting as tail-recursive."),
+                write!(f, "Stack overflow error: Check for non-terminating recursive function.  Consider rewriting as tail-recursive."),
             U1001Timeout => 
-                write!(f, "0: Expression evaluation timeout: Check for infinite loop")
+                write!(f, "Expression evaluation timeout: Check for infinite loop")
         }
     }
 }
