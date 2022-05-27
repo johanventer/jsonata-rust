@@ -40,6 +40,13 @@ static ESCAPED: [u8; 256] = [
     __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // F
 ];
 
+fn float_precision(value: f64, digits: usize) -> usize {
+    match value {
+        v if v <= 0_f64 => digits,
+        _ => digits.saturating_sub(value.abs().log10() as usize + 1),
+    }
+}
+
 /// Default trait for serializing JSONValue into string.
 pub trait Generator {
     type T: Write;
@@ -136,7 +143,13 @@ pub trait Generator {
         match *json {
             Value::Null => self.write(b"null"),
             Value::String(ref string) => self.write_string(string),
-            Value::Number(n) => self.write(n.to_string().as_bytes()),
+            Value::Number(n) => {
+                if n.is_finite() {
+                    self.write(format!("{:.*}", float_precision(n, 15), n).as_bytes())
+                } else {
+                    self.write(b"null")
+                }
+            }
             Value::Bool(true) => self.write(b"true"),
             Value::Bool(false) => self.write(b"false"),
             Value::Array(..) => {
