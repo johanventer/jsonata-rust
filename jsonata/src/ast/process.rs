@@ -346,7 +346,6 @@ fn tail_call_optimize(mut expr: Ast) -> Result<Ast> {
                     args: vec![],
                     thunk: true,
                     body: Box::new(expr),
-                    signature: None,
                 },
                 char_index,
             );

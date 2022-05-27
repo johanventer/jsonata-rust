@@ -12,21 +12,37 @@ use jsonata::{JsonAta, Value};
 // TODO: timelimit, depth
 #[test_resources("jsonata/tests/testsuite/groups/*/*.json")]
 fn t(resource: &str) {
+    // Make sure we can find the .json file with the path to `test_resources`
     let working_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap();
     std::env::set_current_dir(working_dir).unwrap();
 
-    let test = fs::read_to_string(resource)
-        .unwrap_or_else(|_| panic!("Failed to read test case: {}", resource));
+    test_case(resource);
+}
 
+fn test_case(resource: &str) {
     let arena = Bump::new();
     let test_jsonata = JsonAta::new(&test, &arena).unwrap();
     let test = test_jsonata.evaluate(None).unwrap();
 
     let test = Value::wrap_in_array_if_needed(&arena, test, ArrayFlags::empty());
-
+    
     for case in test.members() {
+        let timelimit = &case["timelimit"];
+        let timelimit = if timelimit.is_integer() {
+            Some(timelimit.as_usize())
+        } else {
+            None
+        };
+
+        let depth = &case["depth"];
+        let depth = if depth.is_integer() {
+            Some(depth.as_usize())
+        } else {
+            None
+        };
+
         let expr = &case["expr"];
         let expr_file = &case["expr-file"];
 
@@ -39,7 +55,7 @@ fn t(resource: &str) {
                     .unwrap()
                     .join(expr_file.as_str().to_string()),
             )
-            .unwrap_or_else(|_| panic!("Failed to read expr-file: {}", expr_file.as_str()))
+            .unwrap()
         } else {
             panic!("No expression")
         };
@@ -49,8 +65,7 @@ fn t(resource: &str) {
 
         let data = if dataset.is_string() {
             let dataset = format!("jsonata/tests/testsuite/datasets/{}.json", dataset.as_str());
-            fs::read_to_string(&dataset)
-                .unwrap_or_else(|_e| panic!("Could not read dataset file: {}", dataset))
+            fs::read_to_string(&dataset).unwrap()
         } else if data.is_undefined() {
             "".to_string()
         } else {
@@ -73,7 +88,7 @@ fn t(resource: &str) {
                     Some(data.as_str())
                 };
 
-                let result = jsonata.evaluate(data);
+                let result = jsonata.evaluate_timeboxed(data, depth, timelimit);
 
                 match result {
                     Ok(result) => {

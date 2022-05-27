@@ -1,7 +1,5 @@
 mod process;
 
-use jsonata_signatures::Arg;
-
 // Object constructor, represented by tuples of (key, value)
 pub type Object = Vec<(Ast, Ast)>;
 
@@ -100,7 +98,6 @@ pub enum AstKind {
         name: String,
         args: Vec<Ast>,
         body: Box<Ast>,
-        signature: Option<Vec<Arg>>,
         thunk: bool,
     },
     Ternary {

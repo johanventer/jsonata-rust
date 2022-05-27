@@ -1,5 +1,4 @@
 use jsonata_errors::{Error, Result};
-use jsonata_signatures;
 
 use super::ast::*;
 use super::parser::Parser;
@@ -231,16 +230,6 @@ impl Symbol for Token {
                 let func: Ast;
 
                 if is_lambda {
-                    let signature = if let TokenKind::Signature(ref sig) = parser.token().kind {
-                        Some(jsonata_signatures::parse(sig)?)
-                    } else {
-                        None
-                    };
-
-                    if signature.is_some() {
-                        parser.next_token()?;
-                    }
-
                     parser.expect(TokenKind::LeftBrace)?;
                     let body = Box::new(parser.expression(0)?);
                     func = Ast::new(
@@ -248,7 +237,6 @@ impl Symbol for Token {
                             name,
                             args,
                             body,
-                            signature,
                             thunk: false,
                         },
                         self.char_index,

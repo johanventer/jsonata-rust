@@ -4,22 +4,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
-    // Signature parsing errors
-    F0401UnexpectedEndOfSignature,
-    F0402SignatureStartInvalid,
-    F0403SignatureEndInvalid,
-    F0404UnexpectedCharsAtEndOfSignature,
-    F0405OptionalShouldComeAfterType,
-    F0406AllowContextShouldComeAfterType,
-    F0407OneOrMoreShouldComeAfterType,
-    F0408NoTypeBetweenCarets,
-    F0409MultipleTypesInArray,
-    F0410UnterminatedCaret,
-    F0411NoTypeBetweenParens,
-    F0412UnterminatedParen,
-    F0413ExpectedInSignature(String),
-    F0414UnexpectedCharInSignature(String),
-
     // Compile time errors
     S0101UnterminatedStringLiteral(usize),
     S0102LexedNumberOutOfRange(usize, String),
@@ -43,6 +27,7 @@ pub enum Error {
     D1001NumberOfOutRange(f64),
     D1002NegatingNonNumeric(usize, String),
     D1009MultipleKeys(usize, String),
+    D2014RangeOutOfBounds(usize, usize),
 
     // Type errors
     T0410ArgumentNotValid(usize, usize, String),
@@ -56,6 +41,10 @@ pub enum Error {
     T2004RightSideNotInteger(usize),
     T2009BinaryOpMismatch(usize, String, String, String),
     T2010BinaryOpTypes(usize, String),
+    
+    // Expression timebox/depth errors
+    U1001StackOverflow,
+    U1001Timeout
 }
 
 impl error::Error for Error {}
@@ -64,7 +53,6 @@ impl Error {
     /**
      * Error codes
      *
-     * Fxxxx    - Function signature parsing errors
      * Sxxxx    - Static errors (compile time)
      * Txxxx    - Type errors
      * Dxxxx    - Dynamic errors (evaluate time)
@@ -78,22 +66,6 @@ impl Error {
      */
     pub fn code(&self) -> &str {
         match *self {
-            // Signature parsing errors
-            Error::F0401UnexpectedEndOfSignature => "F0401",
-            Error::F0402SignatureStartInvalid => "F0402",
-            Error::F0403SignatureEndInvalid => "F0403",
-            Error::F0404UnexpectedCharsAtEndOfSignature => "F0404",
-            Error::F0405OptionalShouldComeAfterType => "F0405",
-            Error::F0406AllowContextShouldComeAfterType => "F0406",
-            Error::F0407OneOrMoreShouldComeAfterType => "F0407",
-            Error::F0408NoTypeBetweenCarets => "F0408",
-            Error::F0409MultipleTypesInArray => "F0409",
-            Error::F0410UnterminatedCaret => "F0410",
-            Error::F0411NoTypeBetweenParens => "F0411",
-            Error::F0412UnterminatedParen => "F0412",
-            Error::F0413ExpectedInSignature(..) => "F0413",
-            Error::F0414UnexpectedCharInSignature(..) => "F0414",
-
             // Compile time errors
             Error::S0101UnterminatedStringLiteral(..) => "S0101",
             Error::S0102LexedNumberOutOfRange(..) => "S0102",
@@ -117,6 +89,7 @@ impl Error {
             Error::D1001NumberOfOutRange(..) => "D1001",
             Error::D1002NegatingNonNumeric(..) => "D1002",
             Error::D1009MultipleKeys(..) => "D1009",
+            Error::D2014RangeOutOfBounds(..) => "D2014",
 
             // Type errors
             Error::T0410ArgumentNotValid(..) => "T0410",
@@ -130,6 +103,10 @@ impl Error {
             Error::T2004RightSideNotInteger(..) => "T2004",
             Error::T2009BinaryOpMismatch(..) => "T2009",
             Error::T2010BinaryOpTypes(..) => "T2010",
+            
+            // Expression timebox/depth errors
+            Error::U1001StackOverflow => "U1001",
+            Error::U1001Timeout => "U1001"
         }
     }
 }  
@@ -142,36 +119,6 @@ impl fmt::Display for Error {
         write!(f, "{} @ ", self.code())?;
 
         match *self {
-            // Signature parsing errors
-            F0401UnexpectedEndOfSignature => 
-                write!(f, "Unexpected end of signature"),
-            F0402SignatureStartInvalid => 
-                write!(f, "Signature does not start with '<'"),
-            F0403SignatureEndInvalid => 
-                write!(f, "Signature does not end with '>'"),
-            F0404UnexpectedCharsAtEndOfSignature => 
-                write!(f, "Unexpected characters at end of signature"),
-            F0405OptionalShouldComeAfterType => 
-                write!(f, "`?` should come after a type in signature"),
-            F0406AllowContextShouldComeAfterType => 
-                write!(f, "`-` should come after a type in signature"),
-            F0407OneOrMoreShouldComeAfterType => 
-                write!(f, "`+` should come after a type in signature"),
-            F0408NoTypeBetweenCarets => 
-                write!(f, "No type specified between '<' and '>' in signature"),
-            F0409MultipleTypesInArray => 
-                write!(f, "Arrays can only contain a single type in a signature"),
-            F0410UnterminatedCaret => 
-                write!(f, "Unterminated '>' in signature"),
-            F0411NoTypeBetweenParens => 
-                write!(f, "No types specified between '(' and ')' in signature"),
-            F0412UnterminatedParen => 
-                write!(f, "Unterminated ')' in signature"),
-            F0413ExpectedInSignature(ref t) => 
-                write!(f, "Expected '{}' in signature", t),
-            F0414UnexpectedCharInSignature(ref t) =>
-                write!(f, "Unexpected char '{}' in signature", t),
-                
             // Compile time errors
             S0101UnterminatedStringLiteral(ref p) =>
                 write!(f, "{}: String literal must be terminated by a matching quote", p),
@@ -214,8 +161,10 @@ impl fmt::Display for Error {
             D1002NegatingNonNumeric(ref p, ref v) =>
                 write!(f, "{}: Cannot negate a non-numeric value `{}`", p, v),
             D1009MultipleKeys(ref p, ref k) =>
-                write!( f, "{}: Multiple key definitions evaluate to same key: {}", p, k),
-            
+                write!(f, "{}: Multiple key definitions evaluate to same key: {}", p, k),
+            D2014RangeOutOfBounds(ref p, ref s) =>
+                write!(f, "{}: The size of the sequence allocated by the range operator (..) must not exceed 1e7.  Attempted to allocate {}", p, s),
+                
             // Type errors
             T0410ArgumentNotValid(ref p, ref i, ref t) =>
                 write!(f, "{}: Argument {} of function {} does not match function signature", p, i, t),
@@ -239,6 +188,12 @@ impl fmt::Display for Error {
                 write!(f, "{}: The values {} and {} either side of operator {} must be of the same data type", p, l, r, o),
             T2010BinaryOpTypes(ref p, ref o) =>
                 write!(f, "{}: The expressions either side of operator `{}` must evaluate to numeric or string values", p, o),
+    
+            // Expression timebox/depth errors
+            U1001StackOverflow => 
+                write!(f, "Stack overflow error: Check for non-terminating recursive function.  Consider rewriting as tail-recursive."),
+            U1001Timeout => 
+                write!(f, "Expression evaluation timeout: Check for infinite loop")
         }
     }
 }

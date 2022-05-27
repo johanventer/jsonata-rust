@@ -3,7 +3,5 @@
 members = [
     "jsonata",
     "jsonata-errors",
-    "jsonata-signatures",
-    "jsonata-signature-macro",
     "jsonata-wasm"
 ]
