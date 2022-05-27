@@ -6,6 +6,55 @@ use super::evaluator::Evaluator;
 use super::frame::Frame;
 use super::value::{ArrayFlags, Value};
 
+macro_rules! assert_min_args {
+    ($context:ident, $args:ident, $min:literal) => {
+        if $args.len() < $min {
+            return Err(Error::T0410ArgumentNotValid(
+                $context.char_index,
+                $min,
+                $context.name.to_string(),
+            ));
+        }
+    };
+}
+
+macro_rules! assert_max_args {
+    ($context:ident, $args:ident, $max:literal) => {
+        if $args.len() > $max {
+            return Err(Error::T0410ArgumentNotValid(
+                $context.char_index,
+                $max,
+                $context.name.to_string(),
+            ));
+        }
+    };
+}
+
+macro_rules! assert_arg {
+    ($condition:expr, $context:ident, $index:literal) => {
+        if !($condition) {
+            return Err(Error::T0410ArgumentNotValid(
+                $context.char_index,
+                $index,
+                $context.name.to_string(),
+            ));
+        }
+    };
+}
+
+macro_rules! assert_array_of_type {
+    ($condition:expr, $context:ident, $index:literal, $t:literal) => {
+        if !($condition) {
+            return Err(Error::T0412ArgumentMustBeArrayOfType(
+                $context.char_index,
+                $index,
+                $context.name.to_string(),
+                $t.to_string(),
+            ));
+        };
+    };
+}
+
 #[derive(Clone)]
 pub struct FunctionContext<'a, 'e> {
     pub name: &'a str,
@@ -27,50 +76,7 @@ impl<'a, 'e> FunctionContext<'a, 'e> {
     }
 }
 
-pub fn fn_lookup_internal<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
-    input: &'a Value<'a>,
-    key: &str,
-) -> &'a Value<'a> {
-    match input {
-        Value::Array { .. } => {
-            let result = Value::array(context.arena, ArrayFlags::SEQUENCE);
-
-            for input in input.members() {
-                let res = fn_lookup_internal(context.clone(), input, key);
-                match res {
-                    Value::Undefined => {}
-                    Value::Array { .. } => {
-                        res.members().for_each(|item| result.push(item));
-                    }
-                    _ => result.push(res),
-                };
-            }
-
-            result
-        }
-        Value::Object(..) => input.get_entry(key),
-        _ => Value::undefined(),
-    }
-}
-
-pub fn fn_lookup<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
-    input: &'a Value<'a>,
-    key: &'a Value<'a>,
-) -> Result<&'a Value<'a>> {
-    if !key.is_string() {
-        Err(Error::T0410ArgumentNotValid(
-            context.char_index,
-            1,
-            context.name.to_string(),
-        ))
-    } else {
-        Ok(fn_lookup_internal(context.clone(), input, &key.as_str()))
-    }
-}
-
-// TODO: Added this to make `evaluate_unary_op` compile, probably can be factored out
+// Version of append that takes a mutable arg1 - this could probably be collapsed
 pub fn fn_append_internal<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     arg1: &'a mut Value<'a>,
@@ -110,9 +116,11 @@ pub fn fn_append_internal<'a, 'e>(
 
 pub fn fn_append<'a, 'e>(
     context: FunctionContext<'a, 'e>,
-    arg1: &'a Value<'a>,
-    arg2: &'a Value<'a>,
+    args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
+    let arg1 = &args[0];
+    let arg2 = &args[1];
+
     if arg1.is_undefined() {
         return Ok(arg2);
     }
@@ -151,8 +159,11 @@ pub fn fn_append<'a, 'e>(
 
 pub fn fn_boolean<'a, 'e>(
     context: FunctionContext<'a, 'e>,
-    arg: &'a Value<'a>,
+    args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
+    assert_max_args!(context, args, 1);
+
+    let arg = &args[0];
     Ok(match arg {
         Value::Undefined => Value::undefined(),
         Value::Null => Value::bool(context.arena, false),
@@ -162,29 +173,35 @@ pub fn fn_boolean<'a, 'e>(
         Value::Object(ref obj) => Value::bool(context.arena, !obj.is_empty()),
         Value::Array { .. } => match arg.len() {
             0 => Value::bool(context.arena, false),
-            1 => fn_boolean(context.clone(), arg.get_member(0))?,
+            1 => fn_boolean(
+                context.clone(),
+                Value::wrap_in_array(context.arena, arg.get_member(0), ArrayFlags::empty()),
+            )?,
             _ => {
                 for item in arg.members() {
-                    if fn_boolean(context.clone(), item)?.as_bool() {
+                    if fn_boolean(
+                        context.clone(),
+                        Value::wrap_in_array(context.arena, item, ArrayFlags::empty()),
+                    )?
+                    .as_bool()
+                    {
                         return Ok(Value::bool(context.arena, true));
                     }
                 }
                 Value::bool(context.arena, false)
             }
         },
-        Value::Lambda { .. }
-        | Value::NativeFn0 { .. }
-        | Value::NativeFn1 { .. }
-        | Value::NativeFn2 { .. }
-        | Value::NativeFn3 { .. } => Value::bool(context.arena, false),
+        Value::Lambda { .. } | Value::NativeFn { .. } => Value::bool(context.arena, false),
     })
 }
 
 pub fn fn_filter<'a, 'e>(
     context: FunctionContext<'a, 'e>,
-    arr: &'a Value<'a>,
-    func: &'a Value<'a>,
+    args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
+    let arr = &args[0];
+    let func = &args[1];
+
     if arr.is_undefined() {
         return Ok(Value::undefined());
     }
@@ -225,8 +242,14 @@ pub fn fn_filter<'a, 'e>(
 
 pub fn fn_string<'a, 'e>(
     context: FunctionContext<'a, 'e>,
-    arg: &'a Value<'a>,
+    args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
+    let arg = if args.is_empty() {
+        context.input
+    } else {
+        &args[0]
+    };
+
     if arg.is_undefined() {
         return Ok(Value::undefined());
     }
@@ -247,26 +270,12 @@ pub fn fn_string<'a, 'e>(
     }
 }
 
-pub fn fn_count<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
-    arg: &'a Value<'a>,
-) -> Result<&'a Value<'a>> {
-    Ok(Value::number(
-        context.arena,
-        if arg.is_undefined() {
-            0
-        } else if arg.is_array() {
-            arg.len()
-        } else {
-            1
-        },
-    ))
-}
-
 pub fn fn_not<'a, 'e>(
     context: FunctionContext<'a, 'e>,
-    arg: &'a Value<'a>,
+    args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
+    let arg = &args[0];
+
     Ok(if arg.is_undefined() {
         Value::undefined()
     } else {
@@ -276,8 +285,10 @@ pub fn fn_not<'a, 'e>(
 
 pub fn fn_lowercase<'a, 'e>(
     context: FunctionContext<'a, 'e>,
-    arg: &'a Value<'a>,
+    args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
+    let arg = &args[0];
+
     Ok(if !arg.is_string() {
         Value::undefined()
     } else {
@@ -287,8 +298,10 @@ pub fn fn_lowercase<'a, 'e>(
 
 pub fn fn_uppercase<'a, 'e>(
     context: FunctionContext<'a, 'e>,
-    arg: &'a Value<'a>,
+    args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
+    let arg = &args[0];
+
     if !arg.is_string() {
         Ok(Value::undefined())
     } else {
@@ -298,10 +311,12 @@ pub fn fn_uppercase<'a, 'e>(
 
 pub fn fn_substring<'a, 'e>(
     context: FunctionContext<'a, 'e>,
-    string: &'a Value<'a>,
-    start: &'a Value<'a>,
-    length: &'a Value<'a>,
+    args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
+    let string = &args[0];
+    let start = &args[1];
+    let length = &args[2];
+
     if string.is_undefined() {
         return Ok(Value::undefined());
     }
@@ -376,8 +391,10 @@ pub fn fn_substring<'a, 'e>(
 
 pub fn fn_abs<'a, 'e>(
     context: FunctionContext<'a, 'e>,
-    arg: &'a Value<'a>,
+    args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
+    let arg = &args[0];
+
     if arg.is_undefined() {
         Ok(Value::undefined())
     } else if !arg.is_number() {
@@ -393,8 +410,10 @@ pub fn fn_abs<'a, 'e>(
 
 pub fn fn_floor<'a, 'e>(
     context: FunctionContext<'a, 'e>,
-    arg: &'a Value<'a>,
+    args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
+    let arg = &args[0];
+
     if arg.is_undefined() {
         Ok(Value::undefined())
     } else if !arg.is_number() {
@@ -410,8 +429,10 @@ pub fn fn_floor<'a, 'e>(
 
 pub fn fn_ceil<'a, 'e>(
     context: FunctionContext<'a, 'e>,
-    arg: &'a Value<'a>,
+    args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
+    let arg = &args[0];
+
     if arg.is_undefined() {
         Ok(Value::undefined())
     } else if !arg.is_number() {
@@ -425,26 +446,93 @@ pub fn fn_ceil<'a, 'e>(
     }
 }
 
+pub fn fn_lookup_internal<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    input: &'a Value<'a>,
+    key: &str,
+) -> &'a Value<'a> {
+    match input {
+        Value::Array { .. } => {
+            let result = Value::array(context.arena, ArrayFlags::SEQUENCE);
+
+            for input in input.members() {
+                let res = fn_lookup_internal(context.clone(), input, key);
+                match res {
+                    Value::Undefined => {}
+                    Value::Array { .. } => {
+                        res.members().for_each(|item| result.push(item));
+                    }
+                    _ => result.push(res),
+                };
+            }
+
+            result
+        }
+        Value::Object(..) => input.get_entry(key),
+        _ => Value::undefined(),
+    }
+}
+
+pub fn fn_lookup<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    let input = &args[0];
+    let key = &args[1];
+
+    if !key.is_string() {
+        Err(Error::T0410ArgumentNotValid(
+            context.char_index,
+            1,
+            context.name.to_string(),
+        ))
+    } else {
+        Ok(fn_lookup_internal(context.clone(), input, &key.as_str()))
+    }
+}
+
+pub fn fn_count<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    assert_max_args!(context, args, 1);
+
+    let arg = &args[0];
+
+    Ok(Value::number(
+        context.arena,
+        if arg.is_undefined() {
+            0
+        } else if arg.is_array() {
+            arg.len()
+        } else {
+            1
+        },
+    ))
+}
+
 pub fn fn_max<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
-    if args.is_undefined() || (args.is_array() && args.is_empty()) {
+    assert_max_args!(context, args, 1);
+
+    let arg = &args[0];
+
+    // $max(undefined) and $max([]) return undefined
+    if arg.is_undefined() || (arg.is_array() && arg.is_empty()) {
         return Ok(Value::undefined());
     }
-    let args = Value::wrap_in_array_if_needed(context.arena, args, ArrayFlags::empty());
+
+    let arr = Value::wrap_in_array_if_needed(context.arena, arg, ArrayFlags::empty());
+
     let mut max = f64::MIN;
-    for arg in args.members() {
-        if !arg.is_number() {
-            return Err(Error::T0412ArgumentMustBeArrayOfType(
-                context.char_index,
-                2,
-                context.name.to_string(),
-                "number".to_string(),
-            ));
-        }
-        max = f64::max(max, arg.as_f64());
+
+    for member in arr.members() {
+        assert_array_of_type!(member.is_number(), context, 1, "number");
+        max = f64::max(max, member.as_f64());
     }
+
     Ok(Value::number(context.arena, max))
 }
 
@@ -452,22 +540,24 @@ pub fn fn_min<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
-    if args.is_undefined() || (args.is_array() && args.is_empty()) {
+    assert_max_args!(context, args, 1);
+
+    let arg = &args[0];
+
+    // $min(undefined) and $min([]) return undefined
+    if arg.is_undefined() || (arg.is_array() && arg.is_empty()) {
         return Ok(Value::undefined());
     }
-    let args = Value::wrap_in_array_if_needed(context.arena, args, ArrayFlags::empty());
+
+    let arr = Value::wrap_in_array_if_needed(context.arena, arg, ArrayFlags::empty());
+
     let mut min = f64::MAX;
-    for arg in args.members() {
-        if !arg.is_number() {
-            return Err(Error::T0412ArgumentMustBeArrayOfType(
-                context.char_index,
-                2,
-                context.name.to_string(),
-                "number".to_string(),
-            ));
-        }
-        min = f64::min(min, arg.as_f64());
+
+    for member in arr.members() {
+        assert_array_of_type!(member.is_number(), context, 1, "number");
+        min = f64::min(min, member.as_f64());
     }
+
     Ok(Value::number(context.arena, min))
 }
 
@@ -475,21 +565,23 @@ pub fn fn_sum<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
-    if args.is_undefined() || (args.is_array() && args.is_empty()) {
+    assert_max_args!(context, args, 1);
+
+    let arg = &args[0];
+
+    // $sum(undefined) returns undefined
+    if arg.is_undefined() {
         return Ok(Value::undefined());
     }
-    let args = Value::wrap_in_array_if_needed(context.arena, args, ArrayFlags::empty());
+
+    let arr = Value::wrap_in_array_if_needed(context.arena, arg, ArrayFlags::empty());
+
     let mut sum = 0.0;
-    for arg in args.members() {
-        if !arg.is_number() {
-            return Err(Error::T0412ArgumentMustBeArrayOfType(
-                context.char_index,
-                2,
-                context.name.to_string(),
-                "number".to_string(),
-            ));
-        }
-        sum += arg.as_f64();
+
+    for member in arr.members() {
+        assert_array_of_type!(member.is_number(), context, 1, "number");
+        sum += member.as_f64();
     }
+
     Ok(Value::number(context.arena, sum))
 }

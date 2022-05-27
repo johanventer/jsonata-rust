@@ -60,29 +60,30 @@ impl<'a> JsonAta<'a> {
             input
         };
 
-        macro_rules! bind {
-            ($name:literal, $new:ident, $fn:ident) => {
-                self.frame.bind($name, Value::$new(&self.arena, $name, $fn));
+        macro_rules! bind_native {
+            ($name:literal, $arity:literal, $fn:ident) => {
+                self.frame
+                    .bind($name, Value::nativefn(&self.arena, $name, $arity, $fn));
             };
         }
 
         self.frame.bind("$", input);
-        bind!("lookup", nativefn2, fn_lookup);
-        bind!("append", nativefn2, fn_append);
-        bind!("boolean", nativefn1, fn_boolean);
-        bind!("filter", nativefn2, fn_filter);
-        bind!("string", nativefn1, fn_string);
-        bind!("count", nativefn1, fn_count);
-        bind!("not", nativefn1, fn_not);
-        bind!("uppercase", nativefn1, fn_uppercase);
-        bind!("lowercase", nativefn1, fn_lowercase);
-        bind!("substring", nativefn3, fn_substring);
-        bind!("abs", nativefn1, fn_abs);
-        bind!("max", nativefn1, fn_max);
-        bind!("min", nativefn1, fn_min);
-        bind!("ceil", nativefn1, fn_ceil);
-        bind!("floor", nativefn1, fn_floor);
-        bind!("sum", nativefn1, fn_sum);
+        bind_native!("abs", 1, fn_abs);
+        bind_native!("append", 2, fn_append);
+        bind_native!("boolean", 1, fn_boolean);
+        bind_native!("ceil", 1, fn_ceil);
+        bind_native!("count", 1, fn_count);
+        bind_native!("filter", 2, fn_filter);
+        bind_native!("floor", 1, fn_floor);
+        bind_native!("lookup", 2, fn_lookup);
+        bind_native!("lowercase", 1, fn_lowercase);
+        bind_native!("max", 1, fn_max);
+        bind_native!("min", 1, fn_min);
+        bind_native!("not", 1, fn_not);
+        bind_native!("string", 1, fn_string);
+        bind_native!("substring", 3, fn_substring);
+        bind_native!("sum", 1, fn_sum);
+        bind_native!("uppercase", 1, fn_uppercase);
 
         let chain_ast = parser::parse("function($f, $g) { function($x){ $g($f($x)) } }")?;
         let evaluator = Evaluator::new(chain_ast, &self.arena);

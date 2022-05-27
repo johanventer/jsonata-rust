@@ -43,24 +43,11 @@ pub enum Value<'a> {
         input: &'a Value<'a>,
         frame: Frame<'a>,
     },
-    NativeFn0(String, fn(FunctionContext<'a, '_>) -> Result<&'a Value<'a>>),
-    NativeFn1(
-        String,
-        fn(FunctionContext<'a, '_>, &'a Value<'a>) -> Result<&'a Value<'a>>,
-    ),
-    NativeFn2(
-        String,
-        fn(FunctionContext<'a, '_>, &'a Value<'a>, &'a Value<'a>) -> Result<&'a Value<'a>>,
-    ),
-    NativeFn3(
-        String,
-        fn(
-            FunctionContext<'a, '_>,
-            &'a Value<'a>,
-            &'a Value<'a>,
-            &'a Value<'a>,
-        ) -> Result<&'a Value<'a>>,
-    ),
+    NativeFn {
+        name: String,
+        arity: usize,
+        func: fn(FunctionContext<'a, '_>, &'a Value<'a>) -> Result<&'a Value<'a>>,
+    },
 }
 
 #[allow(clippy::mut_from_ref)]
@@ -122,41 +109,17 @@ impl<'a> Value<'a> {
         })
     }
 
-    pub fn nativefn0(
+    pub fn nativefn(
         arena: &'a Bump,
         name: &str,
-        func: fn(FunctionContext) -> Result<&'a Value<'a>>,
-    ) -> &'a mut Value<'a> {
-        arena.alloc(Value::NativeFn0(name.to_string(), func))
-    }
-
-    pub fn nativefn1(
-        arena: &'a Bump,
-        name: &str,
+        arity: usize,
         func: fn(FunctionContext<'a, '_>, &'a Value<'a>) -> Result<&'a Value<'a>>,
     ) -> &'a mut Value<'a> {
-        arena.alloc(Value::NativeFn1(name.to_string(), func))
-    }
-
-    pub fn nativefn2(
-        arena: &'a Bump,
-        name: &str,
-        func: fn(FunctionContext<'a, '_>, &'a Value<'a>, &'a Value<'a>) -> Result<&'a Value<'a>>,
-    ) -> &'a mut Value<'a> {
-        arena.alloc(Value::NativeFn2(name.to_string(), func))
-    }
-
-    pub fn nativefn3(
-        arena: &'a Bump,
-        name: &str,
-        func: fn(
-            FunctionContext<'a, '_>,
-            &'a Value<'a>,
-            &'a Value<'a>,
-            &'a Value<'a>,
-        ) -> Result<&'a Value<'a>>,
-    ) -> &'a mut Value<'a> {
-        arena.alloc(Value::NativeFn3(name.to_string(), func))
+        arena.alloc(Value::NativeFn {
+            name: name.to_string(),
+            arity,
+            func,
+        })
     }
 
     pub fn is_undefined(&self) -> bool {
@@ -209,14 +172,7 @@ impl<'a> Value<'a> {
     }
 
     pub fn is_function(&self) -> bool {
-        matches!(
-            *self,
-            Value::Lambda { .. }
-                | Value::NativeFn0(..)
-                | Value::NativeFn1(..)
-                | Value::NativeFn2(..)
-                | Value::NativeFn3(..)
-        )
+        matches!(*self, Value::Lambda { .. } | Value::NativeFn { .. })
     }
 
     pub fn is_truthy(&'a self) -> bool {
@@ -239,11 +195,7 @@ impl<'a> Value<'a> {
                 }
             },
             Value::Object(ref o) => !o.is_empty(),
-            Value::Lambda { .. }
-            | Value::NativeFn0(..)
-            | Value::NativeFn1(..)
-            | Value::NativeFn2(..)
-            | Value::NativeFn3(..) => false,
+            Value::Lambda { .. } | Value::NativeFn { .. } => false,
         }
     }
 
@@ -277,13 +229,10 @@ impl<'a> Value<'a> {
                 if let AstKind::Lambda { ref args, .. } = ast.kind {
                     args.len()
                 } else {
-                    0
+                    panic!("Not a lambda function")
                 }
             }
-            Value::NativeFn0(..) => 0,
-            Value::NativeFn1(..) => 1,
-            Value::NativeFn2(..) => 2,
-            Value::NativeFn3(..) => 3,
+            Value::NativeFn { arity, .. } => arity,
             _ => panic!("Not a function"),
         }
     }
@@ -541,6 +490,20 @@ impl<'a> Index<&str> for Value<'a> {
     }
 }
 
+impl<'a> Index<usize> for Value<'a> {
+    type Output = Value<'a>;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        match *self {
+            Value::Array(ref a, _) => match a.get(index) {
+                Some(value) => value,
+                None => Value::undefined(),
+            },
+            _ => Value::undefined(),
+        }
+    }
+}
+
 impl std::fmt::Debug for Value<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -556,12 +519,7 @@ impl std::fmt::Debug for Value<'_> {
                 o.keys().cloned().collect::<Vec<String>>().join(", ")
             ),
             Self::Lambda { .. } => write!(f, "<lambda>"),
-            Self::NativeFn0(..)
-            | Self::NativeFn1(..)
-            | Self::NativeFn2(..)
-            | Self::NativeFn3(..) => {
-                write!(f, "<nativefn>")
-            }
+            Self::NativeFn { .. } => write!(f, "<nativefn>"),
         }
     }
 }

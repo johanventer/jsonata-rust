@@ -37,7 +37,6 @@ impl<'a> Parser<'a> {
         }
 
         if self.token.kind != expected {
-            eprintln!("HELLO");
             return Err(Error::S0202UnexpectedToken(
                 self.token.char_index,
                 expected.to_string(),
