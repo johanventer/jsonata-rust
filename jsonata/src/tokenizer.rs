@@ -59,8 +59,7 @@ pub enum TokenKind {
     Null,
     Bool(bool),
     Str(String),
-    Unsigned(u64),
-    Float(f64),
+    Number(f64),
 
     // Identifiers
     Name(String),
@@ -113,8 +112,7 @@ impl std::fmt::Display for TokenKind {
             Null => write!(f, "null"),
             Bool(v) => write!(f, "{}", v),
             Str(v) => write!(f, "\"{}\"", v),
-            Unsigned(v) => write!(f, "{}", v),
-            Float(v) => write!(f, "{}", v),
+            Number(v) => write!(f, "{}", v),
             Name(v) => write!(f, "{}", v),
             Var(v) => write!(f, "${}", v),
         }
@@ -505,7 +503,7 @@ impl<'a> Tokenizer<'a> {
                 // Numbers
                 '0' => {
                     if self.eof() {
-                        Unsigned(0)
+                        Number(0.0)
                     } else {
                         self.scan_number()?
                     }
@@ -559,8 +557,6 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn scan_number(&mut self) -> Result<TokenKind> {
-        let mut has_fraction = false;
-        let mut has_exponent = false;
         loop {
             match self.peek() {
                 '.' => {
@@ -569,10 +565,8 @@ impl<'a> Tokenizer<'a> {
                         break;
                     }
                     self.bump();
-                    has_fraction = true;
                 }
                 'e' | 'E' => {
-                    has_exponent = true;
                     self.bump();
                     match self.peek() {
                         '+' | '-' => {
@@ -590,25 +584,18 @@ impl<'a> Tokenizer<'a> {
 
         let slice = &self.input[self.start_byte_index..self.byte_index];
 
-        if has_fraction || has_exponent {
-            let n = slice
-                .parse::<f64>()
-                .map_err(|_e| Error::S0201SyntaxError(self.char_index, slice.to_string()))?;
+        let n = slice
+            .parse::<f64>()
+            .map_err(|_e| Error::S0201SyntaxError(self.char_index, slice.to_string()))?;
 
-            match n.classify() {
-                std::num::FpCategory::Infinite
-                | std::num::FpCategory::Nan
-                | std::num::FpCategory::Subnormal => Err(Error::S0102LexedNumberOutOfRange(
-                    self.start_byte_index,
-                    self.token_string(),
-                )),
-                _ => Ok(TokenKind::Float(n)),
-            }
-        } else {
-            slice
-                .parse::<u64>()
-                .map(TokenKind::Unsigned)
-                .map_err(|_e| Error::S0201SyntaxError(self.char_index, slice.to_string()))
+        match n.classify() {
+            std::num::FpCategory::Infinite
+            | std::num::FpCategory::Nan
+            | std::num::FpCategory::Subnormal => Err(Error::S0102LexedNumberOutOfRange(
+                self.start_byte_index,
+                self.token_string(),
+            )),
+            _ => Ok(TokenKind::Number(n)),
         }
     }
 }
@@ -753,43 +740,43 @@ mod tests {
         let mut t = Tokenizer::new("0 1 0.234 5.678 0e0 1e1 1e-1 1e+1 2.234E-2 0.000000000001");
         assert!(matches!(
             t.next_token().unwrap().kind,
-            TokenKind::Unsigned(0)
+            TokenKind::Number(n) if (n - 0.0_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             t.next_token().unwrap().kind,
-            TokenKind::Unsigned(1)
+            TokenKind::Number(n) if (n - 1.0_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             t.next_token().unwrap().kind,
-            TokenKind::Float(n) if (n - 0.234_f64).abs() < f64::EPSILON
+            TokenKind::Number(n) if (n - 0.234_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             t.next_token().unwrap().kind,
-            TokenKind::Float(n) if (n - 5.678_f64).abs() < f64::EPSILON
+            TokenKind::Number(n) if (n - 5.678_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             t.next_token().unwrap().kind,
-            TokenKind::Float(n) if (n - 0_f64).abs() < f64::EPSILON
+            TokenKind::Number(n) if (n - 0_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             t.next_token().unwrap().kind,
-            TokenKind::Float(n) if (n - 10_f64).abs() < f64::EPSILON
+            TokenKind::Number(n) if (n - 10_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             t.next_token().unwrap().kind,
-            TokenKind::Float(n) if (n - 1e-1_f64).abs() < f64::EPSILON
+            TokenKind::Number(n) if (n - 1e-1_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             t.next_token().unwrap().kind,
-            TokenKind::Float(n) if (n - 10_f64).abs() < f64::EPSILON
+            TokenKind::Number(n) if (n - 10_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             t.next_token().unwrap().kind,
-            TokenKind::Float(n) if (n - 2.234E-2_f64).abs() < f64::EPSILON
+            TokenKind::Number(n) if (n - 2.234E-2_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             t.next_token().unwrap().kind,
-            TokenKind::Float(n) if (n - 0.000000000001_f64).abs() < f64::EPSILON
+            TokenKind::Number(n) if (n - 0.000000000001_f64).abs() < f64::EPSILON
         ));
     }
 }

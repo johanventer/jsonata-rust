@@ -110,12 +110,7 @@ fn process_unary(node: Ast) -> Result<Ast> {
         AstKind::Unary(UnaryOp::Minus(value)) => {
             let mut result = process_ast(*value)?;
             match result.kind {
-                AstKind::Unsigned(ref v) => {
-                    // TODO(math): Handle i64 overflow
-                    let v = -(*v as i64);
-                    Ok(Ast::new(AstKind::Signed(v), node.char_index))
-                }
-                AstKind::Float(ref mut v) => {
+                AstKind::Number(ref mut v) => {
                     *v = -*v;
                     Ok(result)
                 }
@@ -203,11 +198,7 @@ fn process_path(char_index: usize, lhs: &mut Box<Ast>, rhs: &mut Box<Ast>) -> Re
         for (step_index, step) in steps.iter_mut().enumerate() {
             match step.kind {
                 // Steps can't be literal values other than strings
-                AstKind::Unsigned(..)
-                | AstKind::Signed(..)
-                | AstKind::Float(..)
-                | AstKind::Bool(..)
-                | AstKind::Null => {
+                AstKind::Number(..) | AstKind::Bool(..) | AstKind::Null => {
                     return Err(Error::S0213InvalidStep(step.char_index, "TODO".to_string()));
                 }
 
