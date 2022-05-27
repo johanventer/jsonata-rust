@@ -4,17 +4,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
-    // JSON parsing errors
-    I0201UnexpectedCharacter {
-        ch: char,
-        line: usize,
-        column: usize,
-    },
-    I0202UnexpectedEndOfJson,
-    I0203ExceededDepthLimit,
-    I0204FailedUtf8Parsing,
-    I0205WrongType(String),
-
     // Signature parsing errors
     F0401UnexpectedEndOfSignature,
     F0402SignatureStartInvalid,
@@ -75,7 +64,6 @@ impl Error {
     /**
      * Error codes
      *
-     * Ixxxx    - JSON parsing errors
      * Fxxxx    - Function signature parsing errors
      * Sxxxx    - Static errors (compile time)
      * Txxxx    - Type errors
@@ -90,13 +78,6 @@ impl Error {
      */
     pub fn code(&self) -> &str {
         match *self {
-            // JSON parsing errors
-            Error::I0201UnexpectedCharacter { .. } => "I0201",
-            Error::I0202UnexpectedEndOfJson => "I0202",
-            Error::I0203ExceededDepthLimit => "I0203",
-            Error::I0204FailedUtf8Parsing => "I0204",
-            Error::I0205WrongType(..) => "I0205",
-
             // Signature parsing errors
             Error::F0401UnexpectedEndOfSignature => "F0401",
             Error::F0402SignatureStartInvalid => "F0402",
@@ -161,18 +142,6 @@ impl fmt::Display for Error {
         write!(f, "{} @ ", self.code())?;
 
         match *self {
-            // JSON parsing errors
-            I0201UnexpectedCharacter { ref ch, ref line, ref column, } =>
-                write!(f, "Unexpected character in input: {} at ({}:{})", ch, line, column),
-            I0202UnexpectedEndOfJson =>
-                write!(f, "Unexpected end of JSON input"),
-            I0203ExceededDepthLimit =>
-                write!(f, "Exceeded depth limit while parsing input"),
-            I0204FailedUtf8Parsing =>
-                write!(f, "Failed to parse UTF-8 bytes in input"),
-            I0205WrongType(ref s) =>
-                write!(f, "Wrong type in input, expected: {}", s),
-                
             // Signature parsing errors
             F0401UnexpectedEndOfSignature => 
                 write!(f, "Unexpected end of signature"),
