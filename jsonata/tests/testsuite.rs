@@ -6,7 +6,6 @@ use std::fs;
 use std::path;
 use test_generator::test_resources;
 
-use jsonata::json;
 use jsonata::value::ArrayFlags;
 use jsonata::{JsonAta, Value};
 
@@ -24,11 +23,13 @@ fn t(resource: &str) {
 
 fn test_case(resource: &str) {
     let arena = Bump::new();
-    let test = Value::wrap_in_array_if_needed(
+    let test_jsonata = JsonAta::new(
+        &fs::read_to_string(path::Path::new(resource)).unwrap(),
         &arena,
-        json::parse(&fs::read_to_string(resource).unwrap(), &arena).unwrap(),
-        ArrayFlags::empty(),
-    );
+    )
+    .unwrap();
+    let test = test_jsonata.evaluate(None).unwrap();
+    let test = Value::wrap_in_array_if_needed(&arena, test, ArrayFlags::empty());
 
     for case in test.members() {
         let timelimit = &case["timelimit"];
@@ -74,13 +75,13 @@ fn test_case(resource: &str) {
             data.dump()
         };
 
-        let jsonata = JsonAta::new(&expr);
+        let jsonata = JsonAta::new(&expr, &arena);
 
         match jsonata {
             Ok(jsonata) => {
                 if case["bindings"].is_object() {
                     for (key, value) in case["bindings"].entries() {
-                        jsonata.assign_var(key, from(value, &arena));
+                        jsonata.assign_var(key, value);
                     }
                 }
 
@@ -94,16 +95,10 @@ fn test_case(resource: &str) {
 
                 match result {
                     Ok(result) => {
-                        let expected_result = from(&case["result"], &arena);
+                        let expected_result = &case["result"];
 
                         if case["undefinedResult"] == true {
                             assert!(result.is_undefined());
-                        } else if case["result"].is_number() {
-                            assert!(result.is_number());
-                            assert!(
-                                f64::abs(expected_result.as_f64() - result.as_f64())
-                                    <= f64::EPSILON
-                            );
                         } else if case["unordered"] == true {
                             // Some test cases specify that the expected array result can be unordered
                             // because the order is implementation dependent. To implement that here
@@ -135,26 +130,5 @@ fn test_case(resource: &str) {
                 assert_eq!(case["code"], error.code());
             }
         }
-    }
-}
-
-pub fn from<'a>(value: &Value, arena: &'a Bump) -> &'a Value<'a> {
-    match value {
-        Value::Undefined => Value::undefined(),
-        Value::Null => Value::null(arena),
-        Value::Number(n) => Value::number(arena, *n),
-        Value::Bool(b) => Value::bool(arena, *b),
-        Value::String(s) => Value::string(arena, s),
-        Value::Array(a, f) => {
-            let array = Value::array_with_capacity(arena, a.len(), *f);
-            a.iter().for_each(|i| array.push(from(i, arena)));
-            array
-        }
-        Value::Object(o) => {
-            let obj = Value::object_with_capacity(arena, o.len());
-            o.iter().for_each(|(k, v)| obj.insert(k, from(v, arena)));
-            obj
-        }
-        _ => panic!("Can't call Value::from on functions"),
     }
 }

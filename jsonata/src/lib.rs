@@ -3,7 +3,6 @@ pub mod ast;
 pub mod evaluator;
 pub mod frame;
 pub mod functions;
-pub mod json;
 pub mod parser;
 pub mod symbol;
 pub mod tokenizer;
@@ -24,15 +23,15 @@ use value::ArrayFlags;
 pub struct JsonAta<'a> {
     ast: Ast,
     frame: Frame<'a>,
-    arena: Bump,
+    arena: &'a Bump,
 }
 
 impl<'a> JsonAta<'a> {
-    pub fn new(expr: &str) -> Result<JsonAta<'a>> {
+    pub fn new(expr: &str, arena: &'a Bump) -> Result<JsonAta<'a>> {
         Ok(Self {
             ast: parser::parse(expr)?,
             frame: Frame::new(),
-            arena: Bump::new(),
+            arena,
         })
     }
 
@@ -40,31 +39,32 @@ impl<'a> JsonAta<'a> {
         &self.ast
     }
 
-    pub fn assign_var<'other>(&'other self, name: &str, value: &'other Value<'other>)
-    where
-        'other: 'a,
-    {
+    pub fn assign_var(&self, name: &str, value: &'a Value<'a>) {
         self.frame.bind(name, value)
     }
 
-    pub fn evaluate(&'a self, input: Option<&str>) -> Result<&'a Value<'a>> {
+    pub fn evaluate(&self, input: Option<&str>) -> Result<&'a Value<'a>> {
         self.evaluate_timeboxed(input, None, None)
     }
 
     pub fn evaluate_timeboxed(
-        &'a self,
+        &self,
         input: Option<&str>,
         max_depth: Option<usize>,
         time_limit: Option<usize>,
     ) -> Result<&'a Value<'a>> {
         let input = match input {
-            Some(input) => json::parse(input, &self.arena).unwrap(),
+            Some(input) => {
+                let input_ast = parser::parse(input)?;
+                let evaluator = Evaluator::new(None, self.arena, None, None);
+                evaluator.evaluate(&input_ast, Value::undefined(), &Frame::new())?
+            }
             None => Value::undefined(),
         };
 
         // If the input is an array, wrap it in an array so that it gets treated as a single input
         let input = if input.is_array() {
-            Value::wrap_in_array(&self.arena, input, ArrayFlags::WRAPPED)
+            Value::wrap_in_array(self.arena, input, ArrayFlags::WRAPPED)
         } else {
             input
         };
@@ -94,8 +94,10 @@ impl<'a> JsonAta<'a> {
         bind_native!("sum", 1, fn_sum);
         bind_native!("uppercase", 1, fn_uppercase);
 
-        let chain_ast = parser::parse("function($f, $g) { function($x){ $g($f($x)) } }")?;
-        let evaluator = Evaluator::new(chain_ast, &self.arena, max_depth, time_limit);
+        let chain_ast = Some(parser::parse(
+            "function($f, $g) { function($x){ $g($f($x)) } }",
+        )?);
+        let evaluator = Evaluator::new(chain_ast, self.arena, max_depth, time_limit);
         evaluator.evaluate(&self.ast, input, &self.frame)
     }
 }

@@ -9,9 +9,10 @@ use hashbrown::HashMap;
 use crate::ast::{Ast, AstKind};
 use crate::frame::Frame;
 use crate::functions::FunctionContext;
-use crate::json::codegen::{DumpGenerator, Generator, PrettyGenerator};
-use crate::json::Number;
 use crate::Result;
+
+mod codegen;
+use codegen::{DumpGenerator, Generator, PrettyGenerator};
 
 bitflags! {
     pub struct ArrayFlags: u8 {
@@ -33,7 +34,7 @@ pub const UNDEFINED: Value = Value::Undefined;
 pub enum Value<'a> {
     Undefined,
     Null,
-    Number(Number),
+    Number(f64),
     Bool(bool),
     String(String),
     Array(Box<'a, Vec<&'a Value<'a>>>, ArrayFlags),
@@ -66,7 +67,7 @@ impl<'a> Value<'a> {
         arena.alloc(Value::Bool(value))
     }
 
-    pub fn number(arena: &Bump, value: impl Into<Number>) -> &mut Value {
+    pub fn number(arena: &Bump, value: impl Into<f64>) -> &mut Value {
         arena.alloc(Value::Number(value.into()))
     }
 
@@ -139,9 +140,8 @@ impl<'a> Value<'a> {
     }
 
     pub fn is_integer(&self) -> bool {
-        if let Value::Number(ref n) = *self {
-            let n = f64::from(*n);
-            match n.classify() {
+        match self {
+            Value::Number(n) => match n.classify() {
                 std::num::FpCategory::Nan
                 | std::num::FpCategory::Infinite
                 | std::num::FpCategory::Subnormal => false,
@@ -149,9 +149,8 @@ impl<'a> Value<'a> {
                     let mantissa = n.trunc();
                     n - mantissa == 0.0
                 }
-            }
-        } else {
-            false
+            },
+            _ => false,
         }
     }
 
@@ -179,7 +178,7 @@ impl<'a> Value<'a> {
         match *self {
             Value::Undefined => false,
             Value::Null => false,
-            Value::Number(ref n) => *n != 0.0,
+            Value::Number(n) => n != 0.0,
             Value::Bool(ref b) => *b,
             Value::String(ref s) => !s.is_empty(),
             Value::Array(ref a, _) => match a.len() {
@@ -244,30 +243,25 @@ impl<'a> Value<'a> {
         }
     }
 
-    pub fn as_f32(&self) -> f32 {
-        match *self {
-            Value::Number(ref n) => f32::from(*n),
-            _ => panic!("Not a number"),
-        }
-    }
-
     pub fn as_f64(&self) -> f64 {
         match *self {
-            Value::Number(ref n) => f64::from(*n),
+            Value::Number(n) => n,
             _ => panic!("Not a number"),
         }
     }
 
+    // TODO(math): Completely unchecked, audit usage
     pub fn as_usize(&self) -> usize {
         match *self {
-            Value::Number(ref n) => f64::from(*n) as usize,
+            Value::Number(n) => n as usize,
             _ => panic!("Not a number"),
         }
     }
 
+    // TODO(math): Completely unchecked, audit usage
     pub fn as_isize(&self) -> isize {
         match *self {
-            Value::Number(ref n) => f64::from(*n) as isize,
+            Value::Number(n) => n as isize,
             _ => panic!("Not a number"),
         }
     }
@@ -389,8 +383,6 @@ impl<'a> Value<'a> {
         gen.consume()
     }
 
-    /// Pretty prints out the value as JSON string. Takes an argument that's
-    /// number of spaces to indent new blocks with.
     pub fn pretty(&'a self, spaces: u16) -> String {
         let mut gen = PrettyGenerator::new(spaces);
         gen.write_json(self).expect("Can't fail");
@@ -413,42 +405,6 @@ impl<'a> PartialEq<Value<'a>> for Value<'a> {
     }
 }
 
-impl PartialEq<i32> for Value<'_> {
-    fn eq(&self, other: &i32) -> bool {
-        match *self {
-            Value::Number(ref n) => *n == *other,
-            _ => false,
-        }
-    }
-}
-
-impl PartialEq<i64> for Value<'_> {
-    fn eq(&self, other: &i64) -> bool {
-        match *self {
-            Value::Number(ref n) => *n == *other,
-            _ => false,
-        }
-    }
-}
-
-impl PartialEq<f32> for Value<'_> {
-    fn eq(&self, other: &f32) -> bool {
-        match *self {
-            Value::Number(ref n) => *n == *other,
-            _ => false,
-        }
-    }
-}
-
-impl PartialEq<f64> for Value<'_> {
-    fn eq(&self, other: &f64) -> bool {
-        match *self {
-            Value::Number(ref n) => *n == *other,
-            _ => false,
-        }
-    }
-}
-
 impl PartialEq<bool> for Value<'_> {
     fn eq(&self, other: &bool) -> bool {
         match *self {
@@ -462,15 +418,6 @@ impl PartialEq<&str> for Value<'_> {
     fn eq(&self, other: &&str) -> bool {
         match *self {
             Value::String(ref s) => s == *other,
-            _ => false,
-        }
-    }
-}
-
-impl PartialEq<String> for Value<'_> {
-    fn eq(&self, other: &String) -> bool {
-        match *self {
-            Value::String(ref s) => *s == *other,
             _ => false,
         }
     }

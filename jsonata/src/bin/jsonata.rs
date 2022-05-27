@@ -1,3 +1,4 @@
+use bumpalo::Bump;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -37,7 +38,8 @@ fn main() {
         None => opt.expr.expect("No JSONata expression provided"),
     };
 
-    let jsonata = JsonAta::new(&expr);
+    let arena = Bump::new();
+    let jsonata = JsonAta::new(&expr, &arena);
 
     match jsonata {
         Ok(jsonata) => {

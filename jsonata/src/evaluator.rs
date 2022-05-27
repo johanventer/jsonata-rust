@@ -18,14 +18,14 @@ struct EvaluatorInternal {
 }
 
 pub struct Evaluator<'a> {
-    chain_ast: Ast,
+    chain_ast: Option<Ast>,
     arena: &'a Bump,
     internal: RefCell<EvaluatorInternal>,
 }
 
 impl<'a> Evaluator<'a> {
     pub fn new(
-        chain_ast: Ast,
+        chain_ast: Option<Ast>,
         arena: &'a Bump,
         max_depth: Option<usize>,
         time_limit: Option<usize>,
@@ -204,7 +204,7 @@ impl<'a> Evaluator<'a> {
                 let result = self.evaluate(value, input, frame)?;
                 match result {
                     Value::Undefined => Ok(Value::undefined()),
-                    Value::Number(num) if !num.is_nan() => Ok(Value::number(self.arena, -*num)),
+                    Value::Number(n) => Ok(Value::number(self.arena, -n)),
                     _ => Err(Error::D1002NegatingNonNumeric(
                         node.char_index,
                         result.dump(),
@@ -337,26 +337,26 @@ impl<'a> Evaluator<'a> {
             | BinaryOp::Modulus => {
                 let rhs = self.evaluate(rhs_ast, input, frame)?;
 
-                let lhs = match lhs {
-                    Value::Undefined => return Ok(Value::undefined()),
-                    Value::Number(n) if !n.is_nan() => f64::from(*n),
-                    _ => {
-                        return Err(Error::T2001LeftSideNotNumber(
-                            node.char_index,
-                            op.to_string(),
-                        ))
-                    }
+                let lhs = if lhs.is_undefined() {
+                    return Ok(Value::undefined());
+                } else if lhs.is_number() {
+                    lhs.as_f64()
+                } else {
+                    return Err(Error::T2001LeftSideNotNumber(
+                        node.char_index,
+                        op.to_string(),
+                    ));
                 };
 
-                let rhs = match rhs {
-                    Value::Undefined => return Ok(Value::undefined()),
-                    Value::Number(n) if !n.is_nan() => f64::from(*n),
-                    _ => {
-                        return Err(Error::T2002RightSideNotNumber(
-                            node.char_index,
-                            op.to_string(),
-                        ))
-                    }
+                let rhs = if rhs.is_undefined() {
+                    return Ok(Value::undefined());
+                } else if rhs.is_number() {
+                    rhs.as_f64()
+                } else {
+                    return Err(Error::T2002RightSideNotNumber(
+                        node.char_index,
+                        op.to_string(),
+                    ));
                 };
 
                 let result = match op {
@@ -389,9 +389,9 @@ impl<'a> Evaluator<'a> {
                     return Err(Error::T2010BinaryOpTypes(node.char_index, op.to_string()));
                 }
 
-                if let (Value::Number(ref lhs), Value::Number(ref rhs)) = (lhs, rhs) {
-                    let lhs = f64::from(*lhs);
-                    let rhs = f64::from(*rhs);
+                if lhs.is_number() && rhs.is_number() {
+                    let lhs = lhs.as_f64();
+                    let rhs = rhs.as_f64();
                     return Ok(Value::bool(
                         self.arena,
                         match op {
@@ -470,8 +470,8 @@ impl<'a> Evaluator<'a> {
                 }
 
                 let result = Value::array_with_capacity(self.arena, size, ArrayFlags::SEQUENCE);
-                for index in lhs..rhs + 1 {
-                    result.push(Value::number(self.arena, index));
+                for index in lhs..=rhs {
+                    result.push(Value::number(self.arena, index as f64))
                 }
 
                 Ok(result)
@@ -531,7 +531,11 @@ impl<'a> Evaluator<'a> {
 
                     if lhs.is_function() {
                         // Apply function chaining
-                        let chain = self.evaluate(&self.chain_ast, Value::undefined(), frame)?;
+                        let chain = self.evaluate(
+                            self.chain_ast.as_ref().unwrap(),
+                            Value::undefined(),
+                            frame,
+                        )?;
 
                         let args = Value::array_with_capacity(self.arena, 2, ArrayFlags::empty());
                         args.push(lhs);
@@ -747,7 +751,7 @@ impl<'a> Evaluator<'a> {
         match node.kind {
             AstKind::Filter(ref filter) => match filter.kind {
                 AstKind::Number(n) => {
-                    let index = get_index(n.into());
+                    let index = get_index(n);
                     let item = input.get_member(index as usize);
                     if !item.is_undefined() {
                         if item.is_array() {

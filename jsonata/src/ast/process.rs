@@ -109,14 +109,15 @@ fn process_unary(node: Ast) -> Result<Ast> {
         // Pre-process negative numbers
         AstKind::Unary(UnaryOp::Minus(value)) => {
             let mut result = process_ast(*value)?;
-            if let AstKind::Number(ref mut num) = result.kind {
-                *num = -*num;
-                Ok(result)
-            } else {
-                Ok(Ast::new(
+            match result.kind {
+                AstKind::Number(ref mut v) => {
+                    *v = -*v;
+                    Ok(result)
+                }
+                _ => Ok(Ast::new(
                     AstKind::Unary(UnaryOp::Minus(Box::new(result))),
                     node.char_index,
-                ))
+                )),
             }
         }
 

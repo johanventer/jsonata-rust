@@ -4,8 +4,6 @@ use std::{char, str};
 
 use jsonata_errors::{Error, Result};
 
-use super::json::Number;
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     // Token indicating the end of the token stream
@@ -61,7 +59,7 @@ pub enum TokenKind {
     Null,
     Bool(bool),
     Str(String),
-    Num(Number),
+    Number(f64),
 
     // Identifiers
     Name(String),
@@ -70,52 +68,53 @@ pub enum TokenKind {
 
 impl std::fmt::Display for TokenKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use TokenKind::*;
         match self {
-            TokenKind::End => write!(f, "(end)"),
-            TokenKind::Whitespace => write!(f, "(whitespace)"),
-            TokenKind::Comment => write!(f, "(comment"),
-            TokenKind::Period => write!(f, "."),
-            TokenKind::LeftBracket => write!(f, "["),
-            TokenKind::RightBracket => write!(f, "]"),
-            TokenKind::LeftBrace => write!(f, "{{"),
-            TokenKind::RightBrace => write!(f, "}}"),
-            TokenKind::LeftParen => write!(f, "("),
-            TokenKind::RightParen => write!(f, ")"),
-            TokenKind::Comma => write!(f, ","),
-            TokenKind::At => write!(f, "@"),
-            TokenKind::Hash => write!(f, "#"),
-            TokenKind::SemiColon => write!(f, ";"),
-            TokenKind::Colon => write!(f, ":"),
-            TokenKind::QuestionMark => write!(f, "?"),
-            TokenKind::Plus => write!(f, "+"),
-            TokenKind::Minus => write!(f, "-"),
-            TokenKind::Asterisk => write!(f, "*"),
-            TokenKind::ForwardSlash => write!(f, "/"),
-            TokenKind::PercentSign => write!(f, "%"),
-            TokenKind::Pipe => write!(f, "|"),
-            TokenKind::Equal => write!(f, "="),
-            TokenKind::RightAngleBracket => write!(f, ">"),
-            TokenKind::LeftAngleBracket => write!(f, "<"),
-            TokenKind::Caret => write!(f, "^"),
-            TokenKind::Ampersand => write!(f, "&"),
-            TokenKind::ExclamationMark => write!(f, "!"),
-            TokenKind::Tilde => write!(f, "~"),
-            TokenKind::Range => write!(f, ".."),
-            TokenKind::Bind => write!(f, ":="),
-            TokenKind::NotEqual => write!(f, "!="),
-            TokenKind::GreaterEqual => write!(f, ">="),
-            TokenKind::LessEqual => write!(f, "<="),
-            TokenKind::Descendent => write!(f, "**"),
-            TokenKind::Apply => write!(f, "~>"),
-            TokenKind::Or => write!(f, "or"),
-            TokenKind::In => write!(f, "in"),
-            TokenKind::And => write!(f, "and"),
-            TokenKind::Null => write!(f, "null"),
-            TokenKind::Bool(v) => write!(f, "{}", v),
-            TokenKind::Str(v) => write!(f, "\"{}\"", v),
-            TokenKind::Num(v) => write!(f, "{}", v),
-            TokenKind::Name(v) => write!(f, "{}", v),
-            TokenKind::Var(v) => write!(f, "${}", v),
+            End => write!(f, "(end)"),
+            Whitespace => write!(f, "(whitespace)"),
+            Comment => write!(f, "(comment"),
+            Period => write!(f, "."),
+            LeftBracket => write!(f, "["),
+            RightBracket => write!(f, "]"),
+            LeftBrace => write!(f, "{{"),
+            RightBrace => write!(f, "}}"),
+            LeftParen => write!(f, "("),
+            RightParen => write!(f, ")"),
+            Comma => write!(f, ","),
+            At => write!(f, "@"),
+            Hash => write!(f, "#"),
+            SemiColon => write!(f, ";"),
+            Colon => write!(f, ":"),
+            QuestionMark => write!(f, "?"),
+            Plus => write!(f, "+"),
+            Minus => write!(f, "-"),
+            Asterisk => write!(f, "*"),
+            ForwardSlash => write!(f, "/"),
+            PercentSign => write!(f, "%"),
+            Pipe => write!(f, "|"),
+            Equal => write!(f, "="),
+            RightAngleBracket => write!(f, ">"),
+            LeftAngleBracket => write!(f, "<"),
+            Caret => write!(f, "^"),
+            Ampersand => write!(f, "&"),
+            ExclamationMark => write!(f, "!"),
+            Tilde => write!(f, "~"),
+            Range => write!(f, ".."),
+            Bind => write!(f, ":="),
+            NotEqual => write!(f, "!="),
+            GreaterEqual => write!(f, ">="),
+            LessEqual => write!(f, "<="),
+            Descendent => write!(f, "**"),
+            Apply => write!(f, "~>"),
+            Or => write!(f, "or"),
+            In => write!(f, "in"),
+            And => write!(f, "and"),
+            Null => write!(f, "null"),
+            Bool(v) => write!(f, "{}", v),
+            Str(v) => write!(f, "\"{}\"", v),
+            Number(v) => write!(f, "{}", v),
+            Name(v) => write!(f, "{}", v),
+            Var(v) => write!(f, "${}", v),
         }
     }
 }
@@ -151,11 +150,6 @@ pub struct Tokenizer<'a> {
 }
 
 const NULL: char = '\0';
-
-/// The mantissa in a json::Number is a u64, but we know that f64 has 53 bits for mantissa
-/// (52 in the mantissa field, and the implict 1 at the start), so at this point we have
-/// already blown the range of f64, so it's just to prevent u64 overflow.
-const MAX_PRECISION: u64 = u64::pow(2, 59);
 
 #[inline]
 fn is_whitespace(c: char) -> bool {
@@ -509,18 +503,12 @@ impl<'a> Tokenizer<'a> {
                 // Numbers
                 '0' => {
                     if self.eof() {
-                        Num(0.into())
+                        Number(0.0)
                     } else {
-                        let mut mantissa = 0;
-                        let mut exponent = 0;
-                        let num = self.number_extensions(&mut mantissa, &mut exponent)?;
-                        Num(num)
+                        self.scan_number()?
                     }
                 }
-                c @ '1'..='9' => {
-                    let num = self.number(c)?;
-                    Num(num)
-                }
+                '1'..='9' => self.scan_number()?,
 
                 // Names
                 c if is_name_start(c) => {
@@ -568,202 +556,47 @@ impl<'a> Tokenizer<'a> {
         Ok(token)
     }
 
-    // NOTE: Much of this number parsing was stolen from the json create, and modified
-    // as needed. See json/README.md.
-
-    fn number(&mut self, first_char: char) -> Result<Number> {
-        let mut mantissa = (first_char as u8 - b'0') as u64;
-
-        let result: Number;
-
+    fn scan_number(&mut self) -> Result<TokenKind> {
         loop {
-            if mantissa > MAX_PRECISION {
-                return Err(Error::D1001NumberOfOutRange(0.0));
-            }
-
-            if self.eof() {
-                result = mantissa.into();
-                break;
-            }
-
             match self.peek() {
-                c @ '0'..='9' => {
-                    self.bump();
-                    mantissa = mantissa * 10 + (c as u8 - b'0') as u64;
-                }
-                _ => {
-                    let mut exponent = 0;
-                    result = self.number_extensions(&mut mantissa, &mut exponent)?;
-                    break;
-                }
-            }
-        }
-
-        Ok(result)
-    }
-
-    fn number_extensions(&mut self, mantissa: &mut u64, exponent: &mut i16) -> Result<Number> {
-        match self.peek() {
-            '.' => match self.peek_second() {
-                // Range operator
-                '.' => Ok((*mantissa).into()),
-                _ => {
-                    self.bump();
-                    self.number_fraction(mantissa, exponent)
-                }
-            },
-            'e' | 'E' => {
-                self.bump();
-                self.number_exponent(mantissa, exponent)
-            }
-            _ => Ok((*mantissa).into()),
-        }
-    }
-
-    fn number_fraction(&mut self, mantissa: &mut u64, exponent: &mut i16) -> Result<Number> {
-        let result: Number;
-
-        // Have to have at least one fractional digit
-        match self.peek() {
-            c @ '0'..='9' => {
-                self.bump();
-                if *mantissa < MAX_PRECISION {
-                    *mantissa = *mantissa * 10 + (c as u8 - b'0') as u64;
-                    *exponent -= 1;
-                } else {
-                    match mantissa
-                        .checked_mul(10)
-                        .and_then(|m| m.checked_add((c as u8 - b'0') as u64))
-                    {
-                        Some(result) => {
-                            *mantissa = result;
-                            *exponent -= 1;
-                        }
-                        None => return Err(Error::D1001NumberOfOutRange(0.0)),
+                '.' => {
+                    // Handle the range operator
+                    if self.peek_second() == '.' {
+                        break;
                     }
-                }
-            }
-            _ => {
-                return Err(Error::S0201SyntaxError(
-                    self.start_char_index,
-                    self.token_string(),
-                ));
-            }
-        }
-
-        // Get the rest of the fractional digits
-        loop {
-            if self.eof() {
-                result = self.finalize_number(*mantissa, *exponent)?;
-                break;
-            }
-
-            match self.peek() {
-                c @ '0'..='9' => {
                     self.bump();
-                    if *mantissa < MAX_PRECISION {
-                        *mantissa = *mantissa * 10 + (c as u8 - b'0') as u64;
-                        *exponent -= 1;
-                    } else {
-                        match mantissa
-                            .checked_mul(10)
-                            .and_then(|m| m.checked_add((c as u8 - b'0') as u64))
-                        {
-                            Some(result) => {
-                                *mantissa = result;
-                                *exponent -= 1;
-                            }
-                            None => return Err(Error::D1001NumberOfOutRange(0.0)),
-                        }
-                    }
                 }
                 'e' | 'E' => {
                     self.bump();
-                    result = self.number_exponent(mantissa, exponent)?;
-                    break;
+                    match self.peek() {
+                        '+' | '-' => {
+                            self.bump();
+                        }
+                        _ => {}
+                    }
                 }
-                _ => {
-                    result = self.finalize_number(*mantissa, *exponent)?;
-                    break;
-                }
-            }
-        }
-
-        Ok(result)
-    }
-
-    fn number_exponent(
-        &mut self,
-        mantissa: &mut u64,
-        original_exponent: &mut i16,
-    ) -> Result<Number> {
-        let sign = match self.peek() {
-            '-' => {
-                self.bump();
-                -1
-            }
-            '+' => {
-                self.bump();
-                1
-            }
-            _ => 1,
-        };
-
-        let mut exponent = match self.peek() {
-            c @ '0'..='9' => {
-                self.bump();
-                (c as u8 - b'0') as i16
-            }
-            _ => {
-                return Err(Error::S0201SyntaxError(
-                    self.start_char_index,
-                    self.token_string(),
-                ));
-            }
-        };
-
-        loop {
-            if self.eof() {
-                break;
-            }
-
-            match self.peek() {
-                c @ '0'..='9' => {
+                '0'..='9' => {
                     self.bump();
-                    exponent = exponent
-                        .saturating_mul(10)
-                        .saturating_add((c as u8 - b'0') as i16);
                 }
                 _ => break,
             }
         }
 
-        self.finalize_number(*mantissa, original_exponent.saturating_add(exponent * sign))
-    }
+        let slice = &self.input[self.start_byte_index..self.byte_index];
 
-    /// Final checks on a number for out of range conditions
-    fn finalize_number(&self, mantissa: u64, exponent: i16) -> Result<Number> {
-        let result = unsafe { Number::from_parts_unchecked(true, mantissa, exponent) };
-        match f64::try_from(result) {
-            Ok(f) => match f.classify() {
-                std::num::FpCategory::Infinite
-                | std::num::FpCategory::Nan
-                | std::num::FpCategory::Subnormal => {
-                    return Err(Error::S0102LexedNumberOutOfRange(
-                        self.start_byte_index,
-                        self.token_string(),
-                    ))
-                }
-                _ => {}
-            },
-            _ => {
-                return Err(Error::S0102LexedNumberOutOfRange(
-                    self.start_byte_index,
-                    self.token_string(),
-                ))
-            }
+        let n = slice
+            .parse::<f64>()
+            .map_err(|_e| Error::S0201SyntaxError(self.char_index, slice.to_string()))?;
+
+        match n.classify() {
+            std::num::FpCategory::Infinite
+            | std::num::FpCategory::Nan
+            | std::num::FpCategory::Subnormal => Err(Error::S0102LexedNumberOutOfRange(
+                self.start_byte_index,
+                self.token_string(),
+            )),
+            _ => Ok(TokenKind::Number(n)),
         }
-        Ok(result)
     }
 }
 
@@ -904,42 +737,46 @@ mod tests {
 
     #[test]
     fn numbers() {
-        let mut t = Tokenizer::new("0 1 0.234 5.678 0e0 1e1 1e-1 1e+1 2.234E-2");
+        let mut t = Tokenizer::new("0 1 0.234 5.678 0e0 1e1 1e-1 1e+1 2.234E-2 0.000000000001");
         assert!(matches!(
             t.next_token().unwrap().kind,
-            TokenKind::Num(n) if (f64::from(n) - 0.0_f64).abs() < f64::EPSILON
+            TokenKind::Number(n) if (n - 0.0_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             t.next_token().unwrap().kind,
-            TokenKind::Num(n) if (f64::from(n) - 1.0_f64).abs() < f64::EPSILON
+            TokenKind::Number(n) if (n - 1.0_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             t.next_token().unwrap().kind,
-            TokenKind::Num(n) if (f64::from(n) - 0.234_f64).abs() < f64::EPSILON
+            TokenKind::Number(n) if (n - 0.234_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             t.next_token().unwrap().kind,
-            TokenKind::Num(n) if (f64::from(n) - 5.678_f64).abs() < f64::EPSILON
+            TokenKind::Number(n) if (n - 5.678_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             t.next_token().unwrap().kind,
-            TokenKind::Num(n) if (f64::from(n) - 0e0_f64).abs() < f64::EPSILON
+            TokenKind::Number(n) if (n - 0_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             t.next_token().unwrap().kind,
-            TokenKind::Num(n) if (f64::from(n) - 1e1_f64).abs() < f64::EPSILON
+            TokenKind::Number(n) if (n - 10_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             t.next_token().unwrap().kind,
-            TokenKind::Num(n) if (f64::from(n) - 1e-1_f64).abs() < f64::EPSILON
+            TokenKind::Number(n) if (n - 1e-1_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             t.next_token().unwrap().kind,
-            TokenKind::Num(n) if (f64::from(n) - 1e+1_f64).abs() < f64::EPSILON
+            TokenKind::Number(n) if (n - 10_f64).abs() < f64::EPSILON
         ));
         assert!(matches!(
             t.next_token().unwrap().kind,
-            TokenKind::Num(n) if (f64::from(n) - 2.234E-2_f64).abs() < f64::EPSILON
+            TokenKind::Number(n) if (n - 2.234E-2_f64).abs() < f64::EPSILON
+        ));
+        assert!(matches!(
+            t.next_token().unwrap().kind,
+            TokenKind::Number(n) if (n - 0.000000000001_f64).abs() < f64::EPSILON
         ));
     }
 }
