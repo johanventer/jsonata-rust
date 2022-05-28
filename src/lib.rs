@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 // TODO: Fix visibility of all these modules, they're all pub for now
 pub mod ast;
 pub mod errors;
