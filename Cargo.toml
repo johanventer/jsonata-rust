@@ -1,8 +1,11 @@
 [package]
 name = "jsonata"
 version = "0.0.0"
-authors = ["Johan Venter <johan.venter@gmail.com>"]
 edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["Johan Venter <johan.venter@gmail.com>"]
+description = "An (incomplete) implementation of JSONata in Rust"
+repository = "https://github.com/johanventer/jsonata-rust/"
 
 [dependencies]
 chrono = "0.4"
