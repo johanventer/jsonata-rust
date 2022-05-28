@@ -455,8 +455,8 @@ impl<'a> Evaluator<'a> {
                     return Ok(Value::undefined());
                 }
 
-                let lhs = lhs.as_usize();
-                let rhs = rhs.as_usize();
+                let lhs = lhs.as_isize();
+                let rhs = rhs.as_isize();
 
                 if lhs > rhs {
                     return Ok(Value::undefined());
@@ -467,12 +467,7 @@ impl<'a> Evaluator<'a> {
                     return Err(Error::D2014RangeOutOfBounds(node.char_index, size));
                 }
 
-                let result = Value::array_with_capacity(self.arena, size, ArrayFlags::SEQUENCE);
-                for index in lhs..=rhs {
-                    result.push(Value::number(self.arena, index as f64))
-                }
-
-                Ok(result)
+                Ok(Value::range(self.arena, lhs, rhs))
             }
 
             BinaryOp::Concat => {
@@ -570,7 +565,7 @@ impl<'a> Evaluator<'a> {
                 let rhs = Value::wrap_in_array_if_needed(self.arena, rhs, ArrayFlags::empty());
 
                 for item in rhs.members() {
-                    if *item == lhs {
+                    if item == lhs {
                         return Ok(Value::bool(self.arena, true));
                     }
                 }

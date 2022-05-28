@@ -12,9 +12,13 @@ use crate::functions::FunctionContext;
 use crate::Result;
 use jsonata_errors::Error;
 
-use self::serialize::{DumpFormatter, PrettyFormatter, Serializer};
-
+pub mod iterator;
+mod range;
 pub mod serialize;
+
+use self::range::Range;
+use self::serialize::{DumpFormatter, PrettyFormatter, Serializer};
+pub use iterator::MemberIterator;
 
 bitflags! {
     pub struct ArrayFlags: u8 {
@@ -51,6 +55,7 @@ pub enum Value<'a> {
         arity: usize,
         func: fn(FunctionContext<'a, '_>, &'a Value<'a>) -> Result<&'a Value<'a>>,
     },
+    Range(Range<'a>),
 }
 
 #[allow(clippy::mut_from_ref)]
@@ -123,6 +128,10 @@ impl<'a> Value<'a> {
             arity,
             func,
         })
+    }
+
+    pub fn range(arena: &'a Bump, start: isize, end: isize) -> &'a mut Value<'a> {
+        arena.alloc(Value::Range(Range::new(arena, start, end)))
     }
 
     pub fn is_undefined(&self) -> bool {
@@ -201,7 +210,7 @@ impl<'a> Value<'a> {
     }
 
     pub fn is_array(&self) -> bool {
-        matches!(*self, Value::Array(..))
+        matches!(*self, Value::Array(..) | Value::Range(..))
     }
 
     pub fn is_object(&self) -> bool {
@@ -233,29 +242,30 @@ impl<'a> Value<'a> {
             },
             Value::Object(ref o) => !o.is_empty(),
             Value::Lambda { .. } | Value::NativeFn { .. } => false,
+            Value::Range(ref r) => !r.is_empty(),
         }
     }
 
     pub fn get_member(&'a self, index: usize) -> &Value {
         match *self {
-            Value::Array(ref array, _) => match array.get(index) {
-                Some(value) => *value,
-                None => Value::undefined(),
-            },
+            Value::Array(ref array, _) => {
+                array.get(index).copied().unwrap_or_else(Value::undefined)
+            }
+            Value::Range(ref range) => range.nth(index).unwrap_or_else(Value::undefined),
             _ => panic!("Not an array"),
         }
     }
 
-    pub fn members(&self) -> std::slice::Iter<'_, &'a Value> {
-        match *self {
-            Value::Array(ref array, _) => array.iter(),
+    pub fn members(&'a self) -> MemberIterator<'a> {
+        match self {
+            Value::Array(..) | Value::Range(..) => MemberIterator::new(self),
             _ => panic!("Not an array"),
         }
     }
 
     pub fn entries(&self) -> hashbrown::hash_map::Iter<'_, String, &'a Value> {
-        match *self {
-            Value::Object(ref map) => map.iter(),
+        match self {
+            Value::Object(map) => map.iter(),
             _ => panic!("Not an object"),
         }
     }
@@ -314,6 +324,7 @@ impl<'a> Value<'a> {
     pub fn len(&self) -> usize {
         match *self {
             Value::Array(ref array, _) => array.len(),
+            Value::Range(ref range) => range.len(),
             _ => panic!("Not an array"),
         }
     }
@@ -321,6 +332,7 @@ impl<'a> Value<'a> {
     pub fn is_empty(&self) -> bool {
         match *self {
             Value::Array(ref array, _) => array.is_empty(),
+            Value::Range(ref range) => range.is_empty(),
             _ => panic!("Not an array"),
         }
     }
@@ -435,6 +447,7 @@ impl<'a> PartialEq<Value<'a>> for Value<'a> {
             (Value::String(l), Value::String(r)) => *l == *r,
             (Value::Array(l, ..), Value::Array(r, ..)) => *l == *r,
             (Value::Object(l), Value::Object(r)) => *l == *r,
+            (Value::Range(l), Value::Range(r)) => *l == *r,
             _ => false,
         }
     }
@@ -444,6 +457,24 @@ impl PartialEq<bool> for Value<'_> {
     fn eq(&self, other: &bool) -> bool {
         match *self {
             Value::Bool(ref b) => *b == *other,
+            _ => false,
+        }
+    }
+}
+
+impl PartialEq<usize> for Value<'_> {
+    fn eq(&self, other: &usize) -> bool {
+        match self {
+            Value::Number(..) => self.as_usize() == *other,
+            _ => false,
+        }
+    }
+}
+
+impl PartialEq<isize> for Value<'_> {
+    fn eq(&self, other: &isize) -> bool {
+        match self {
+            Value::Number(..) => self.as_isize() == *other,
             _ => false,
         }
     }
@@ -481,6 +512,7 @@ impl<'a> Index<usize> for Value<'a> {
                 Some(value) => value,
                 None => Value::undefined(),
             },
+            Value::Range(ref r) => &r[index],
             _ => Value::undefined(),
         }
     }
@@ -498,6 +530,7 @@ impl std::fmt::Debug for Value<'_> {
             Self::Object(o) => o.fmt(f),
             Self::Lambda { .. } => write!(f, "<lambda>"),
             Self::NativeFn { .. } => write!(f, "<nativefn>"),
+            Self::Range(r) => write!(f, "<range({},{})>", r.start(), r.end()),
         }
     }
 }
@@ -514,6 +547,7 @@ impl std::string::ToString for Value<'_> {
             Self::Object(..) => "<object>".to_string(),
             Self::Lambda { .. } => "<lambda>".to_string(),
             Self::NativeFn { .. } => "<nativefn>".to_string(),
+            Self::Range(r) => format!("<range({},{})>", r.start(), r.end()),
         }
     }
 }

@@ -27,7 +27,7 @@ pub enum Error {
     D1001NumberOfOutRange(f64),
     D1002NegatingNonNumeric(usize, String),
     D1009MultipleKeys(usize, String),
-    D2014RangeOutOfBounds(usize, usize),
+    D2014RangeOutOfBounds(usize, isize),
     D3001StringNotFinite(usize),
     D3030NonNumericCast(usize, String),
     D3060SqrtNegative(usize, String),
