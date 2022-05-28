@@ -600,3 +600,23 @@ pub fn fn_exists<'a, 'e>(
         _ => Ok(Value::bool(context.arena, true)),
     }
 }
+
+pub fn fn_assert<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    let condition = &args[0];
+    let message = &args[1];
+
+    assert_arg!(condition.is_bool(), context, 1);
+
+    if let Value::Bool(false) = condition {
+        Err(Error::D3141Assert(if message.is_string() {
+            message.as_str().to_string()
+        } else {
+            "$assert() statement failed".to_string()
+        }))
+    } else {
+        Ok(Value::undefined())
+    }
+}

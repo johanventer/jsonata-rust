@@ -79,6 +79,7 @@ impl<'a> JsonAta<'a> {
         self.frame.bind("$", input);
         bind_native!("abs", 1, fn_abs);
         bind_native!("append", 2, fn_append);
+        bind_native!("assert", 2, fn_assert);
         bind_native!("boolean", 1, fn_boolean);
         bind_native!("ceil", 1, fn_ceil);
         bind_native!("count", 1, fn_count);

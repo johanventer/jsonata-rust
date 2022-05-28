@@ -30,6 +30,7 @@ pub enum Error {
     D2014RangeOutOfBounds(usize, usize),
     D3001StringNotFinite(usize),
     D3030NonNumericCast(usize, String),
+    D3141Assert(String),
 
     // Type errors
     T0410ArgumentNotValid(usize, usize, String),
@@ -94,6 +95,7 @@ impl Error {
             Error::D2014RangeOutOfBounds(..) => "D2014",
             Error::D3001StringNotFinite(..) => "D3001",
             Error::D3030NonNumericCast(..) => "D3030",
+            Error::D3141Assert(..) => "D3141",
 
             // Type errors
             Error::T0410ArgumentNotValid(..) => "T0410",
@@ -172,6 +174,8 @@ impl fmt::Display for Error {
                 write!(f, "{}: Attempting to invoke string function on Infinity or NaN", p),
             D3030NonNumericCast(ref p, ref n) =>
                 write!(f, "{}: Unable to cast value to a number: {}", p, n),
+            D3141Assert(ref m) =>
+                write!(f, "{}", m),
             
             // Type errors
             T0410ArgumentNotValid(ref p, ref i, ref t) =>
@@ -273,4 +277,3 @@ impl fmt::Display for Error {
 // "D3138": "The $single() function expected exactly 1 matching result.  Instead it matched more.",
 // "D3139": "The $single() function expected exactly 1 matching result.  Instead it matched 0.",
 // "D3140": "Malformed URL passed to ${{{functionName}}}(): {{value}}",
-// "D3141": "{{{message}}}"

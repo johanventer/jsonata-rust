@@ -132,14 +132,22 @@ fn test_case(resource: &str) {
                         }
                     }
                     Err(error) => {
-                        println!("{}", error);
-                        assert_eq!(case["code"], error.code());
+                        let code = if !case["error"].is_undefined() {
+                            &case["error"]["code"]
+                        } else {
+                            &case["code"]
+                        };
+                        assert_eq!(*code, error.code());
                     }
                 }
             }
             Err(error) => {
-                println!("{}", error);
-                assert_eq!(case["code"], error.code());
+                let code = if !case["error"].is_undefined() {
+                    &case["error"]["code"]
+                } else {
+                    &case["code"]
+                };
+                assert_eq!(*code, error.code());
             }
         }
     }
