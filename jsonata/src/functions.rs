@@ -7,17 +7,17 @@ use super::frame::Frame;
 use super::value::serialize::{DumpFormatter, PrettyFormatter, Serializer};
 use super::value::{ArrayFlags, Value};
 
-// macro_rules! min_args {
-//     ($context:ident, $args:ident, $min:literal) => {
-//         if $args.len() < $min {
-//             return Err(Error::T0410ArgumentNotValid(
-//                 $context.char_index,
-//                 $min,
-//                 $context.name.to_string(),
-//             ));
-//         }
-//     };
-// }
+macro_rules! min_args {
+    ($context:ident, $args:ident, $min:literal) => {
+        if $args.len() < $min {
+            return Err(Error::T0410ArgumentNotValid(
+                $context.char_index,
+                $min,
+                $context.name.to_string(),
+            ));
+        }
+    };
+}
 
 macro_rules! max_args {
     ($context:ident, $args:ident, $max:literal) => {
@@ -583,5 +583,20 @@ pub fn fn_number<'a, 'e>(
             }
         }
         _ => bad_arg!(context, 1),
+    }
+}
+
+pub fn fn_exists<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    min_args!(context, args, 1);
+    max_args!(context, args, 1);
+
+    let arg = &args[0];
+
+    match arg {
+        Value::Undefined => Ok(Value::bool(context.arena, false)),
+        _ => Ok(Value::bool(context.arena, true)),
     }
 }

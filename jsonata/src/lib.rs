@@ -82,6 +82,7 @@ impl<'a> JsonAta<'a> {
         bind_native!("boolean", 1, fn_boolean);
         bind_native!("ceil", 1, fn_ceil);
         bind_native!("count", 1, fn_count);
+        bind_native!("exists", 1, fn_exists);
         bind_native!("filter", 2, fn_filter);
         bind_native!("floor", 1, fn_floor);
         bind_native!("lookup", 2, fn_lookup);
@@ -94,7 +95,6 @@ impl<'a> JsonAta<'a> {
         bind_native!("substring", 3, fn_substring);
         bind_native!("sum", 1, fn_sum);
         bind_native!("uppercase", 1, fn_uppercase);
-        
 
         let chain_ast = Some(parser::parse(
             "function($f, $g) { function($x){ $g($f($x)) } }",
