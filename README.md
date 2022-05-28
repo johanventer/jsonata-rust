@@ -5,7 +5,7 @@
 [<img alt="docs.rs" src="https://img.shields.io/docsrs/jsonata?label=docs.rs&logo=docs.rs&style=for-the-badge" height=22>](https://docs.rs/jsonata)
 [<img alt="test status" src="https://img.shields.io/github/workflow/status/johanventer/jsonata-rust/Test%20Suite?label=tests&style=for-the-badge" height=22>](https://github.com/johanventer/jsonata-rust/actions?query=branch%3Amain)
 
-**Please don't use this in production yet**
+**Please don't use this in production yet, it will panic in unexpected places for unimplemented features, the API is not ergonomic and is changing fast, and the docs are lacking. This version is published to crates.io so interested people can start to play with it easily.**
 
 An (incomplete) implementation of [JSONata](https://jsonata.org) in Rust.
 
@@ -20,7 +20,95 @@ From the JSONata website:
 - Create user-defined functions
 - Format query results into any JSON output structure
 
-Read the full documentation [here](https://docs.jsonata.org/overview.html), and give it a go in the exerciser environment [here](https://try.jsonata.org).
+Read the [full documentation](https://docs.jsonata.org/overview.html), and give it a go in the [exerciser environment](https://try.jsonata.org).
+
+## Getting started
+
+The API is currently not very ergonomic, as you need to provide a bumpalo arena for allocating values in.
+
+First, add the following to your `Cargo.toml`:
+
+```toml
+[dependencies]
+jsonata = "0"
+bumpalo = "3.9.1"
+```
+
+Then you can evaluate an expression with JSON input like this:
+
+```rust
+use bumpalo::Bump;
+use jsonata::JsonAta;
+
+fn main() {
+    // Create an arena for allocating values, this will go away in future except for advanced use cases
+    let arena = Bump::new();
+
+    // Provide some JSON input, this could be read from a file or come from the network
+    let input = "{ \"name\": \"world\" }";
+
+    // The JSONata expression to evaluate
+    let expr = "\"Hello, \" & name & \"!\"";
+
+    // Parse the expression - this could fail
+    let jsonata = JsonAta::new(expr, &arena).unwrap();
+
+    // Evaluate the expression against the input - this could fail
+    let result = jsonata.evaluate(Some(input)).unwrap();
+
+    // Serialize the result into JSON
+    println!("{}", result.serialize(false));
+}
+```
+
+There's also a basic CLI tool:
+
+```
+# cargo install jsonata
+
+# jsonata "1 + 1"
+2
+
+# jsonata '"Hello, " & name & "!"' '{ "name": "world" }'
+"Hello, world!"
+```
+
+The expression and input can be specified on the command line, but that requires manual escaping. Alternatively, they can be provided from files. Here's the `--help` output:
+
+```
+# jsonata --help
+jsonata 0.0.0
+A command line JSON processor using JSONata
+
+USAGE:
+    jsonata [FLAGS] [OPTIONS] [ARGS]
+
+FLAGS:
+    -a, --ast        Parse the given expression, print the AST and exit
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+OPTIONS:
+    -e, --expr-file <expr-file>      File containing the JSONata expression to evaluate (overrides expr on command line)
+    -i, --input-file <input-file>    Input JSON file (if not specified, STDIN)
+
+ARGS:
+    <expr>     JSONata expression to evaluate
+    <input>    JSON input
+```
+
+## Missing (but planned) features
+
+There are a number of JSONata features which are not yet implemented:
+
+- Many built-in functions are missing
+- Parent operator
+- Context and index bind variables
+- Regular expressions
+- Object transforms
+- Sorting
+- Partial function application
+- JSON AST output to match the reference implementation
 
 ## Differences from reference JSONata
 
@@ -42,46 +130,9 @@ In addition, for all the built-in functions, type checking of arguments is also 
 
 ## Status
 
-This is my first real Rust project, so I'm learning as I go. There's plenty of non-idiomatic code, and currently there's a bunch of core JSONata features that still need to be implemented. There's a TODO section below with a high-level list.
+There's a [status document](docs/status.md) which describes the current status and long-term goals for this implementation.
 
-Currently, the implementation passes over 400 of the tests from the JSONata test suite.
-
-## Goals
-
-This crate implements JSONata in Rust, and as such can take JSON input, parse it, evaluate it against a JSONata expression. There's a few other ideas in here that are in semi-baked state or non-existent:
-
-- A command line utility and REPL (semi-baked)
-- WASM bindings to run directly in the browser (semi-baked)
-- JSONata-compatible JSON output for the AST, as it's often useful to feed the AST of one expression back into another, particularly for tooling like [jsonata-visual-editor](https://github.com/jsonata-ui/jsonata-visual-editor) and being compatible here would help (non-existent)
-
-It would be cool if we could transform the AST to bytecode which can be compiled to WASM or perhaps LLVM IR, so that specific JSONata expressions could be run as native code outside of the evaluator to provide high-performance and scale.
-
-## TODO
-
-There's still a lot left to do.
-
-### Features
-
-There are a number of JSONata features which are not yet implemented:
-
-- Parent operator
-- Context and index bind variables
-- Regular expressions
-- Lots of functions remain unimplemented
-- Object transforms
-- Sorting
-- Partial function application
-
-### Code issues
-
-There's a bunch of issues with the code - I'm learning Rust as I go, so as I learn more, the code improves. However, here's some issues I know about:
-
-- I've tried to implement structural sharing of the input and the output values, with the minimal number of heap allocations. This was a lot of effort working out the lifetimes, but I'm not actually sure it was worth it.
-- Currently using the same JsonAta for performing multiple evaluations will be additive in terms of memory - the original result and input are tied to the lifetime of JsonAta, so reusing it just keeps using memory in the arena.
-- Code is too spaghetti in some places, needs to be more Rust-idiomatic
-- There's a lot of code that's not very efficient, lots of opportunities for optimization
-
-### Tests
+## Tests
 
 Reference JSONata contains an extensive test suite with over 1000 tests. Currently, this implementation passes over 600 of these, you can run them like this:
 
@@ -90,15 +141,6 @@ cargo test testsuite
 ```
 
 In `tests/testsuite/groups` are the tests groups that are passing, while `tests/testsuite/skip` contains the groups that still require feature implementation. There may be tests in the remaining groups that do pass, but I don't want to split them up - only when a test group fully passes is it moved.
-
-### Benchmarks
-
-I would really like to implement some benchmarks for tracking overall performance as the code changes.
-In particular, I would like to make use of [criterion](https://docs.rs/criterion/latest/criterion/).
-
-It would also be good to benchmark against Javascript JSONata, but I fear this version will never
-compete in the browser environment because of the JSON parsing/stringification on the way in and out.
-However, it might be possible to compare the evaluation time directly in Node, if we make sure to give Node some JIT warmup to make it fair.
 
 ## License
 
