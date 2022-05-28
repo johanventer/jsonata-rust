@@ -1,4 +1,4 @@
-#![doc = include_str!("../README.md")]
+#![cfg_attr(not(doctest), doc = include_str!("../README.md"))]
 
 // TODO: Fix visibility of all these modules, they're all pub for now
 pub mod ast;
