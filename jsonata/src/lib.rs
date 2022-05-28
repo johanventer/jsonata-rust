@@ -87,6 +87,7 @@ impl<'a> JsonAta<'a> {
         bind_native!("exists", 1, fn_exists);
         bind_native!("filter", 2, fn_filter);
         bind_native!("floor", 1, fn_floor);
+        bind_native!("length", 1, fn_length);
         bind_native!("lookup", 2, fn_lookup);
         bind_native!("lowercase", 1, fn_lowercase);
         bind_native!("max", 1, fn_max);

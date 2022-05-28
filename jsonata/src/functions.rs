@@ -635,3 +635,23 @@ pub fn fn_error<'a, 'e>(
         "$error() function evaluated".to_string()
     }))
 }
+
+pub fn fn_length<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    max_args!(context, args, 1);
+
+    let arg1 = &args[0];
+
+    if arg1.is_undefined() {
+        return Ok(Value::undefined());
+    }
+
+    assert_arg!(arg1.is_string(), context, 1);
+
+    Ok(Value::number(
+        context.arena,
+        arg1.as_str().chars().count() as f64,
+    ))
+}
