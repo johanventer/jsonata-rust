@@ -204,10 +204,12 @@ impl<'a> Evaluator<'a> {
                 let result = self.evaluate(value, input, frame)?;
                 match result {
                     Value::Undefined => Ok(Value::undefined()),
-                    Value::Number(n) => Ok(Value::number(self.arena, -n)),
+                    Value::Number(n) if result.is_valid_number()? => {
+                        Ok(Value::number(self.arena, -n))
+                    }
                     _ => Err(Error::D1002NegatingNonNumeric(
                         node.char_index,
-                        result.dump(),
+                        result.to_string(),
                     )),
                 }
             }
@@ -270,7 +272,7 @@ impl<'a> Evaluator<'a> {
             for (index, pair) in object.iter().enumerate() {
                 let key = self.evaluate(&pair.0, item, frame)?;
                 if !key.is_string() {
-                    return Err(Error::T1003NonStringKey(char_index, key.dump()));
+                    return Err(Error::T1003NonStringKey(char_index, key.to_string()));
                 }
 
                 let key = key.as_str();
@@ -339,7 +341,7 @@ impl<'a> Evaluator<'a> {
 
                 let lhs = if lhs.is_undefined() {
                     return Ok(Value::undefined());
-                } else if lhs.is_number() {
+                } else if lhs.is_valid_number()? {
                     lhs.as_f64()
                 } else {
                     return Err(Error::T2001LeftSideNotNumber(
@@ -350,7 +352,7 @@ impl<'a> Evaluator<'a> {
 
                 let rhs = if rhs.is_undefined() {
                     return Ok(Value::undefined());
-                } else if rhs.is_number() {
+                } else if rhs.is_valid_number()? {
                     rhs.as_f64()
                 } else {
                     return Err(Error::T2002RightSideNotNumber(
@@ -368,11 +370,7 @@ impl<'a> Evaluator<'a> {
                     _ => unreachable!(),
                 };
 
-                if result.is_infinite() {
-                    Err(Error::D1001NumberOfOutRange(result))
-                } else {
-                    Ok(Value::number(self.arena, result))
-                }
+                Ok(Value::number(self.arena, result))
             }
 
             BinaryOp::LessThan
@@ -419,8 +417,8 @@ impl<'a> Evaluator<'a> {
 
                 Err(Error::T2009BinaryOpMismatch(
                     node.char_index,
-                    lhs.dump(),
-                    rhs.dump(),
+                    lhs.to_string(),
+                    rhs.to_string(),
                     op.to_string(),
                 ))
             }
@@ -764,11 +762,10 @@ impl<'a> Evaluator<'a> {
                 _ => {
                     for (i, item) in input.members().enumerate() {
                         let mut index = self.evaluate(filter, item, frame)?;
-                        if index.is_number() && !index.is_nan() {
+                        if index.is_valid_number()? {
                             index = Value::wrap_in_array(self.arena, index, ArrayFlags::empty());
                         }
-                        if index.is_array() && index.members().all(|v| v.is_number() && !v.is_nan())
-                        {
+                        if index.is_array_of_valid_numbers()? {
                             index.members().for_each(|v| {
                                 let index = get_index(v.as_f64());
                                 if index == i {

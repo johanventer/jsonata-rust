@@ -10,9 +10,11 @@ use crate::ast::{Ast, AstKind};
 use crate::frame::Frame;
 use crate::functions::FunctionContext;
 use crate::Result;
+use jsonata_errors::Error;
 
-mod codegen;
-use codegen::{DumpGenerator, Generator, PrettyGenerator};
+use self::serialize::{DumpFormatter, PrettyFormatter, Serializer};
+
+pub mod serialize;
 
 bitflags! {
     pub struct ArrayFlags: u8 {
@@ -54,8 +56,8 @@ pub enum Value<'a> {
 #[allow(clippy::mut_from_ref)]
 impl<'a> Value<'a> {
     pub fn undefined() -> &'a Value<'a> {
-        // TODO: SAFETY: The UNDEFINED const is Value<'static>, and doesn't reference any other Values,
-        // so there shouldn't be an issue casting it Value<'a>, right?
+        // SAFETY: The UNDEFINED const is Value<'static>, it doesn't reference any other Values,
+        // and there's no Drop implementation, so there shouldn't be an issue casting it to Value<'a>.
         unsafe { std::mem::transmute::<&Value<'static>, &'a Value<'a>>(&UNDEFINED) }
     }
 
@@ -154,8 +156,44 @@ impl<'a> Value<'a> {
         }
     }
 
+    pub fn is_array_of_valid_numbers(&self) -> Result<bool> {
+        match self {
+            Value::Array(ref a, _) => {
+                for member in a.iter() {
+                    if !member.is_valid_number()? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    pub fn is_valid_number(&self) -> Result<bool> {
+        match self {
+            Value::Number(n) => {
+                if n.is_nan() {
+                    Ok(false)
+                } else if n.is_infinite() {
+                    Err(Error::D1001NumberOfOutRange(*n))
+                } else {
+                    Ok(true)
+                }
+            }
+            _ => Ok(false),
+        }
+    }
+
     pub fn is_nan(&self) -> bool {
         matches!(*self, Value::Number(n) if n.is_nan())
+    }
+
+    pub fn is_finite(&self) -> bool {
+        match self {
+            Value::Number(n) => n.is_finite(),
+            _ => false,
+        }
     }
 
     pub fn is_string(&self) -> bool {
@@ -376,17 +414,14 @@ impl<'a> Value<'a> {
         }
     }
 
-    // Prints out the value as JSON string.
-    pub fn dump(&'a self) -> String {
-        let mut gen = DumpGenerator::new();
-        gen.write_json(self).expect("Can't fail");
-        gen.consume()
-    }
-
-    pub fn pretty(&'a self, spaces: u16) -> String {
-        let mut gen = PrettyGenerator::new(spaces);
-        gen.write_json(self).expect("Can't fail");
-        gen.consume()
+    pub fn serialize(&'a self, pretty: bool) -> String {
+        if pretty {
+            let serializer = Serializer::new(PrettyFormatter::default(), false);
+            serializer.serialize(self).expect("Shouldn't fail")
+        } else {
+            let serializer = Serializer::new(DumpFormatter, false);
+            serializer.serialize(self).expect("Shouldn't fail")
+        }
     }
 }
 
@@ -456,17 +491,29 @@ impl std::fmt::Debug for Value<'_> {
         match self {
             Self::Undefined => write!(f, "undefined"),
             Self::Null => write!(f, "null"),
-            Self::Number(n) => write!(f, "{}", n),
-            Self::Bool(b) => write!(f, "{}", if *b { "true" } else { "false" }),
-            Self::String(s) => write!(f, "\"{}\"", s),
-            Self::Array(a, _) => write!(f, "<array({})>", a.len()),
-            Self::Object(o) => write!(
-                f,
-                "<object{{{}}}>",
-                o.keys().cloned().collect::<Vec<String>>().join(", ")
-            ),
+            Self::Number(n) => n.fmt(f),
+            Self::Bool(b) => b.fmt(f),
+            Self::String(s) => s.fmt(f),
+            Self::Array(a, _) => a.fmt(f),
+            Self::Object(o) => o.fmt(f),
             Self::Lambda { .. } => write!(f, "<lambda>"),
             Self::NativeFn { .. } => write!(f, "<nativefn>"),
+        }
+    }
+}
+
+impl std::string::ToString for Value<'_> {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Undefined => "undefined".to_string(),
+            Self::Null => "null".to_string(),
+            Self::Number(n) => n.to_string(),
+            Self::Bool(b) => b.to_string(),
+            Self::String(s) => s.clone(),
+            Self::Array(..) => "<array>".to_string(),
+            Self::Object(..) => "<object>".to_string(),
+            Self::Lambda { .. } => "<lambda>".to_string(),
+            Self::NativeFn { .. } => "<nativefn>".to_string(),
         }
     }
 }

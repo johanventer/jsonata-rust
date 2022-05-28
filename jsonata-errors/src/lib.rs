@@ -28,6 +28,12 @@ pub enum Error {
     D1002NegatingNonNumeric(usize, String),
     D1009MultipleKeys(usize, String),
     D2014RangeOutOfBounds(usize, usize),
+    D3001StringNotFinite(usize),
+    D3030NonNumericCast(usize, String),
+    D3060SqrtNegative(usize, String),
+    D3061PowUnrepresentable(usize, String, String),
+    D3141Assert(String),
+    D3137Error(String),
 
     // Type errors
     T0410ArgumentNotValid(usize, usize, String),
@@ -90,6 +96,12 @@ impl Error {
             Error::D1002NegatingNonNumeric(..) => "D1002",
             Error::D1009MultipleKeys(..) => "D1009",
             Error::D2014RangeOutOfBounds(..) => "D2014",
+            Error::D3001StringNotFinite(..) => "D3001",
+            Error::D3030NonNumericCast(..) => "D3030",
+            Error::D3060SqrtNegative(..) => "D3060",
+            Error::D3061PowUnrepresentable(..) => "D3061",
+            Error::D3141Assert(..) => "D3141",
+            Error::D3137Error(..) => "D3137",
 
             // Type errors
             Error::T0410ArgumentNotValid(..) => "T0410",
@@ -164,7 +176,19 @@ impl fmt::Display for Error {
                 write!(f, "{}: Multiple key definitions evaluate to same key: {}", p, k),
             D2014RangeOutOfBounds(ref p, ref s) =>
                 write!(f, "{}: The size of the sequence allocated by the range operator (..) must not exceed 1e7.  Attempted to allocate {}", p, s),
-                
+            D3001StringNotFinite(ref p) => 
+                write!(f, "{}: Attempting to invoke string function on Infinity or NaN", p),
+            D3030NonNumericCast(ref p, ref n) =>
+                write!(f, "{}: Unable to cast value to a number: {}", p, n),
+            D3060SqrtNegative(ref p, ref n) =>
+                write!(f, "{}: The sqrt function cannot be applied to a negative number: {}", p, n),
+            D3061PowUnrepresentable(ref p, ref b, ref e) =>
+                write!(f, "{}: The power function has resulted in a value that cannot be represented as a JSON number: base={}, exponent={}", p, b, e),
+            D3141Assert(ref m) =>
+                write!(f, "{}", m),
+            D3137Error(ref m) =>
+                write!(f, "{}", m),
+            
             // Type errors
             T0410ArgumentNotValid(ref p, ref i, ref t) =>
                 write!(f, "{}: Argument {} of function {} does not match function signature", p, i, t),
@@ -227,16 +251,12 @@ impl fmt::Display for Error {
 //     "The size of the sequence allocated by the range operator (..) must not exceed 1e7.  Attempted to allocate {}",
 //     value
 // );
-// "D3001": "Attempting to invoke string function on Infinity or NaN",
 // "D3010": "Second argument of replace function cannot be an empty string",
 // "D3011": "Fourth argument of replace function must evaluate to a positive number",
 // "D3012": "Attempted to replace a matched string with a non-string value",
 // "D3020": "Third argument of split function must evaluate to a positive number",
-// "D3030": "Unable to cast value to a number: {{value}}",
 // "D3040": "Third argument of match function must evaluate to a positive number",
 // "D3050": "The second argument of reduce function must be a function with at least two arguments",
-// "D3060": "The sqrt function cannot be applied to a negative number: {{value}}",
-// "D3061": "The power function has resulted in a value that cannot be represented as a JSON number: base={{value}}, exponent={{exp}}",
 // "D3070": "The single argument form of the sort function can only be applied to an array of strings or an array of numbers.  Use the second argument to specify a comparison function",
 // "D3080": "The picture string must only contain a maximum of two sub-pictures",
 // "D3081": "The sub-picture must not contain more than one instance of the 'decimal-separator' character",
@@ -263,8 +283,6 @@ impl fmt::Display for Error {
 // "D3134": "The timezone integer format specifier cannot have more than four digits",
 // "D3135": "No matching closing bracket ']' in date/time picture string",
 // "D3136": "The date/time picture string is missing specifiers required to parse the timestamp",
-// "D3137": "{{{message}}}",
 // "D3138": "The $single() function expected exactly 1 matching result.  Instead it matched more.",
 // "D3139": "The $single() function expected exactly 1 matching result.  Instead it matched 0.",
 // "D3140": "Malformed URL passed to ${{{functionName}}}(): {{value}}",
-// "D3141": "{{{message}}}"

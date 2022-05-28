@@ -4,21 +4,22 @@ use jsonata_errors::{Error, Result};
 
 use super::evaluator::Evaluator;
 use super::frame::Frame;
+use super::value::serialize::{DumpFormatter, PrettyFormatter, Serializer};
 use super::value::{ArrayFlags, Value};
 
-// macro_rules! assert_min_args {
-//     ($context:ident, $args:ident, $min:literal) => {
-//         if $args.len() < $min {
-//             return Err(Error::T0410ArgumentNotValid(
-//                 $context.char_index,
-//                 $min,
-//                 $context.name.to_string(),
-//             ));
-//         }
-//     };
-// }
+macro_rules! min_args {
+    ($context:ident, $args:ident, $min:literal) => {
+        if $args.len() < $min {
+            return Err(Error::T0410ArgumentNotValid(
+                $context.char_index,
+                $min,
+                $context.name.to_string(),
+            ));
+        }
+    };
+}
 
-macro_rules! assert_max_args {
+macro_rules! max_args {
     ($context:ident, $args:ident, $max:literal) => {
         if $args.len() > $max {
             return Err(Error::T0410ArgumentNotValid(
@@ -30,17 +31,23 @@ macro_rules! assert_max_args {
     };
 }
 
-// macro_rules! assert_arg {
-//     ($condition:expr, $context:ident, $index:literal) => {
-//         if !($condition) {
-//             return Err(Error::T0410ArgumentNotValid(
-//                 $context.char_index,
-//                 $index,
-//                 $context.name.to_string(),
-//             ));
-//         }
-//     };
-// }
+macro_rules! bad_arg {
+    ($context:ident, $index:literal) => {
+        return Err(Error::T0410ArgumentNotValid(
+            $context.char_index,
+            $index,
+            $context.name.to_string(),
+        ))
+    };
+}
+
+macro_rules! assert_arg {
+    ($condition: expr, $context:ident, $index:literal) => {
+        if !($condition) {
+            bad_arg!($context, $index);
+        }
+    };
+}
 
 macro_rules! assert_array_of_type {
     ($condition:expr, $context:ident, $index:literal, $t:literal) => {
@@ -161,14 +168,17 @@ pub fn fn_boolean<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
-    assert_max_args!(context, args, 1);
+    max_args!(context, args, 1);
 
     let arg = &args[0];
     Ok(match arg {
         Value::Undefined => Value::undefined(),
         Value::Null => Value::bool(context.arena, false),
         Value::Bool(b) => Value::bool(context.arena, *b),
-        Value::Number(n) => Value::bool(context.arena, *n != 0.0),
+        Value::Number(n) => {
+            arg.is_valid_number()?;
+            Value::bool(context.arena, *n != 0.0)
+        }
         Value::String(ref str) => Value::bool(context.arena, !str.is_empty()),
         Value::Object(ref obj) => Value::bool(context.arena, !obj.is_empty()),
         Value::Array { .. } => match arg.len() {
@@ -208,13 +218,7 @@ pub fn fn_filter<'a, 'e>(
 
     let arr = Value::wrap_in_array_if_needed(context.arena, arr, ArrayFlags::empty());
 
-    if !func.is_function() {
-        return Err(Error::T0410ArgumentNotValid(
-            context.char_index,
-            2,
-            context.name.to_string(),
-        ));
-    }
+    assert_arg!(func.is_function(), context, 2);
 
     let result = Value::array(context.arena, ArrayFlags::SEQUENCE);
 
@@ -244,29 +248,39 @@ pub fn fn_string<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
-    let arg = if args.is_empty() {
-        context.input
+    max_args!(context, args, 2);
+
+    let input = if args.is_empty() {
+        if context.input.is_array() && context.input.has_flags(ArrayFlags::WRAPPED) {
+            &context.input[0]
+        } else {
+            context.input
+        }
     } else {
         &args[0]
     };
 
-    if arg.is_undefined() {
+    if input.is_undefined() {
         return Ok(Value::undefined());
     }
 
-    if arg.is_string() {
-        Ok(arg)
-    } else if arg.is_function() {
+    let pretty = &args[1];
+    assert_arg!(pretty.is_undefined() || pretty.is_bool(), context, 2);
+
+    if input.is_string() {
+        Ok(input)
+    } else if input.is_function() {
         Ok(Value::string(context.arena, String::from("")))
-
-    // TODO: Check for infinite numbers
-    // } else if arg.is_number() && arg.is_infinite() {
-    //     // TODO: D3001
-    //     unreachable!()
-
-    // TODO: pretty printing
+    } else if input.is_number() && !input.is_finite() {
+        Err(Error::D3001StringNotFinite(context.char_index))
+    } else if *pretty == true {
+        let serializer = Serializer::new(PrettyFormatter::default(), true);
+        let output = serializer.serialize(input)?;
+        Ok(Value::string(context.arena, output))
     } else {
-        Ok(Value::string(context.arena, arg.dump()))
+        let serializer = Serializer::new(DumpFormatter, true);
+        let output = serializer.serialize(input)?;
+        Ok(Value::string(context.arena, output))
     }
 }
 
@@ -321,21 +335,8 @@ pub fn fn_substring<'a, 'e>(
         return Ok(Value::undefined());
     }
 
-    if !string.is_string() {
-        return Err(Error::T0410ArgumentNotValid(
-            context.char_index,
-            1,
-            context.name.to_string(),
-        ));
-    }
-
-    if !start.is_number() {
-        return Err(Error::T0410ArgumentNotValid(
-            context.char_index,
-            2,
-            context.name.to_string(),
-        ));
-    }
+    assert_arg!(string.is_string(), context, 1);
+    assert_arg!(start.is_number(), context, 2);
 
     let string = string.as_str();
 
@@ -360,13 +361,7 @@ pub fn fn_substring<'a, 'e>(
             string[start as usize..].to_string(),
         ))
     } else {
-        if !length.is_number() {
-            return Err(Error::T0410ArgumentNotValid(
-                context.char_index,
-                3,
-                context.name.to_string(),
-            ));
-        }
+        assert_arg!(length.is_number(), context, 3);
 
         let length = length.as_isize();
         if length < 0 {
@@ -396,16 +391,12 @@ pub fn fn_abs<'a, 'e>(
     let arg = &args[0];
 
     if arg.is_undefined() {
-        Ok(Value::undefined())
-    } else if !arg.is_number() {
-        Err(Error::T0410ArgumentNotValid(
-            context.char_index,
-            1,
-            context.name.to_string(),
-        ))
-    } else {
-        Ok(Value::number(context.arena, arg.as_f64().abs()))
+        return Ok(Value::undefined());
     }
+
+    assert_arg!(arg.is_number(), context, 1);
+
+    Ok(Value::number(context.arena, arg.as_f64().abs()))
 }
 
 pub fn fn_floor<'a, 'e>(
@@ -415,16 +406,12 @@ pub fn fn_floor<'a, 'e>(
     let arg = &args[0];
 
     if arg.is_undefined() {
-        Ok(Value::undefined())
-    } else if !arg.is_number() {
-        Err(Error::T0410ArgumentNotValid(
-            context.char_index,
-            1,
-            context.name.to_string(),
-        ))
-    } else {
-        Ok(Value::number(context.arena, arg.as_f64().floor()))
+        return Ok(Value::undefined());
     }
+
+    assert_arg!(arg.is_number(), context, 1);
+
+    Ok(Value::number(context.arena, arg.as_f64().floor()))
 }
 
 pub fn fn_ceil<'a, 'e>(
@@ -434,16 +421,12 @@ pub fn fn_ceil<'a, 'e>(
     let arg = &args[0];
 
     if arg.is_undefined() {
-        Ok(Value::undefined())
-    } else if !arg.is_number() {
-        Err(Error::T0410ArgumentNotValid(
-            context.char_index,
-            1,
-            context.name.to_string(),
-        ))
-    } else {
-        Ok(Value::number(context.arena, arg.as_f64().ceil()))
+        return Ok(Value::undefined());
     }
+
+    assert_arg!(arg.is_number(), context, 1);
+
+    Ok(Value::number(context.arena, arg.as_f64().ceil()))
 }
 
 pub fn fn_lookup_internal<'a, 'e>(
@@ -479,23 +462,15 @@ pub fn fn_lookup<'a, 'e>(
 ) -> Result<&'a Value<'a>> {
     let input = &args[0];
     let key = &args[1];
-
-    if !key.is_string() {
-        Err(Error::T0410ArgumentNotValid(
-            context.char_index,
-            1,
-            context.name.to_string(),
-        ))
-    } else {
-        Ok(fn_lookup_internal(context.clone(), input, &key.as_str()))
-    }
+    assert_arg!(key.is_string(), context, 2);
+    Ok(fn_lookup_internal(context.clone(), input, &key.as_str()))
 }
 
 pub fn fn_count<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
-    assert_max_args!(context, args, 1);
+    max_args!(context, args, 1);
 
     let arg = &args[0];
 
@@ -515,7 +490,7 @@ pub fn fn_max<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
-    assert_max_args!(context, args, 1);
+    max_args!(context, args, 1);
 
     let arg = &args[0];
 
@@ -539,7 +514,7 @@ pub fn fn_min<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
-    assert_max_args!(context, args, 1);
+    max_args!(context, args, 1);
 
     let arg = &args[0];
 
@@ -563,7 +538,7 @@ pub fn fn_sum<'a, 'e>(
     context: FunctionContext<'a, 'e>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
-    assert_max_args!(context, args, 1);
+    max_args!(context, args, 1);
 
     let arg = &args[0];
 
@@ -581,4 +556,172 @@ pub fn fn_sum<'a, 'e>(
         sum += member.as_f64();
     }
     Ok(Value::number(context.arena, sum))
+}
+
+pub fn fn_number<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    max_args!(context, args, 1);
+
+    let arg = &args[0];
+
+    match arg {
+        Value::Undefined => Ok(Value::undefined()),
+        Value::Number(..) => Ok(arg),
+        Value::Bool(true) => Ok(Value::number(context.arena, 1)),
+        Value::Bool(false) => Ok(Value::number(context.arena, 0)),
+        Value::String(s) => {
+            let result: f64 = s
+                .parse()
+                .map_err(|_e| Error::D3030NonNumericCast(context.char_index, arg.to_string()))?;
+
+            if !result.is_nan() && !result.is_infinite() {
+                Ok(Value::number(context.arena, result))
+            } else {
+                Ok(Value::undefined())
+            }
+        }
+        _ => bad_arg!(context, 1),
+    }
+}
+
+pub fn fn_exists<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    min_args!(context, args, 1);
+    max_args!(context, args, 1);
+
+    let arg = &args[0];
+
+    match arg {
+        Value::Undefined => Ok(Value::bool(context.arena, false)),
+        _ => Ok(Value::bool(context.arena, true)),
+    }
+}
+
+pub fn fn_assert<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    let condition = &args[0];
+    let message = &args[1];
+
+    assert_arg!(condition.is_bool(), context, 1);
+
+    if let Value::Bool(false) = condition {
+        Err(Error::D3141Assert(if message.is_string() {
+            message.as_str().to_string()
+        } else {
+            "$assert() statement failed".to_string()
+        }))
+    } else {
+        Ok(Value::undefined())
+    }
+}
+
+pub fn fn_error<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    let message = &args[0];
+
+    assert_arg!(message.is_undefined() || message.is_string(), context, 1);
+
+    Err(Error::D3137Error(if message.is_string() {
+        message.as_str().to_string()
+    } else {
+        "$error() function evaluated".to_string()
+    }))
+}
+
+pub fn fn_length<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    max_args!(context, args, 1);
+
+    let arg1 = &args[0];
+
+    if arg1.is_undefined() {
+        return Ok(Value::undefined());
+    }
+
+    assert_arg!(arg1.is_string(), context, 1);
+
+    Ok(Value::number(
+        context.arena,
+        arg1.as_str().chars().count() as f64,
+    ))
+}
+
+pub fn fn_sqrt<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    max_args!(context, args, 1);
+
+    let arg1 = &args[0];
+
+    if arg1.is_undefined() {
+        return Ok(Value::undefined());
+    }
+
+    assert_arg!(arg1.is_number(), context, 1);
+
+    let n = arg1.as_f64();
+    if n.is_sign_negative() {
+        Err(Error::D3060SqrtNegative(context.char_index, n.to_string()))
+    } else {
+        Ok(Value::number(context.arena, n.sqrt()))
+    }
+}
+
+pub fn fn_power<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    max_args!(context, args, 2);
+
+    let number = &args[0];
+    let exp = &args[1];
+
+    if number.is_undefined() {
+        return Ok(Value::undefined());
+    }
+
+    assert_arg!(number.is_number(), context, 1);
+    assert_arg!(exp.is_number(), context, 2);
+
+    let result = number.as_f64().powf(exp.as_f64());
+
+    if !result.is_finite() {
+        Err(Error::D3061PowUnrepresentable(
+            context.char_index,
+            number.to_string(),
+            exp.to_string(),
+        ))
+    } else {
+        Ok(Value::number(context.arena, result))
+    }
+}
+
+pub fn fn_reverse<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    max_args!(context, args, 1);
+
+    let arr = &args[0];
+
+    if arr.is_undefined() {
+        return Ok(Value::undefined());
+    }
+
+    assert_arg!(arr.is_array(), context, 1);
+
+    let result = Value::array_with_capacity(context.arena, arr.len(), ArrayFlags::empty());
+    arr.members().rev().for_each(|member| result.push(member));
+    Ok(result)
 }
