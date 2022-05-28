@@ -655,3 +655,25 @@ pub fn fn_length<'a, 'e>(
         arg1.as_str().chars().count() as f64,
     ))
 }
+
+pub fn fn_sqrt<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    max_args!(context, args, 1);
+
+    let arg1 = &args[0];
+
+    if arg1.is_undefined() {
+        return Ok(Value::undefined());
+    }
+
+    assert_arg!(arg1.is_number(), context, 1);
+
+    let n = arg1.as_f64();
+    if n.is_sign_negative() {
+        Err(Error::D3060SqrtNegative(context.char_index, n.to_string()))
+    } else {
+        Ok(Value::number(context.arena, n.sqrt()))
+    }
+}
