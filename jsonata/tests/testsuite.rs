@@ -132,6 +132,7 @@ fn test_case(resource: &str) {
                         }
                     }
                     Err(error) => {
+                        eprintln!("{}", error);
                         let code = if !case["error"].is_undefined() {
                             &case["error"]["code"]
                         } else {
@@ -142,6 +143,7 @@ fn test_case(resource: &str) {
                 }
             }
             Err(error) => {
+                eprintln!("{}", error);
                 let code = if !case["error"].is_undefined() {
                     &case["error"]["code"]
                 } else {

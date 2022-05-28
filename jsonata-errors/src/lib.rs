@@ -31,6 +31,7 @@ pub enum Error {
     D3001StringNotFinite(usize),
     D3030NonNumericCast(usize, String),
     D3141Assert(String),
+    D3137Error(String),
 
     // Type errors
     T0410ArgumentNotValid(usize, usize, String),
@@ -96,6 +97,7 @@ impl Error {
             Error::D3001StringNotFinite(..) => "D3001",
             Error::D3030NonNumericCast(..) => "D3030",
             Error::D3141Assert(..) => "D3141",
+            Error::D3137Error(..) => "D3137",
 
             // Type errors
             Error::T0410ArgumentNotValid(..) => "T0410",
@@ -175,6 +177,8 @@ impl fmt::Display for Error {
             D3030NonNumericCast(ref p, ref n) =>
                 write!(f, "{}: Unable to cast value to a number: {}", p, n),
             D3141Assert(ref m) =>
+                write!(f, "{}", m),
+            D3137Error(ref m) =>
                 write!(f, "{}", m),
             
             // Type errors
@@ -273,7 +277,6 @@ impl fmt::Display for Error {
 // "D3134": "The timezone integer format specifier cannot have more than four digits",
 // "D3135": "No matching closing bracket ']' in date/time picture string",
 // "D3136": "The date/time picture string is missing specifiers required to parse the timestamp",
-// "D3137": "{{{message}}}",
 // "D3138": "The $single() function expected exactly 1 matching result.  Instead it matched more.",
 // "D3139": "The $single() function expected exactly 1 matching result.  Instead it matched 0.",
 // "D3140": "Malformed URL passed to ${{{functionName}}}(): {{value}}",

@@ -620,3 +620,18 @@ pub fn fn_assert<'a, 'e>(
         Ok(Value::undefined())
     }
 }
+
+pub fn fn_error<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    let message = &args[0];
+
+    assert_arg!(message.is_undefined() || message.is_string(), context, 1);
+
+    Err(Error::D3137Error(if message.is_string() {
+        message.as_str().to_string()
+    } else {
+        "$error() function evaluated".to_string()
+    }))
+}
