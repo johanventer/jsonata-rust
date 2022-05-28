@@ -677,3 +677,32 @@ pub fn fn_sqrt<'a, 'e>(
         Ok(Value::number(context.arena, n.sqrt()))
     }
 }
+
+pub fn fn_power<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    max_args!(context, args, 2);
+
+    let number = &args[0];
+    let exp = &args[1];
+
+    if number.is_undefined() {
+        return Ok(Value::undefined());
+    }
+
+    assert_arg!(number.is_number(), context, 1);
+    assert_arg!(exp.is_number(), context, 2);
+
+    let result = number.as_f64().powf(exp.as_f64());
+
+    if !result.is_finite() {
+        Err(Error::D3061PowUnrepresentable(
+            context.char_index,
+            number.to_string(),
+            exp.to_string(),
+        ))
+    } else {
+        Ok(Value::number(context.arena, result))
+    }
+}

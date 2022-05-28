@@ -94,6 +94,7 @@ impl<'a> JsonAta<'a> {
         bind_native!("min", 1, fn_min);
         bind_native!("not", 1, fn_not);
         bind_native!("number", 1, fn_number);
+        bind_native!("power", 2, fn_power);
         bind_native!("string", 1, fn_string);
         bind_native!("sqrt", 1, fn_sqrt);
         bind_native!("substring", 3, fn_substring);
