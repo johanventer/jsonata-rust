@@ -31,7 +31,7 @@ Most of the JSONata functions, however, support being passed the context as the 
 
 This is implemented in each built-in function itself. For example, if `$string` sees that it is called with no arguments, it will use the current context.
 
-In addition, for all the built-in functions, type checking of arguments is also implemented directly in the functions themselves so that you get eqivalent runtime errors for passing the wrong things to these functions as you would in reference JSONata.
+In addition, for all the built-in functions, type checking of arguments is also implemented directly in the functions themselves so that you get equivalent runtime errors for passing the wrong things to these functions as you would in reference JSONata.
 
 ## Status
 
@@ -73,19 +73,16 @@ There's a bunch of issues with the code - I'm learning Rust as I go, so as I lea
 - Currently using the same JsonAta for performing multiple evaluations will be additive in terms of memory - the original result and input are tied to the lifetime of JsonAta, so reusing it just keeps using memory in the arena.
 - Code is too spaghetti in some places, needs to be more Rust-idiomatic
 - There's a lot of code that's not very efficient, lots of opportunities for optimization
-- Function signature code is not very good, both the parsing and the macro - I had never written a proc-macro before and just ended up emitting a lot of strings of code, which is probably bad form.
 
 ### Tests
 
-There's a couple of missing things in the testsuite tests which run the JSONata test suite, namely the time limit and depth test case options.
-
-That being said, it passes over 400 of the JSONata tests, you can run them like this:
+Reference JSONata contains an extensive test suite with over 1000 tests. Currently, this implementation passes over 600 of these, you can run them like this:
 
 ```bash
 cargo test testsuite
 ```
 
-In `tests/testsuite/groups` are the tests groups that are passing, while `tests/testsuite/skip` contains the groups that still require feature implementation.
+In `tests/testsuite/groups` are the tests groups that are passing, while `tests/testsuite/skip` contains the groups that still require feature implementation. There may be tests in the remaining groups that do pass, but I don't want to split them up - only when a test group fully passes is it moved.
 
 ### Benchmarks
 
