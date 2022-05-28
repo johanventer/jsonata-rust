@@ -9,7 +9,7 @@
 use std::io::Write;
 
 use super::Value;
-use jsonata_errors::Result;
+use crate::Result;
 
 const QU: u8 = b'"';
 const BS: u8 = b'\\';

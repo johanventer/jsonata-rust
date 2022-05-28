@@ -9,8 +9,7 @@ use hashbrown::HashMap;
 use crate::ast::{Ast, AstKind};
 use crate::frame::Frame;
 use crate::functions::FunctionContext;
-use crate::Result;
-use jsonata_errors::Error;
+use crate::{Error, Result};
 
 pub mod iterator;
 mod range;

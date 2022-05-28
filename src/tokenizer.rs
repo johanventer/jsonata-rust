@@ -2,7 +2,7 @@ use std::char::decode_utf16;
 use std::str::Chars;
 use std::{char, str};
 
-use jsonata_errors::{Error, Result};
+use crate::{Error, Result};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
