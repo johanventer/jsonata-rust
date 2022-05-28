@@ -24,7 +24,7 @@ Read the [full documentation](https://docs.jsonata.org/overview.html), and give 
 
 ## Getting started
 
-The API is currently not very ergonomic, as you need to provide a bumpalo arena for allocating values in.
+The API is currently not very ergonomic, as you need to provide a [`bumpalo`](https://github.com/fitzgen/bumpalo) arena for allocating values in.
 
 First, add the following to your `Cargo.toml`:
 
