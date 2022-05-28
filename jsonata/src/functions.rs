@@ -706,3 +706,22 @@ pub fn fn_power<'a, 'e>(
         Ok(Value::number(context.arena, result))
     }
 }
+
+pub fn fn_reverse<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    max_args!(context, args, 1);
+
+    let arr = &args[0];
+
+    if arr.is_undefined() {
+        return Ok(Value::undefined());
+    }
+
+    assert_arg!(arr.is_array(), context, 1);
+
+    let result = Value::array_with_capacity(context.arena, arr.len(), ArrayFlags::empty());
+    arr.members().rev().for_each(|member| result.push(member));
+    Ok(result)
+}
