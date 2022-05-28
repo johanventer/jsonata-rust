@@ -1,5 +1,12 @@
 # jsonata-rust
 
+[<img alt="github" src="https://img.shields.io/badge/github-johanventer%2Fjsonata--rust-lightgrey?style=for-the-badge&logo=github" height=22>](https://github.com/johanventer/jsonata-rust/)
+[<img alt="crates.io" src="https://img.shields.io/crates/v/jsonata?logo=rust&style=for-the-badge" height=22>](https://crates.io/crates/jsonata)
+[<img alt="docs.rs" src="https://img.shields.io/docsrs/jsonata?label=docs.rs&logo=docs.rs&style=for-the-badge" height=22>](https://docs.rs/jsonata)
+[<img alt="test status" src="https://img.shields.io/github/workflow/status/johanventer/jsonata-rust/Test%20Suite?label=tests&style=for-the-badge" height=22>](https://github.com/johanventer/jsonata-rust/actions?query=branch%3Amain)
+
+**Please don't use this in production yet**
+
 An (incomplete) implementation of [JSONata](https://jsonata.org) in Rust.
 
 ## What is JSONata?
