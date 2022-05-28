@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::collections::{hash_map, HashMap};
 use std::time::Instant;
 
-use jsonata_errors::{Error, Result};
+use crate::{Error, Result};
 
 use super::ast::*;
 use super::frame::Frame;

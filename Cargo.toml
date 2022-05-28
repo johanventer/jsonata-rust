@@ -1,7 +1,23 @@
-[workspace]
+[package]
+name = "jsonata"
+version = "0.0.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["Johan Venter <johan.venter@gmail.com>"]
+description = "An (incomplete) implementation of JSONata in Rust"
+homepage = "https://github.com/johanventer/jsonata-rust/"
+repository = "https://github.com/johanventer/jsonata-rust/"
+keyword = ["jsonata", "json"]
+categories = ["command-line-utilities", "compilers", "parser-implementations"]
 
-members = [
-    "jsonata",
-    "jsonata-errors",
-    "jsonata-wasm"
-]
+[dependencies]
+chrono = "0.4"
+structopt = "0.3"
+bitflags = "1.3.2"
+bumpalo = { version = "3.9.1", features = ["collections", "boxed"] }
+hashbrown = { version = "0.12.0", features = ["bumpalo"] }
+dtoa = "1"
+
+[dev-dependencies]
+test-case = "1.2.0"
+test-generator = "0.3"

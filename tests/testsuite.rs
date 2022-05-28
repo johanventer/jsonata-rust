@@ -13,22 +13,16 @@ const SKIP: &[&str] = &[
     // The order of object properties in the output is not deterministic,
     // so string comparison fails. If we were using something like a BTreeMap
     // or an IndexedMap then running these would be possible.
-    "jsonata/tests/testsuite/groups/function-string/case018.json",
-    "jsonata/tests/testsuite/groups/function-string/case027.json",
-    "jsonata/tests/testsuite/groups/function-string/case028.json",
+    "tests/testsuite/groups/function-string/case018.json",
+    "tests/testsuite/groups/function-string/case027.json",
+    "tests/testsuite/groups/function-string/case028.json",
 ];
 
-#[test_resources("jsonata/tests/testsuite/groups/*/*.json")]
+#[test_resources("tests/testsuite/groups/*/*.json")]
 fn t(resource: &str) {
     if SKIP.iter().any(|&s| s == resource) {
         return;
     }
-
-    // Make sure we can find the .json file with the path to `test_resources`
-    let working_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap();
-    std::env::set_current_dir(working_dir).unwrap();
 
     test_case(resource);
 }
@@ -79,7 +73,7 @@ fn test_case(resource: &str) {
         let dataset = &case["dataset"];
 
         let data = if dataset.is_string() {
-            let dataset = format!("jsonata/tests/testsuite/datasets/{}.json", dataset.as_str());
+            let dataset = format!("tests/testsuite/datasets/{}.json", dataset.as_str());
             fs::read_to_string(&dataset).unwrap()
         } else if data.is_undefined() {
             "".to_string()

@@ -1,5 +1,8 @@
+#![cfg_attr(not(doctest), doc = include_str!("../README.md"))]
+
 // TODO: Fix visibility of all these modules, they're all pub for now
 pub mod ast;
+pub mod errors;
 pub mod evaluator;
 pub mod frame;
 pub mod functions;
@@ -8,8 +11,8 @@ pub mod symbol;
 pub mod tokenizer;
 pub mod value;
 
+pub use errors::Error;
 pub use functions::FunctionContext;
-pub use jsonata_errors::{Error, Result};
 pub use value::Value;
 
 use bumpalo::Bump;
@@ -19,6 +22,8 @@ use evaluator::Evaluator;
 use frame::Frame;
 use functions::*;
 use value::ArrayFlags;
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 pub struct JsonAta<'a> {
     ast: Ast,

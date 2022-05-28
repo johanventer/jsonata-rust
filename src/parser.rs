@@ -1,4 +1,4 @@
-use jsonata_errors::{Error, Result};
+use crate::{Error, Result};
 
 use super::ast::*;
 use super::symbol::Symbol;
