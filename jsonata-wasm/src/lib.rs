@@ -11,7 +11,7 @@ pub fn evaluate(expr: &str, input: &str) -> Result<JsValue, JsValue> {
         .evaluate(Some(input))
         .map(|result| match result {
             Value::Undefined => JsValue::UNDEFINED,
-            _ => JsValue::from(result.dump()),
+            _ => JsValue::from(result.serialize(false)),
         })
         .map_err(|e| JsValue::from(e.to_string()))
 }

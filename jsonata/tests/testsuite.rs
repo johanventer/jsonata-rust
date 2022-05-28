@@ -10,12 +10,12 @@ use jsonata::value::ArrayFlags;
 use jsonata::{JsonAta, Value};
 
 const SKIP: &[&str] = &[
-    // The order of object properties in the output is not deterministic, 
+    // The order of object properties in the output is not deterministic,
     // so string comparison fails. If we were using something like a BTreeMap
     // or an IndexedMap then running these would be possible.
     "jsonata/tests/testsuite/groups/function-string/case018.json",
     "jsonata/tests/testsuite/groups/function-string/case027.json",
-    "jsonata/tests/testsuite/groups/function-string/case028.json"
+    "jsonata/tests/testsuite/groups/function-string/case028.json",
 ];
 
 #[test_resources("jsonata/tests/testsuite/groups/*/*.json")]
@@ -84,7 +84,7 @@ fn test_case(resource: &str) {
         } else if data.is_undefined() {
             "".to_string()
         } else {
-            data.dump()
+            data.serialize(false)
         };
 
         let jsonata = JsonAta::new(&expr, &arena);

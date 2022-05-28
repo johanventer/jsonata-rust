@@ -4,6 +4,7 @@ use jsonata_errors::{Error, Result};
 
 use super::evaluator::Evaluator;
 use super::frame::Frame;
+use super::value::serialize::{DumpFormatter, PrettyFormatter, Serializer};
 use super::value::{ArrayFlags, Value};
 
 // macro_rules! min_args {
@@ -273,9 +274,13 @@ pub fn fn_string<'a, 'e>(
     } else if input.is_number() && !input.is_finite() {
         Err(Error::D3001StringNotFinite(context.char_index))
     } else if *pretty == true {
-        Ok(Value::string(context.arena, input.pretty(2)))
+        let serializer = Serializer::new(PrettyFormatter::default(), true);
+        let output = serializer.serialize(input)?;
+        Ok(Value::string(context.arena, output))
     } else {
-        Ok(Value::string(context.arena, input.dump()))
+        let serializer = Serializer::new(DumpFormatter, true);
+        let output = serializer.serialize(input)?;
+        Ok(Value::string(context.arena, output))
     }
 }
 
@@ -569,7 +574,7 @@ pub fn fn_number<'a, 'e>(
         Value::String(s) => {
             let result: f64 = s
                 .parse()
-                .map_err(|_e| Error::D3030NonNumericCast(context.char_index, arg.dump()))?;
+                .map_err(|_e| Error::D3030NonNumericCast(context.char_index, arg.to_string()))?;
 
             if !result.is_nan() && !result.is_infinite() {
                 Ok(Value::number(context.arena, result))

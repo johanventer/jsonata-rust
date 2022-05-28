@@ -56,7 +56,7 @@ fn main() {
             };
 
             match jsonata.evaluate(Some(&input)) {
-                Ok(result) => println!("{}", result.pretty(4)),
+                Ok(result) => println!("{}", result.serialize(true)),
                 Err(error) => println!("{}", error),
             }
         }

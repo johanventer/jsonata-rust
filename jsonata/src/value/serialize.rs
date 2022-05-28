@@ -1,13 +1,15 @@
-// This JSON dumping code was stolen from [Maciej Hirsz's](https://github.com/maciejhirsz) excellent
-// [json crate](https://github.com/maciejhirsz/json-rust), and modified to work on our custom internal
-// value.
+// Acknowledgement:
+//
+// This is based on the JSON dumping code from [Maciej Hirsz's](https://github.com/maciejhirsz)
+// excellent [json crate](https://github.com/maciejhirsz/json-rust), and modified to work on
+// our custom internal value.
 //
 // The original code is licensed in the same way as this crate.
 
-use std::io;
 use std::io::Write;
 
 use super::Value;
+use jsonata_errors::Result;
 
 const QU: u8 = b'"';
 const BS: u8 = b'\\';
@@ -40,71 +42,134 @@ static ESCAPED: [u8; 256] = [
     __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // F
 ];
 
-/// Default trait for serializing JSONValue into string.
-pub trait Serializer {
-    type T: Write;
+pub trait Formatter {
+    fn write_min(&self, output: &mut Vec<u8>, slice: &[u8], min: u8);
+    fn new_line(&self, output: &mut Vec<u8>);
+    fn indent(&mut self);
+    fn dedent(&mut self);
+}
 
-    fn get_writer(&mut self) -> &mut Self::T;
+pub struct DumpFormatter;
 
+impl Formatter for DumpFormatter {
     #[inline(always)]
-    fn write(&mut self, slice: &[u8]) -> io::Result<()> {
-        self.get_writer().write_all(slice)
+    fn write_min(&self, output: &mut Vec<u8>, _: &[u8], min: u8) {
+        output.push(min);
     }
 
     #[inline(always)]
-    fn write_char(&mut self, ch: u8) -> io::Result<()> {
-        self.get_writer().write_all(&[ch])
-    }
-
-    fn write_min(&mut self, slice: &[u8], min: u8) -> io::Result<()>;
-
-    #[inline(always)]
-    fn new_line(&mut self) -> io::Result<()> {
-        Ok(())
-    }
+    fn new_line(&self, _output: &mut Vec<u8>) {}
 
     #[inline(always)]
     fn indent(&mut self) {}
 
     #[inline(always)]
     fn dedent(&mut self) {}
+}
+
+pub struct PrettyFormatter {
+    dent: u16,
+    spaces: u16,
+}
+
+impl Default for PrettyFormatter {
+    fn default() -> Self {
+        Self { dent: 0, spaces: 2 }
+    }
+}
+
+impl Formatter for PrettyFormatter {
+    #[inline(always)]
+    fn write_min(&self, output: &mut Vec<u8>, slice: &[u8], _: u8) {
+        output.extend_from_slice(slice);
+    }
+
+    fn new_line(&self, output: &mut Vec<u8>) {
+        output.push(b'\n');
+        for _ in 0..(self.dent * self.spaces) {
+            output.push(b' ');
+        }
+    }
+
+    fn indent(&mut self) {
+        self.dent += 1;
+    }
+
+    fn dedent(&mut self) {
+        self.dent -= 1;
+    }
+}
+
+pub struct Serializer<T: Formatter> {
+    output: Vec<u8>,
+    formatter: T,
+    fail_on_invalid_numbers: bool,
+}
+
+impl<T: Formatter> Serializer<T> {
+    pub fn new(formatter: T, fail_on_invalid_numbers: bool) -> Self {
+        Serializer {
+            output: Vec::with_capacity(1024),
+            formatter,
+            fail_on_invalid_numbers,
+        }
+    }
+
+    pub fn serialize<'a>(mut self, value: &'a Value<'a>) -> Result<String> {
+        self.write_json(value)?;
+
+        // SAFETY: Original strings were unicode, numbers are all ASCII,
+        // therefore this is safe.
+        Ok(unsafe { String::from_utf8_unchecked(self.output) })
+    }
+
+    #[inline(always)]
+    fn write(&mut self, slice: &[u8]) {
+        self.output.extend_from_slice(slice);
+    }
+
+    #[inline(always)]
+    fn write_char(&mut self, ch: u8) {
+        self.output.push(ch);
+    }
 
     #[inline(never)]
-    fn write_string_complex(&mut self, string: &str, mut start: usize) -> io::Result<()> {
-        self.write(&string.as_bytes()[..start])?;
+    fn write_string_complex(&mut self, string: &str, mut start: usize) {
+        self.write(&string.as_bytes()[..start]);
 
         for (index, ch) in string.bytes().enumerate().skip(start) {
             let escape = ESCAPED[ch as usize];
             if escape > 0 {
-                self.write(&string.as_bytes()[start..index])?;
-                self.write(&[b'\\', escape])?;
+                self.write(&string.as_bytes()[start..index]);
+                self.write(&[b'\\', escape]);
                 start = index + 1;
             }
             if escape == b'u' {
-                write!(self.get_writer(), "{:04x}", ch)?;
+                write!(self.output, "{:04x}", ch).unwrap();
             }
         }
-        self.write(&string.as_bytes()[start..])?;
+        self.write(&string.as_bytes()[start..]);
 
-        self.write_char(b'"')
+        self.write_char(b'"');
     }
 
     #[inline(always)]
-    fn write_string(&mut self, string: &str) -> io::Result<()> {
-        self.write_char(b'"')?;
+    fn write_string(&mut self, string: &str) {
+        self.write_char(b'"');
 
         for (index, ch) in string.bytes().enumerate() {
             if ESCAPED[ch as usize] > 0 {
-                return self.write_string_complex(string, index);
+                self.write_string_complex(string, index);
+                return;
             }
         }
 
-        self.write(string.as_bytes())?;
-        self.write_char(b'"')
+        self.write(string.as_bytes());
+        self.write_char(b'"');
     }
 
     #[inline(always)]
-    fn write_number(&mut self, number: f64) -> io::Result<()> {
+    fn write_number(&mut self, number: f64) {
         const MAX_SIGNIFICANT_DIGITS: usize = 15;
 
         if number.is_finite() {
@@ -125,7 +190,7 @@ pub trait Serializer {
             let whole = split_iter.next();
             let fraction = split_iter.next();
             if let Some(whole) = whole {
-                self.write(whole)?;
+                self.write(whole);
                 if whole.len() < MAX_SIGNIFICANT_DIGITS {
                     if let Some(fraction) = fraction {
                         let fraction_length =
@@ -136,223 +201,96 @@ pub trait Serializer {
                                     .trim_end_matches('0')
                             };
                             if !fraction.is_empty() {
-                                self.write_char(b'.')?;
-                                self.write(fraction.as_bytes())?;
+                                self.write_char(b'.');
+                                self.write(fraction.as_bytes());
                             }
                         }
                     }
                 }
             } else {
-                self.write(formatted)?;
+                self.write(formatted);
             }
-
-            Ok(())
         } else {
-            self.write(b"null")
+            self.write(b"null");
         }
     }
 
     #[inline(always)]
-    fn write_object<'a>(&mut self, object: &'a Value<'a>) -> io::Result<()> {
-        self.write_char(b'{')?;
+    fn write_object<'a>(&mut self, object: &'a Value<'a>) -> Result<()> {
+        self.write_char(b'{');
         let mut iter = object.entries();
 
         if let Some((key, value)) = iter.next() {
-            self.indent();
-            self.new_line()?;
-            self.write_string(key)?;
-            self.write_min(b": ", b':')?;
+            self.formatter.indent();
+            self.formatter.new_line(&mut self.output);
+            self.write_string(key);
+            self.formatter.write_min(&mut self.output, b": ", b':');
             self.write_json(value)?;
         } else {
-            self.write_char(b'}')?;
+            self.write_char(b'}');
             return Ok(());
         }
 
         for (key, value) in iter {
-            self.write_char(b',')?;
-            self.new_line()?;
-            self.write_string(key)?;
-            self.write_min(b": ", b':')?;
+            self.write_char(b',');
+            self.formatter.new_line(&mut self.output);
+            self.write_string(key);
+            self.formatter.write_min(&mut self.output, b": ", b':');
             self.write_json(value)?;
         }
 
-        self.dedent();
-        self.new_line()?;
-        self.write_char(b'}')
+        self.formatter.dedent();
+        self.formatter.new_line(&mut self.output);
+        self.write_char(b'}');
+
+        Ok(())
     }
 
-    fn write_json<'a>(&mut self, json: &'a Value<'a>) -> io::Result<()> {
-        match *json {
-            Value::Undefined => Ok(()),
+    #[inline(always)]
+    fn write_array<'a>(&mut self, array: &'a Value<'a>) -> Result<()> {
+        self.write_char(b'[');
+        let mut iter = array.members();
+
+        if let Some(item) = iter.next() {
+            self.formatter.indent();
+            self.formatter.new_line(&mut self.output);
+            self.write_json(item)?;
+        } else {
+            self.write_char(b']');
+            return Ok(());
+        }
+
+        for item in iter {
+            self.write_char(b',');
+            self.formatter.new_line(&mut self.output);
+            self.write_json(item)?;
+        }
+
+        self.formatter.dedent();
+        self.formatter.new_line(&mut self.output);
+        self.write_char(b']');
+
+        Ok(())
+    }
+
+    fn write_json<'a>(&mut self, value: &'a Value<'a>) -> Result<()> {
+        match value {
+            Value::Undefined => {}
             Value::Null => self.write(b"null"),
             Value::String(ref string) => self.write_string(string),
-            Value::Number(n) => self.write_number(n),
+            Value::Number(n) => {
+                if self.fail_on_invalid_numbers {
+                    value.is_valid_number()?;
+                }
+                self.write_number(*n);
+            }
             Value::Bool(true) => self.write(b"true"),
             Value::Bool(false) => self.write(b"false"),
-            Value::Array(..) => {
-                self.write_char(b'[')?;
-                let mut iter = json.members();
-
-                if let Some(item) = iter.next() {
-                    self.indent();
-                    self.new_line()?;
-                    self.write_json(item)?;
-                } else {
-                    self.write_char(b']')?;
-                    return Ok(());
-                }
-
-                for item in iter {
-                    self.write_char(b',')?;
-                    self.new_line()?;
-                    self.write_json(item)?;
-                }
-
-                self.dedent();
-                self.new_line()?;
-                self.write_char(b']')
-            }
-            Value::Object(..) => self.write_object(json),
+            Value::Array(..) => self.write_array(value)?,
+            Value::Object(..) => self.write_object(value)?,
             Value::Lambda { .. } | Value::NativeFn { .. } => self.write(b"\"\""),
-        }
-    }
-}
+        };
 
-/// In-Memory Generator, this uses a Vec to store the JSON result.
-pub struct DumpSerializer {
-    code: Vec<u8>,
-}
-
-impl DumpSerializer {
-    pub fn new() -> Self {
-        DumpSerializer {
-            code: Vec::with_capacity(1024),
-        }
-    }
-
-    pub fn consume(self) -> String {
-        // Original strings were unicode, numbers are all ASCII,
-        // therefore this is safe.
-        unsafe { String::from_utf8_unchecked(self.code) }
-    }
-}
-
-impl Default for DumpSerializer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Serializer for DumpSerializer {
-    type T = Vec<u8>;
-
-    fn write(&mut self, slice: &[u8]) -> io::Result<()> {
-        self.code.extend_from_slice(slice);
         Ok(())
-    }
-
-    #[inline(always)]
-    fn write_char(&mut self, ch: u8) -> io::Result<()> {
-        self.code.push(ch);
-        Ok(())
-    }
-
-    #[inline(always)]
-    fn get_writer(&mut self) -> &mut Vec<u8> {
-        &mut self.code
-    }
-
-    #[inline(always)]
-    fn write_min(&mut self, _: &[u8], min: u8) -> io::Result<()> {
-        self.code.push(min);
-        Ok(())
-    }
-}
-
-/// Pretty In-Memory Generator, this uses a Vec to store the JSON result and add indent.
-pub struct PrettySerializer {
-    code: Vec<u8>,
-    dent: u16,
-    spaces_per_indent: u16,
-}
-
-impl PrettySerializer {
-    pub fn new(spaces: u16) -> Self {
-        PrettySerializer {
-            code: Vec::with_capacity(1024),
-            dent: 0,
-            spaces_per_indent: spaces,
-        }
-    }
-
-    pub fn consume(self) -> String {
-        unsafe { String::from_utf8_unchecked(self.code) }
-    }
-}
-
-impl Serializer for PrettySerializer {
-    type T = Vec<u8>;
-
-    #[inline(always)]
-    fn write(&mut self, slice: &[u8]) -> io::Result<()> {
-        self.code.extend_from_slice(slice);
-        Ok(())
-    }
-
-    #[inline(always)]
-    fn write_char(&mut self, ch: u8) -> io::Result<()> {
-        self.code.push(ch);
-        Ok(())
-    }
-
-    #[inline(always)]
-    fn get_writer(&mut self) -> &mut Vec<u8> {
-        &mut self.code
-    }
-
-    #[inline(always)]
-    fn write_min(&mut self, slice: &[u8], _: u8) -> io::Result<()> {
-        self.code.extend_from_slice(slice);
-        Ok(())
-    }
-
-    fn new_line(&mut self) -> io::Result<()> {
-        self.code.push(b'\n');
-        for _ in 0..(self.dent * self.spaces_per_indent) {
-            self.code.push(b' ');
-        }
-        Ok(())
-    }
-
-    fn indent(&mut self) {
-        self.dent += 1;
-    }
-
-    fn dedent(&mut self) {
-        self.dent -= 1;
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // found while fuzzing the DumpGenerator
-    #[test]
-    fn should_not_panic_on_bad_bytes() {
-        let data = [0, 12, 128, 88, 64, 99].to_vec();
-        let s = unsafe { String::from_utf8_unchecked(data) };
-
-        let mut generator = DumpSerializer::new();
-        generator.write_string(&s).unwrap();
-    }
-
-    #[test]
-    fn should_not_panic_on_bad_bytes_2() {
-        let data = b"\x48\x48\x48\x57\x03\xE8\x48\x48\xE8\x03\x8F\x48\x29\x48\x48";
-        let s = unsafe { String::from_utf8_unchecked(data.to_vec()) };
-
-        let mut generator = DumpSerializer::new();
-        generator.write_string(&s).unwrap();
     }
 }

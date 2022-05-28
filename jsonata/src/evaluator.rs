@@ -209,7 +209,7 @@ impl<'a> Evaluator<'a> {
                     }
                     _ => Err(Error::D1002NegatingNonNumeric(
                         node.char_index,
-                        result.dump(),
+                        result.to_string(),
                     )),
                 }
             }
@@ -272,7 +272,7 @@ impl<'a> Evaluator<'a> {
             for (index, pair) in object.iter().enumerate() {
                 let key = self.evaluate(&pair.0, item, frame)?;
                 if !key.is_string() {
-                    return Err(Error::T1003NonStringKey(char_index, key.dump()));
+                    return Err(Error::T1003NonStringKey(char_index, key.to_string()));
                 }
 
                 let key = key.as_str();
@@ -417,8 +417,8 @@ impl<'a> Evaluator<'a> {
 
                 Err(Error::T2009BinaryOpMismatch(
                     node.char_index,
-                    lhs.dump(),
-                    rhs.dump(),
+                    lhs.to_string(),
+                    rhs.to_string(),
                     op.to_string(),
                 ))
             }
