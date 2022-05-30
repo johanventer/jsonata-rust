@@ -407,7 +407,7 @@ impl<'a> Value<'a> {
         arena: &'a Bump,
         value: &'a Value<'a>,
         flags: ArrayFlags,
-    ) -> &'a Value<'a> {
+    ) -> &'a mut Value<'a> {
         arena.alloc(Value::Array(Box::new_in(vec![value], arena), flags))
     }
 

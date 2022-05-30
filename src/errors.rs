@@ -48,6 +48,8 @@ pub enum Error {
     T2002RightSideNotNumber(usize, String),
     T2003LeftSideNotInteger(usize),
     T2004RightSideNotInteger(usize),
+    T2007CompareTypeMismatch(usize, String, String),
+    T2008InvalidOrderBy(usize),
     T2009BinaryOpMismatch(usize, String, String, String),
     T2010BinaryOpTypes(usize, String),
     
@@ -119,6 +121,8 @@ impl Error {
             Error::T2002RightSideNotNumber(..) => "T2002",
             Error::T2003LeftSideNotInteger(..) => "T2003",
             Error::T2004RightSideNotInteger(..) => "T2004",
+            Error::T2007CompareTypeMismatch(..) => "T2007",
+            Error::T2008InvalidOrderBy(..) => "T2008",
             Error::T2009BinaryOpMismatch(..) => "T2009",
             Error::T2010BinaryOpTypes(..) => "T2010",
             
@@ -220,6 +224,10 @@ impl fmt::Display for Error {
                 write!(f, "{}: The left side of the range operator (..) must evaluate to an integer", p),
             T2004RightSideNotInteger(ref p) =>
                 write!(f, "{}: The right side of the range operator (..) must evaluate to an integer", p),
+            T2007CompareTypeMismatch(ref p, ref a, ref b) =>
+                write!(f, "{p}: Type mismatch when comparing values {a} and {b} in order-by clause"),
+            T2008InvalidOrderBy(ref p) =>
+                write!(f, "{}: The expressions within an order-by clause must evaluate to numeric or string values", p),
             T2009BinaryOpMismatch(ref p,ref l ,ref r ,ref o ) =>
                 write!(f, "{}: The values {} and {} either side of operator {} must be of the same data type", p, l, r, o),
             T2010BinaryOpTypes(ref p, ref o) =>
@@ -251,8 +259,6 @@ impl fmt::Display for Error {
 // // "T1010": "The matcher function argument passed to function {{token}} does not return the correct object structure",
 // "D2005": "The left side of := must be a variable name (start with $)",  // defunct - replaced by S0212 parser error
 // "T2006": "The right side of the function application operator ~> must be a function",
-// "T2007": "Type mismatch when comparing values {{value}} and {{value2}} in order-by clause",
-// "T2008": "The expressions within an order-by clause must evaluate to numeric or string values",
 // "T2011": "The insert/update clause of the transform expression must evaluate to an object: {{value}}",
 // "T2012": "The delete clause of the transform expression must evaluate to a string or array of strings: {{value}}",
 // "T2013": "The transform expression clones the input object using the $clone() function.  This has been overridden in the current scope by a non-function.",

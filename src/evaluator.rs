@@ -1,6 +1,7 @@
 use bumpalo::Bump;
 use std::cell::RefCell;
 use std::collections::{hash_map, HashMap};
+use std::rc::Rc;
 use std::time::Instant;
 
 use crate::{Error, Result};
@@ -321,7 +322,9 @@ impl<'a> Evaluator<'a> {
             let value = if reduce {
                 let tuple = self.reduce_tuple_stream(char_index, group.data, input, frame)?;
                 let context = tuple.get_entry("@");
-                tuple.remove_entry("@");
+                // TODO: Do we need this? JSONata does this, but it's difficult with the mutability
+                // of our values.
+                // tuple.remove_entry("@");
                 let tuple_frame = Frame::from_tuple(frame, tuple);
                 self.evaluate(&object[group.index].1, context, &tuple_frame)?
             } else {
@@ -341,9 +344,9 @@ impl<'a> Evaluator<'a> {
         tuple_stream: &'a Value<'a>,
         input: &'a Value<'a>,
         frame: &Frame<'a>,
-    ) -> Result<&'a mut Value<'a>> {
+    ) -> Result<&'a Value<'a>> {
         if !tuple_stream.is_array() {
-            return Ok(tuple_stream.clone_array_with_flags(self.arena, tuple_stream.get_flags()));
+            return Ok(tuple_stream);
         }
 
         let result = Value::object(self.arena);
@@ -750,7 +753,7 @@ impl<'a> Evaluator<'a> {
         last_step: bool,
     ) -> Result<&'a Value<'a>> {
         if let AstKind::Sort(ref sort_terms) = step.kind {
-            let mut result = self.evaluate_sort(sort_terms, input, frame)?;
+            let mut result = self.evaluate_sort(step.char_index, sort_terms, input, frame)?;
             if let Some(ref stages) = step.stages {
                 result = self.evaluate_stages(stages, result, frame)?;
             }
@@ -814,7 +817,7 @@ impl<'a> Evaluator<'a> {
     ) -> Result<&'a Value<'a>> {
         if let AstKind::Sort(ref sort_terms) = step.kind {
             let mut result = if tuple_bindings.is_undefined() {
-                let sorted = self.evaluate_sort(sort_terms, input, frame)?;
+                let sorted = self.evaluate_sort(step.char_index, sort_terms, input, frame)?;
                 let result =
                     Value::array(self.arena, ArrayFlags::SEQUENCE | ArrayFlags::TUPLE_STREAM);
                 for (item_index, item) in sorted.members().enumerate() {
@@ -827,7 +830,7 @@ impl<'a> Evaluator<'a> {
                 }
                 result
             } else {
-                self.evaluate_sort(sort_terms, tuple_bindings, frame)?
+                self.evaluate_sort(step.char_index, sort_terms, tuple_bindings, frame)?
             };
 
             if let Some(ref stages) = step.stages {
@@ -897,11 +900,99 @@ impl<'a> Evaluator<'a> {
 
     fn evaluate_sort(
         &self,
-        _sort_terms: &[(Ast, bool)],
-        _input: &'a Value<'a>,
-        _frame: &Frame<'a>,
+        char_index: usize,
+        sort_terms: &[(Ast, bool)],
+        input: &'a Value<'a>,
+        frame: &Frame<'a>,
     ) -> Result<&'a Value<'a>> {
-        unimplemented!("Sorts not yet implemented")
+        if input.is_undefined() {
+            return Ok(Value::undefined());
+        }
+
+        if !input.is_array() || input.len() <= 1 {
+            return Ok(Value::wrap_in_array_if_needed(
+                self.arena,
+                input,
+                ArrayFlags::empty(),
+            ));
+        }
+
+        let unsorted = input.members().collect::<Vec<&'a Value<'a>>>();
+        let is_tuple_sort = input.has_flags(ArrayFlags::TUPLE_STREAM);
+
+        let comp = Rc::new(|a: &'a Value<'a>, b: &'a Value<'a>| {
+            let mut result = 0;
+
+            for (sort_term, descending) in sort_terms {
+                let aa = if is_tuple_sort {
+                    let tuple_frame = Frame::from_tuple(frame, a);
+                    self.evaluate(sort_term, &a["@"], &tuple_frame)?
+                } else {
+                    self.evaluate(sort_term, a, frame)?
+                };
+
+                let bb = if is_tuple_sort {
+                    let tuple_frame = Frame::from_tuple(frame, b);
+                    self.evaluate(sort_term, &b["@"], &tuple_frame)?
+                } else {
+                    self.evaluate(sort_term, b, frame)?
+                };
+
+                if aa.is_undefined() {
+                    result = if bb.is_undefined() { 0 } else { 1 };
+                    continue;
+                }
+
+                if bb.is_undefined() {
+                    result = -1;
+                    continue;
+                }
+
+                if !(aa.is_string() || aa.is_number()) || !(bb.is_string() || bb.is_number()) {
+                    return Err(Error::T2008InvalidOrderBy(char_index));
+                }
+
+                match (aa, bb) {
+                    (Value::String(a), Value::String(b)) if *a == *b => {
+                        continue;
+                    }
+                    (Value::String(a), Value::String(b)) if *a < *b => {
+                        result = -1;
+                    }
+                    (Value::String(..), Value::String(..)) => {
+                        result = 1;
+                    }
+                    (Value::Number(a), Value::Number(b)) if *a == *b => {
+                        continue;
+                    }
+                    (Value::Number(a), Value::Number(b)) if *a < *b => {
+                        result = -1;
+                    }
+                    (Value::Number(..), Value::Number(..)) => {
+                        result = 1;
+                    }
+                    _ => {
+                        return Err(Error::T2007CompareTypeMismatch(
+                            char_index,
+                            a.to_string(),
+                            b.to_string(),
+                        ));
+                    }
+                };
+
+                if *descending {
+                    result = -result;
+                }
+            }
+
+            Ok(result == 1)
+        });
+
+        let sorted = merge_sort(unsorted, comp)?;
+        let result = Value::array_with_capacity(self.arena, sorted.len(), input.get_flags());
+        sorted.iter().for_each(|member| result.push(*member));
+
+        Ok(result)
     }
 
     fn evaluate_stages(
