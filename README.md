@@ -103,10 +103,8 @@ There are a number of JSONata features which are not yet implemented:
 
 - Many built-in functions are missing
 - Parent operator
-- Context and index bind variables
 - Regular expressions
 - Object transforms
-- Sorting
 - Partial function application
 - JSON AST output to match the reference implementation
 
