@@ -1,5 +1,4 @@
 use std::borrow::Borrow;
-use std::rc::Rc;
 
 use bumpalo::Bump;
 
@@ -800,25 +799,22 @@ pub fn fn_sort<'a, 'e>(
     let sorted = if (&args[1]).is_undefined() {
         merge_sort(
             unsorted,
-            Rc::new(|a: &'a Value<'a>, b: &'a Value<'a>| match (a, b) {
+            &|a: &'a Value<'a>, b: &'a Value<'a>| match (a, b) {
                 (Value::Number(a), Value::Number(b)) => Ok(a > b),
                 (Value::String(a), Value::String(b)) => Ok(a > b),
                 _ => Err(Error::D3070InvalidDefaultSort(context.char_index)),
-            }),
+            },
         )?
     } else {
         let comparator = args.get_member(1);
         assert_arg!(comparator.is_function(), context, 2);
-        merge_sort(
-            unsorted,
-            Rc::new(|a: &'a Value<'a>, b: &'a Value<'a>| {
-                let args = Value::array_with_capacity(context.arena, 2, ArrayFlags::empty());
-                args.push(a);
-                args.push(b);
-                let result = context.evaluate_function(comparator, args)?;
-                Ok(result.is_truthy())
-            }),
-        )?
+        merge_sort(unsorted, &|a: &'a Value<'a>, b: &'a Value<'a>| {
+            let args = Value::array_with_capacity(context.arena, 2, ArrayFlags::empty());
+            args.push(a);
+            args.push(b);
+            let result = context.evaluate_function(comparator, args)?;
+            Ok(result.is_truthy())
+        })?
     };
 
     let result = Value::array_with_capacity(context.arena, sorted.len(), arr.get_flags());
@@ -827,7 +823,7 @@ pub fn fn_sort<'a, 'e>(
     Ok(result)
 }
 
-pub fn merge_sort<'a, F>(items: Vec<&'a Value<'a>>, comp: Rc<F>) -> Result<Vec<&'a Value<'a>>>
+pub fn merge_sort<'a, F>(items: Vec<&'a Value<'a>>, comp: &F) -> Result<Vec<&'a Value<'a>>>
 where
     F: Fn(&'a Value<'a>, &'a Value<'a>) -> Result<bool>,
 {
@@ -835,7 +831,7 @@ where
         result: &mut Vec<&'a Value<'a>>,
         left: &[&'a Value<'a>],
         right: &[&'a Value<'a>],
-        comp: Rc<F>,
+        comp: &F,
     ) -> Result<()>
     where
         F: Fn(&'a Value<'a>, &'a Value<'a>) -> Result<bool>,
@@ -858,7 +854,7 @@ where
     fn merge<'a, F>(
         left: &[&'a Value<'a>],
         right: &[&'a Value<'a>],
-        comp: Rc<F>,
+        comp: &F,
     ) -> Result<Vec<&'a Value<'a>>>
     where
         F: Fn(&'a Value<'a>, &'a Value<'a>) -> Result<bool>,
@@ -873,7 +869,7 @@ where
     }
     let middle = (items.len() as f64 / 2.0).floor() as usize;
     let (left, right) = items.split_at(middle);
-    let left = merge_sort(left.to_vec(), comp.clone())?;
-    let right = merge_sort(right.to_vec(), comp.clone())?;
+    let left = merge_sort(left.to_vec(), comp)?;
+    let right = merge_sort(right.to_vec(), comp)?;
     merge(&left, &right, comp)
 }

@@ -1,7 +1,6 @@
 use bumpalo::Bump;
 use std::cell::RefCell;
 use std::collections::{hash_map, HashMap};
-use std::rc::Rc;
 use std::time::Instant;
 
 use crate::{Error, Result};
@@ -920,7 +919,7 @@ impl<'a> Evaluator<'a> {
         let unsorted = input.members().collect::<Vec<&'a Value<'a>>>();
         let is_tuple_sort = input.has_flags(ArrayFlags::TUPLE_STREAM);
 
-        let comp = Rc::new(|a: &'a Value<'a>, b: &'a Value<'a>| {
+        let comp = |a: &'a Value<'a>, b: &'a Value<'a>| {
             let mut result = 0;
 
             for (sort_term, descending) in sort_terms {
@@ -986,9 +985,9 @@ impl<'a> Evaluator<'a> {
             }
 
             Ok(result == 1)
-        });
+        };
 
-        let sorted = merge_sort(unsorted, comp)?;
+        let sorted = merge_sort(unsorted, &comp)?;
         let result = Value::array_with_capacity(self.arena, sorted.len(), input.get_flags());
         sorted.iter().for_each(|member| result.push(*member));
 
