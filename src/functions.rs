@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 use bumpalo::Bump;
 
 use crate::{Error, Result};
@@ -725,4 +727,47 @@ pub fn fn_reverse<'a, 'e>(
     let result = Value::array_with_capacity(context.arena, arr.len(), ArrayFlags::empty());
     arr.members().rev().for_each(|member| result.push(member));
     Ok(result)
+}
+
+pub fn fn_join<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    max_args!(context, args, 2);
+
+    let strings = &args[0];
+
+    if strings.is_undefined() {
+        return Ok(Value::undefined());
+    }
+
+    if strings.is_string() {
+        return Ok(strings);
+    }
+
+    assert_array_of_type!(strings.is_array(), context, 1, "string");
+
+    let separator = &args[1];
+    assert_arg!(
+        separator.is_undefined() || separator.is_string(),
+        context,
+        2
+    );
+
+    let separator = if separator.is_string() {
+        separator.as_str()
+    } else {
+        "".into()
+    };
+
+    let mut result = String::with_capacity(1024);
+    for (index, member) in strings.members().enumerate() {
+        assert_array_of_type!(member.is_string(), context, 1, "string");
+        result.push_str(member.as_str().borrow());
+        if index != strings.len() - 1 {
+            result.push_str(&separator);
+        }
+    }
+
+    Ok(Value::string(context.arena, result))
 }
