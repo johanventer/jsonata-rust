@@ -22,6 +22,8 @@ pub enum Error {
     S0212ExpectedVarLeft(usize),
     S0213InvalidStep(usize, String),
     S0214ExpectedVarRight(usize, String),
+    S0215BindingAfterPredicates(usize),
+    S0216BindingAfterSort(usize),
 
     // Runtime errors
     D1001NumberOfOutRange(f64),
@@ -90,6 +92,8 @@ impl Error {
             Error::S0212ExpectedVarLeft(..) => "S0212",
             Error::S0213InvalidStep(..) => "S0213",
             Error::S0214ExpectedVarRight(..) => "S0214",
+            Error::S0215BindingAfterPredicates(..) => "S0215",
+            Error::S0216BindingAfterSort(..) => "S0216",
 
             // Runtime errors
             Error::D1001NumberOfOutRange(..) => "D1001",
@@ -166,6 +170,10 @@ impl fmt::Display for Error {
                 write!(f, "{}: The literal value `{}` cannot be used as a step within a path expression", p, k),
             S0214ExpectedVarRight(ref p, ref k) =>
                 write!(f, "{}: The right side of `{}` must be a variable name (start with $)", p, k),
+            S0215BindingAfterPredicates(ref p) => 
+                write!(f, "{}: A context variable binding must precede any predicates on a step", p),
+            S0216BindingAfterSort(ref p) =>
+                write!(f, "{}: A context variable binding must precede the 'order-by' clause on a step", p),
             
             // Runtime errors
             D1001NumberOfOutRange(ref n) =>
@@ -225,8 +233,6 @@ impl fmt::Display for Error {
 // "S0205": "Unexpected token: {{token}}",
 // "S0206": "Unknown expression type: {{token}}",
 // "S0207": "Unexpected end of expression",
-// "S0215": "A context variable binding must precede any predicates on a step",
-// "S0216": "A context variable binding must precede the 'order-by' clause on a step",
 // "S0217": "The object representing the 'parent' cannot be derived from this expression",
 
 // "S0301": "Empty regular expressions are not allowed",

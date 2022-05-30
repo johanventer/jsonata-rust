@@ -21,10 +21,11 @@ pub use iterator::MemberIterator;
 
 bitflags! {
     pub struct ArrayFlags: u8 {
-        const SEQUENCE  = 0b00000001;
-        const SINGLETON = 0b00000010;
-        const CONS      = 0b00000100;
-        const WRAPPED   = 0b00001000;
+        const SEQUENCE     = 0b00000001;
+        const SINGLETON    = 0b00000010;
+        const CONS         = 0b00000100;
+        const WRAPPED      = 0b00001000;
+        const TUPLE_STREAM = 0b00010000;
     }
 }
 
@@ -346,6 +347,13 @@ impl<'a> Value<'a> {
         }
     }
 
+    pub fn remove_entry(&mut self, key: &str) {
+        match *self {
+            Value::Object(ref mut map) => map.remove(key),
+            _ => panic!("Not an object"),
+        };
+    }
+
     pub fn push(&mut self, value: &'a Value<'a>) {
         match *self {
             Value::Array(ref mut array, _) => array.push(value),
@@ -415,7 +423,7 @@ impl<'a> Value<'a> {
         }
     }
 
-    pub fn clone_array_with_flags(&self, arena: &'a Bump, flags: ArrayFlags) -> &'a Value<'a> {
+    pub fn clone_array_with_flags(&self, arena: &'a Bump, flags: ArrayFlags) -> &'a mut Value<'a> {
         match *self {
             Value::Array(ref array, _) => arena.alloc(Value::Array(
                 Box::new_in(array.as_ref().clone(), arena),
