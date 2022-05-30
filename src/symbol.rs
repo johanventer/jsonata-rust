@@ -313,7 +313,7 @@ impl Symbol for Token {
                 }
 
                 Ok(Ast::new(
-                    AstKind::Binary(BinaryOp::ContextBind, Box::new(left), Box::new(rhs)),
+                    AstKind::Binary(BinaryOp::FocusBind, Box::new(left), Box::new(rhs)),
                     self.char_index,
                 ))
             }
@@ -330,7 +330,7 @@ impl Symbol for Token {
                 }
 
                 Ok(Ast::new(
-                    AstKind::Binary(BinaryOp::PositionalBind, Box::new(left), Box::new(rhs)),
+                    AstKind::Binary(BinaryOp::IndexBind, Box::new(left), Box::new(rhs)),
                     self.char_index,
                 ))
             }

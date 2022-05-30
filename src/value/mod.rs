@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::ops::Index;
 
 use bitflags::bitflags;
 use bumpalo::boxed::Box;
@@ -11,6 +10,7 @@ use crate::frame::Frame;
 use crate::functions::FunctionContext;
 use crate::{Error, Result};
 
+pub mod impls;
 pub mod iterator;
 mod range;
 pub mod serialize;
@@ -21,10 +21,11 @@ pub use iterator::MemberIterator;
 
 bitflags! {
     pub struct ArrayFlags: u8 {
-        const SEQUENCE  = 0b00000001;
-        const SINGLETON = 0b00000010;
-        const CONS      = 0b00000100;
-        const WRAPPED   = 0b00001000;
+        const SEQUENCE     = 0b00000001;
+        const SINGLETON    = 0b00000010;
+        const CONS         = 0b00000100;
+        const WRAPPED      = 0b00001000;
+        const TUPLE_STREAM = 0b00010000;
     }
 }
 
@@ -178,6 +179,20 @@ impl<'a> Value<'a> {
         }
     }
 
+    pub fn is_array_of_strings(&self) -> bool {
+        match self {
+            Value::Array(ref a, _) => {
+                for member in a.iter() {
+                    if !member.is_string() {
+                        return false;
+                    }
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+
     pub fn is_valid_number(&self) -> Result<bool> {
         match self {
             Value::Number(n) => {
@@ -245,7 +260,7 @@ impl<'a> Value<'a> {
         }
     }
 
-    pub fn get_member(&'a self, index: usize) -> &Value {
+    pub fn get_member(&self, index: usize) -> &'a Value<'a> {
         match *self {
             Value::Array(ref array, _) => {
                 array.get(index).copied().unwrap_or_else(Value::undefined)
@@ -336,7 +351,7 @@ impl<'a> Value<'a> {
         }
     }
 
-    pub fn get_entry(&'a self, key: &str) -> &Value {
+    pub fn get_entry(&self, key: &str) -> &'a Value<'a> {
         match *self {
             Value::Object(ref map) => match map.get(key) {
                 Some(value) => value,
@@ -344,6 +359,13 @@ impl<'a> Value<'a> {
             },
             _ => panic!("Not an object"),
         }
+    }
+
+    pub fn remove_entry(&mut self, key: &str) {
+        match *self {
+            Value::Object(ref mut map) => map.remove(key),
+            _ => panic!("Not an object"),
+        };
     }
 
     pub fn push(&mut self, value: &'a Value<'a>) {
@@ -385,7 +407,7 @@ impl<'a> Value<'a> {
         arena: &'a Bump,
         value: &'a Value<'a>,
         flags: ArrayFlags,
-    ) -> &'a Value<'a> {
+    ) -> &'a mut Value<'a> {
         arena.alloc(Value::Array(Box::new_in(vec![value], arena), flags))
     }
 
@@ -415,7 +437,7 @@ impl<'a> Value<'a> {
         }
     }
 
-    pub fn clone_array_with_flags(&self, arena: &'a Bump, flags: ArrayFlags) -> &'a Value<'a> {
+    pub fn clone_array_with_flags(&self, arena: &'a Bump, flags: ArrayFlags) -> &'a mut Value<'a> {
         match *self {
             Value::Array(ref array, _) => arena.alloc(Value::Array(
                 Box::new_in(array.as_ref().clone(), arena),
@@ -432,121 +454,6 @@ impl<'a> Value<'a> {
         } else {
             let serializer = Serializer::new(DumpFormatter, false);
             serializer.serialize(self).expect("Shouldn't fail")
-        }
-    }
-}
-
-impl<'a> PartialEq<Value<'a>> for Value<'a> {
-    fn eq(&self, other: &Value<'a>) -> bool {
-        match (self, other) {
-            (Value::Undefined, Value::Undefined) => true,
-            (Value::Null, Value::Null) => true,
-            (Value::Number(l), Value::Number(r)) => *l == *r,
-            (Value::Bool(l), Value::Bool(r)) => *l == *r,
-            (Value::String(l), Value::String(r)) => *l == *r,
-            (Value::Array(l, ..), Value::Array(r, ..)) => *l == *r,
-            (Value::Object(l), Value::Object(r)) => *l == *r,
-            (Value::Range(l), Value::Range(r)) => *l == *r,
-            _ => false,
-        }
-    }
-}
-
-impl PartialEq<bool> for Value<'_> {
-    fn eq(&self, other: &bool) -> bool {
-        match *self {
-            Value::Bool(ref b) => *b == *other,
-            _ => false,
-        }
-    }
-}
-
-impl PartialEq<usize> for Value<'_> {
-    fn eq(&self, other: &usize) -> bool {
-        match self {
-            Value::Number(..) => self.as_usize() == *other,
-            _ => false,
-        }
-    }
-}
-
-impl PartialEq<isize> for Value<'_> {
-    fn eq(&self, other: &isize) -> bool {
-        match self {
-            Value::Number(..) => self.as_isize() == *other,
-            _ => false,
-        }
-    }
-}
-
-impl PartialEq<&str> for Value<'_> {
-    fn eq(&self, other: &&str) -> bool {
-        match *self {
-            Value::String(ref s) => s == *other,
-            _ => false,
-        }
-    }
-}
-
-impl<'a> Index<&str> for Value<'a> {
-    type Output = Value<'a>;
-
-    fn index(&self, index: &str) -> &Self::Output {
-        match *self {
-            Value::Object(ref o) => match o.get(index) {
-                Some(value) => value,
-                None => Value::undefined(),
-            },
-            _ => Value::undefined(),
-        }
-    }
-}
-
-impl<'a> Index<usize> for Value<'a> {
-    type Output = Value<'a>;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        match *self {
-            Value::Array(ref a, _) => match a.get(index) {
-                Some(value) => value,
-                None => Value::undefined(),
-            },
-            Value::Range(ref r) => &r[index],
-            _ => Value::undefined(),
-        }
-    }
-}
-
-impl std::fmt::Debug for Value<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Undefined => write!(f, "undefined"),
-            Self::Null => write!(f, "null"),
-            Self::Number(n) => n.fmt(f),
-            Self::Bool(b) => b.fmt(f),
-            Self::String(s) => s.fmt(f),
-            Self::Array(a, _) => a.fmt(f),
-            Self::Object(o) => o.fmt(f),
-            Self::Lambda { .. } => write!(f, "<lambda>"),
-            Self::NativeFn { .. } => write!(f, "<nativefn>"),
-            Self::Range(r) => write!(f, "<range({},{})>", r.start(), r.end()),
-        }
-    }
-}
-
-impl std::string::ToString for Value<'_> {
-    fn to_string(&self) -> String {
-        match self {
-            Self::Undefined => "undefined".to_string(),
-            Self::Null => "null".to_string(),
-            Self::Number(n) => n.to_string(),
-            Self::Bool(b) => b.to_string(),
-            Self::String(s) => s.clone(),
-            Self::Array(..) => "<array>".to_string(),
-            Self::Object(..) => "<object>".to_string(),
-            Self::Lambda { .. } => "<lambda>".to_string(),
-            Self::NativeFn { .. } => "<nativefn>".to_string(),
-            Self::Range(r) => format!("<range({},{})>", r.start(), r.end()),
         }
     }
 }

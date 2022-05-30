@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 use bumpalo::Bump;
 
 use crate::{Error, Result};
@@ -725,4 +727,149 @@ pub fn fn_reverse<'a, 'e>(
     let result = Value::array_with_capacity(context.arena, arr.len(), ArrayFlags::empty());
     arr.members().rev().for_each(|member| result.push(member));
     Ok(result)
+}
+
+pub fn fn_join<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    max_args!(context, args, 2);
+
+    let strings = &args[0];
+
+    if strings.is_undefined() {
+        return Ok(Value::undefined());
+    }
+
+    if strings.is_string() {
+        return Ok(strings);
+    }
+
+    assert_array_of_type!(strings.is_array(), context, 1, "string");
+
+    let separator = &args[1];
+    assert_arg!(
+        separator.is_undefined() || separator.is_string(),
+        context,
+        2
+    );
+
+    let separator = if separator.is_string() {
+        separator.as_str()
+    } else {
+        "".into()
+    };
+
+    let mut result = String::with_capacity(1024);
+    for (index, member) in strings.members().enumerate() {
+        assert_array_of_type!(member.is_string(), context, 1, "string");
+        result.push_str(member.as_str().borrow());
+        if index != strings.len() - 1 {
+            result.push_str(&separator);
+        }
+    }
+
+    Ok(Value::string(context.arena, result))
+}
+
+pub fn fn_sort<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    max_args!(context, args, 2);
+
+    let arr = &args[0];
+
+    if arr.is_undefined() {
+        return Ok(Value::undefined());
+    }
+
+    if !arr.is_array() || arr.len() <= 1 {
+        return Ok(Value::wrap_in_array_if_needed(
+            context.arena,
+            arr,
+            ArrayFlags::empty(),
+        ));
+    }
+
+    // TODO: This is all a bit inefficient, copying Vecs of references around, but
+    // at least it's just references.
+
+    let unsorted = arr.members().collect::<Vec<&'a Value<'a>>>();
+    let sorted = if (&args[1]).is_undefined() {
+        merge_sort(
+            unsorted,
+            &|a: &'a Value<'a>, b: &'a Value<'a>| match (a, b) {
+                (Value::Number(a), Value::Number(b)) => Ok(a > b),
+                (Value::String(a), Value::String(b)) => Ok(a > b),
+                _ => Err(Error::D3070InvalidDefaultSort(context.char_index)),
+            },
+        )?
+    } else {
+        let comparator = args.get_member(1);
+        assert_arg!(comparator.is_function(), context, 2);
+        merge_sort(unsorted, &|a: &'a Value<'a>, b: &'a Value<'a>| {
+            let args = Value::array_with_capacity(context.arena, 2, ArrayFlags::empty());
+            args.push(a);
+            args.push(b);
+            let result = context.evaluate_function(comparator, args)?;
+            Ok(result.is_truthy())
+        })?
+    };
+
+    let result = Value::array_with_capacity(context.arena, sorted.len(), arr.get_flags());
+    sorted.iter().for_each(|member| result.push(*member));
+
+    Ok(result)
+}
+
+pub fn merge_sort<'a, F>(items: Vec<&'a Value<'a>>, comp: &F) -> Result<Vec<&'a Value<'a>>>
+where
+    F: Fn(&'a Value<'a>, &'a Value<'a>) -> Result<bool>,
+{
+    fn merge_iter<'a, F>(
+        result: &mut Vec<&'a Value<'a>>,
+        left: &[&'a Value<'a>],
+        right: &[&'a Value<'a>],
+        comp: &F,
+    ) -> Result<()>
+    where
+        F: Fn(&'a Value<'a>, &'a Value<'a>) -> Result<bool>,
+    {
+        if left.is_empty() {
+            result.extend(right);
+            Ok(())
+        } else if right.is_empty() {
+            result.extend(left);
+            Ok(())
+        } else if comp(left[0], right[0])? {
+            result.push(right[0]);
+            merge_iter(result, left, &right[1..], comp)
+        } else {
+            result.push(left[0]);
+            merge_iter(result, &left[1..], right, comp)
+        }
+    }
+
+    fn merge<'a, F>(
+        left: &[&'a Value<'a>],
+        right: &[&'a Value<'a>],
+        comp: &F,
+    ) -> Result<Vec<&'a Value<'a>>>
+    where
+        F: Fn(&'a Value<'a>, &'a Value<'a>) -> Result<bool>,
+    {
+        let mut merged = Vec::with_capacity(left.len() + right.len());
+        merge_iter(&mut merged, left, right, comp)?;
+        Ok(merged)
+    }
+
+    if items.len() <= 1 {
+        return Ok(items);
+    }
+    let middle = (items.len() as f64 / 2.0).floor() as usize;
+    let (left, right) = items.split_at(middle);
+    let left = merge_sort(left.to_vec(), comp)?;
+    let right = merge_sort(right.to_vec(), comp)?;
+    merge(&left, &right, comp)
 }

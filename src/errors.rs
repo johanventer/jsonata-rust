@@ -22,6 +22,8 @@ pub enum Error {
     S0212ExpectedVarLeft(usize),
     S0213InvalidStep(usize, String),
     S0214ExpectedVarRight(usize, String),
+    S0215BindingAfterPredicates(usize),
+    S0216BindingAfterSort(usize),
 
     // Runtime errors
     D1001NumberOfOutRange(f64),
@@ -32,6 +34,7 @@ pub enum Error {
     D3030NonNumericCast(usize, String),
     D3060SqrtNegative(usize, String),
     D3061PowUnrepresentable(usize, String, String),
+    D3070InvalidDefaultSort(usize),
     D3141Assert(String),
     D3137Error(String),
 
@@ -45,6 +48,8 @@ pub enum Error {
     T2002RightSideNotNumber(usize, String),
     T2003LeftSideNotInteger(usize),
     T2004RightSideNotInteger(usize),
+    T2007CompareTypeMismatch(usize, String, String),
+    T2008InvalidOrderBy(usize),
     T2009BinaryOpMismatch(usize, String, String, String),
     T2010BinaryOpTypes(usize, String),
     
@@ -90,6 +95,8 @@ impl Error {
             Error::S0212ExpectedVarLeft(..) => "S0212",
             Error::S0213InvalidStep(..) => "S0213",
             Error::S0214ExpectedVarRight(..) => "S0214",
+            Error::S0215BindingAfterPredicates(..) => "S0215",
+            Error::S0216BindingAfterSort(..) => "S0216",
 
             // Runtime errors
             Error::D1001NumberOfOutRange(..) => "D1001",
@@ -100,6 +107,7 @@ impl Error {
             Error::D3030NonNumericCast(..) => "D3030",
             Error::D3060SqrtNegative(..) => "D3060",
             Error::D3061PowUnrepresentable(..) => "D3061",
+            Error::D3070InvalidDefaultSort(..) => "D3070",
             Error::D3141Assert(..) => "D3141",
             Error::D3137Error(..) => "D3137",
 
@@ -113,6 +121,8 @@ impl Error {
             Error::T2002RightSideNotNumber(..) => "T2002",
             Error::T2003LeftSideNotInteger(..) => "T2003",
             Error::T2004RightSideNotInteger(..) => "T2004",
+            Error::T2007CompareTypeMismatch(..) => "T2007",
+            Error::T2008InvalidOrderBy(..) => "T2008",
             Error::T2009BinaryOpMismatch(..) => "T2009",
             Error::T2010BinaryOpTypes(..) => "T2010",
             
@@ -166,6 +176,10 @@ impl fmt::Display for Error {
                 write!(f, "{}: The literal value `{}` cannot be used as a step within a path expression", p, k),
             S0214ExpectedVarRight(ref p, ref k) =>
                 write!(f, "{}: The right side of `{}` must be a variable name (start with $)", p, k),
+            S0215BindingAfterPredicates(ref p) => 
+                write!(f, "{}: A context variable binding must precede any predicates on a step", p),
+            S0216BindingAfterSort(ref p) =>
+                write!(f, "{}: A context variable binding must precede the 'order-by' clause on a step", p),
             
             // Runtime errors
             D1001NumberOfOutRange(ref n) =>
@@ -184,6 +198,8 @@ impl fmt::Display for Error {
                 write!(f, "{}: The sqrt function cannot be applied to a negative number: {}", p, n),
             D3061PowUnrepresentable(ref p, ref b, ref e) =>
                 write!(f, "{}: The power function has resulted in a value that cannot be represented as a JSON number: base={}, exponent={}", p, b, e),
+            D3070InvalidDefaultSort(ref p) =>
+                write!(f, "{}: The single argument form of the sort function can only be applied to an array of strings or an array of numbers.  Use the second argument to specify a comparison function", p),
             D3141Assert(ref m) =>
                 write!(f, "{}", m),
             D3137Error(ref m) =>
@@ -208,6 +224,10 @@ impl fmt::Display for Error {
                 write!(f, "{}: The left side of the range operator (..) must evaluate to an integer", p),
             T2004RightSideNotInteger(ref p) =>
                 write!(f, "{}: The right side of the range operator (..) must evaluate to an integer", p),
+            T2007CompareTypeMismatch(ref p, ref a, ref b) =>
+                write!(f, "{p}: Type mismatch when comparing values {a} and {b} in order-by clause"),
+            T2008InvalidOrderBy(ref p) =>
+                write!(f, "{}: The expressions within an order-by clause must evaluate to numeric or string values", p),
             T2009BinaryOpMismatch(ref p,ref l ,ref r ,ref o ) =>
                 write!(f, "{}: The values {} and {} either side of operator {} must be of the same data type", p, l, r, o),
             T2010BinaryOpTypes(ref p, ref o) =>
@@ -225,8 +245,6 @@ impl fmt::Display for Error {
 // "S0205": "Unexpected token: {{token}}",
 // "S0206": "Unknown expression type: {{token}}",
 // "S0207": "Unexpected end of expression",
-// "S0215": "A context variable binding must precede any predicates on a step",
-// "S0216": "A context variable binding must precede the 'order-by' clause on a step",
 // "S0217": "The object representing the 'parent' cannot be derived from this expression",
 
 // "S0301": "Empty regular expressions are not allowed",
@@ -241,8 +259,6 @@ impl fmt::Display for Error {
 // // "T1010": "The matcher function argument passed to function {{token}} does not return the correct object structure",
 // "D2005": "The left side of := must be a variable name (start with $)",  // defunct - replaced by S0212 parser error
 // "T2006": "The right side of the function application operator ~> must be a function",
-// "T2007": "Type mismatch when comparing values {{value}} and {{value2}} in order-by clause",
-// "T2008": "The expressions within an order-by clause must evaluate to numeric or string values",
 // "T2011": "The insert/update clause of the transform expression must evaluate to an object: {{value}}",
 // "T2012": "The delete clause of the transform expression must evaluate to a string or array of strings: {{value}}",
 // "T2013": "The transform expression clones the input object using the $clone() function.  This has been overridden in the current scope by a non-function.",
@@ -257,7 +273,6 @@ impl fmt::Display for Error {
 // "D3020": "Third argument of split function must evaluate to a positive number",
 // "D3040": "Third argument of match function must evaluate to a positive number",
 // "D3050": "The second argument of reduce function must be a function with at least two arguments",
-// "D3070": "The single argument form of the sort function can only be applied to an array of strings or an array of numbers.  Use the second argument to specify a comparison function",
 // "D3080": "The picture string must only contain a maximum of two sub-pictures",
 // "D3081": "The sub-picture must not contain more than one instance of the 'decimal-separator' character",
 // "D3082": "The sub-picture must not contain more than one instance of the 'percent' character",

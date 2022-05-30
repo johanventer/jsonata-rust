@@ -127,31 +127,38 @@ impl<'a> Evaluator<'a> {
 
         if let Some(filters) = &node.predicates {
             for filter in filters {
-                result = self.evaluate_filter(filter, result, frame)?
+                if let AstKind::Filter(ref expr) = filter.kind {
+                    result = self.evaluate_filter(expr, result, frame)?
+                }
             }
         }
 
         self.check_limits(false)?;
 
-        Ok(if result.has_flags(ArrayFlags::SEQUENCE) {
-            if node.keep_array {
-                result = result
-                    .clone_array_with_flags(self.arena, result.get_flags() | ArrayFlags::SINGLETON)
-            }
-            if result.is_empty() {
-                Value::undefined()
-            } else if result.len() == 1 {
-                if result.has_flags(ArrayFlags::SINGLETON) {
-                    result
+        Ok(
+            if result.has_flags(ArrayFlags::SEQUENCE) && !result.has_flags(ArrayFlags::TUPLE_STREAM)
+            {
+                if node.keep_array {
+                    result = result.clone_array_with_flags(
+                        self.arena,
+                        result.get_flags() | ArrayFlags::SINGLETON,
+                    )
+                }
+                if result.is_empty() {
+                    Value::undefined()
+                } else if result.len() == 1 {
+                    if result.has_flags(ArrayFlags::SINGLETON) {
+                        result
+                    } else {
+                        result.get_member(0)
+                    }
                 } else {
-                    result.get_member(0)
+                    result
                 }
             } else {
                 result
-            }
-        } else {
-            result
-        })
+            },
+        )
     }
 
     fn evaluate_block(
@@ -255,13 +262,14 @@ impl<'a> Evaluator<'a> {
         }
 
         let mut groups: HashMap<String, Group> = HashMap::new();
+        let reduce = input.has_flags(ArrayFlags::TUPLE_STREAM);
 
         let input = if input.is_array() && input.is_empty() {
-            let input = Value::array_with_capacity(self.arena, 1, ArrayFlags::empty());
+            let input = Value::array_with_capacity(self.arena, 1, input.get_flags());
             input.push(Value::undefined());
             input
         } else if !input.is_array() {
-            let wrapped = Value::array_with_capacity(self.arena, 1, ArrayFlags::empty());
+            let wrapped = Value::array_with_capacity(self.arena, 1, ArrayFlags::SEQUENCE);
             wrapped.push(input);
             wrapped
         } else {
@@ -269,8 +277,18 @@ impl<'a> Evaluator<'a> {
         };
 
         for item in input.members() {
+            let tuple_frame = if reduce {
+                Some(Frame::from_tuple(frame, item))
+            } else {
+                None
+            };
+
             for (index, pair) in object.iter().enumerate() {
-                let key = self.evaluate(&pair.0, item, frame)?;
+                let key = if reduce {
+                    self.evaluate(&pair.0, &item["@"], tuple_frame.as_ref().unwrap())?
+                } else {
+                    self.evaluate(&pair.0, item, frame)?
+                };
                 if !key.is_string() {
                     return Err(Error::T1003NonStringKey(char_index, key.to_string()));
                 }
@@ -300,9 +318,48 @@ impl<'a> Evaluator<'a> {
 
         for key in groups.keys() {
             let group = groups.get(key).unwrap();
-            let value = self.evaluate(&object[group.index].1, group.data, frame)?;
+            let value = if reduce {
+                let tuple = self.reduce_tuple_stream(char_index, group.data, input, frame)?;
+                let context = tuple.get_entry("@");
+                // TODO: Do we need this? JSONata does this, but it's difficult with the mutability
+                // of our values.
+                // tuple.remove_entry("@");
+                let tuple_frame = Frame::from_tuple(frame, tuple);
+                self.evaluate(&object[group.index].1, context, &tuple_frame)?
+            } else {
+                self.evaluate(&object[group.index].1, group.data, frame)?
+            };
             if !value.is_undefined() {
                 result.insert(key, value);
+            }
+        }
+
+        Ok(result)
+    }
+
+    fn reduce_tuple_stream(
+        &self,
+        char_index: usize,
+        tuple_stream: &'a Value<'a>,
+        input: &'a Value<'a>,
+        frame: &Frame<'a>,
+    ) -> Result<&'a Value<'a>> {
+        if !tuple_stream.is_array() {
+            return Ok(tuple_stream);
+        }
+
+        let result = Value::object(self.arena);
+        for (key, value) in (&tuple_stream[0]).entries() {
+            result.insert(key, value);
+        }
+        for i in 1..tuple_stream.len() {
+            for (key, value) in (&tuple_stream[i]).entries() {
+                let args = Value::array_with_capacity(self.arena, 2, ArrayFlags::empty());
+                args.push(result.get_entry(&key[..]));
+                args.push(value);
+                let new_value =
+                    fn_append(self.fn_context("append", char_index, input, frame), args)?;
+                result.insert(key, new_value);
             }
         }
 
@@ -602,28 +659,61 @@ impl<'a> Evaluator<'a> {
         input: &'a Value<'a>,
         frame: &Frame<'a>,
     ) -> Result<&'a Value<'a>> {
+        // Turn the input into an array if it's not already.
+        //
+        // If the first step is a variable reference, then the path is absolute rather than
+        // relative.
         let mut input = if input.is_array() && !matches!(steps[0].kind, AstKind::Var(..)) {
             input
         } else {
-            Value::wrap_in_array(self.arena, input, ArrayFlags::empty())
+            Value::wrap_in_array(self.arena, input, ArrayFlags::SEQUENCE)
         };
 
         let mut result = Value::undefined();
+        let mut is_tuple_stream = false;
+        let mut tuple_bindings = Value::undefined();
 
-        for (index, step) in steps.iter().enumerate() {
-            result = if index == 0 && step.cons_array {
-                self.evaluate(step, input, frame)?
+        for (step_index, step) in steps.iter().enumerate() {
+            // If any step is marked as a tuple, then we have to deal with a tuple stream
+            if step.tuple {
+                is_tuple_stream = true;
+            }
+
+            // If the first step is an explicit array constructor, then just evaluate that
+            // (i.e. don't iterate over a context array)
+            if step_index == 0 && step.cons_array {
+                result = self.evaluate(step, input, frame)?;
+            } else if is_tuple_stream {
+                tuple_bindings = self.evaluate_tuple_step(step, input, tuple_bindings, frame)?;
             } else {
-                self.evaluate_step(step, input, frame, index == steps.len() - 1)?
-            };
+                result = self.evaluate_step(step, input, frame, step_index == steps.len() - 1)?;
+            }
 
-            if result.is_undefined() || (result.is_array() && result.is_empty()) {
+            // If any step results in undefined or an empty array, we can break out as
+            // no further steps will produce any results
+            if !is_tuple_stream
+                && (result.is_undefined() || (result.is_array() && result.is_empty()))
+            {
                 break;
             }
 
-            // if step.focus.is_none() {
             input = result
-            // }
+        }
+
+        if is_tuple_stream {
+            if node.tuple {
+                result = tuple_bindings;
+            } else {
+                let new_result = Value::array_with_capacity(
+                    self.arena,
+                    tuple_bindings.len(),
+                    ArrayFlags::SEQUENCE,
+                );
+                for binding in tuple_bindings.members() {
+                    new_result.push(binding.get_entry("@"));
+                }
+                result = new_result;
+            }
         }
 
         if node.keep_singleton_array {
@@ -639,7 +729,16 @@ impl<'a> Evaluator<'a> {
         }
 
         if let Some((char_index, ref object)) = node.group_by {
-            self.evaluate_group_expression(char_index, object, result, frame)
+            self.evaluate_group_expression(
+                char_index,
+                object,
+                if is_tuple_stream {
+                    tuple_bindings
+                } else {
+                    result
+                },
+                frame,
+            )
         } else {
             Ok(result)
         }
@@ -652,8 +751,8 @@ impl<'a> Evaluator<'a> {
         frame: &Frame<'a>,
         last_step: bool,
     ) -> Result<&'a Value<'a>> {
-        if let AstKind::Sort(ref sorts) = step.kind {
-            let mut result = self.evaluate_sorts(sorts, input, frame)?;
+        if let AstKind::Sort(ref sort_terms) = step.kind {
+            let mut result = self.evaluate_sort(step.char_index, sort_terms, input, frame)?;
             if let Some(ref stages) = step.stages {
                 result = self.evaluate_stages(stages, result, frame)?;
             }
@@ -662,12 +761,19 @@ impl<'a> Evaluator<'a> {
 
         let result = Value::array(self.arena, ArrayFlags::SEQUENCE);
 
-        for item in input.members() {
+        // Evaluate the step on each member of the input
+        for (item_index, item) in input.members().enumerate() {
+            if let Some(ref index_var) = step.index {
+                frame.bind(index_var, Value::number(self.arena, item_index as f64));
+            }
+
             let mut item_result = self.evaluate(step, item, frame)?;
 
             if let Some(ref stages) = step.stages {
                 for stage in stages {
-                    item_result = self.evaluate_filter(stage, item_result, frame)?;
+                    if let AstKind::Filter(ref expr) = stage.kind {
+                        item_result = self.evaluate_filter(expr, item_result, frame)?
+                    }
                 }
             }
 
@@ -684,6 +790,7 @@ impl<'a> Evaluator<'a> {
             {
                 result.get_member(0)
             } else {
+                // Flatten the result sequence
                 let result_sequence = Value::array(self.arena, ArrayFlags::SEQUENCE);
 
                 for result_item in result.members() {
@@ -700,31 +807,243 @@ impl<'a> Evaluator<'a> {
         )
     }
 
-    fn evaluate_sorts(
+    fn evaluate_tuple_step(
         &self,
-        _sorts: &[(Ast, bool)],
-        _inputt: &'a Value<'a>,
-        _frame: &Frame<'a>,
+        step: &Ast,
+        input: &'a Value<'a>,
+        tuple_bindings: &'a Value<'a>,
+        frame: &Frame<'a>,
     ) -> Result<&'a Value<'a>> {
-        unimplemented!("Sorts not yet implemented")
+        if let AstKind::Sort(ref sort_terms) = step.kind {
+            let mut result = if tuple_bindings.is_undefined() {
+                let sorted = self.evaluate_sort(step.char_index, sort_terms, input, frame)?;
+                let result =
+                    Value::array(self.arena, ArrayFlags::SEQUENCE | ArrayFlags::TUPLE_STREAM);
+                for (item_index, item) in sorted.members().enumerate() {
+                    let tuple = Value::object(self.arena);
+                    tuple.insert("@", item);
+                    if let Some(ref index_var) = step.index {
+                        tuple.insert(index_var, Value::number(self.arena, item_index as f64));
+                    }
+                    result.push(tuple);
+                }
+                result
+            } else {
+                self.evaluate_sort(step.char_index, sort_terms, tuple_bindings, frame)?
+            };
+
+            if let Some(ref stages) = step.stages {
+                result = self.evaluate_stages(stages, result, frame)?;
+            }
+
+            return Ok(result);
+        }
+
+        let tuple_bindings = if tuple_bindings.is_undefined() {
+            let tuple_bindings =
+                Value::array_with_capacity(self.arena, input.len(), ArrayFlags::empty());
+            for member in input.members() {
+                let tuple = Value::object(self.arena);
+                tuple.insert("@", member);
+                tuple_bindings.push(tuple);
+            }
+            tuple_bindings
+        } else {
+            tuple_bindings
+        };
+
+        let result = Value::array(self.arena, ArrayFlags::SEQUENCE | ArrayFlags::TUPLE_STREAM);
+
+        for tuple in tuple_bindings.members() {
+            let step_frame = Frame::from_tuple(frame, tuple);
+            let mut binding_sequence = self.evaluate(step, &tuple["@"], &step_frame)?;
+            if !binding_sequence.is_undefined() {
+                binding_sequence = Value::wrap_in_array_if_needed(
+                    self.arena,
+                    binding_sequence,
+                    ArrayFlags::empty(),
+                );
+                for (binding_index, binding) in binding_sequence.members().enumerate() {
+                    let output_tuple = Value::object(self.arena);
+                    for (key, value) in tuple.entries() {
+                        output_tuple.insert(key, value);
+                    }
+                    if binding_sequence.has_flags(ArrayFlags::TUPLE_STREAM) {
+                        for (key, value) in binding.entries() {
+                            output_tuple.insert(key, value);
+                        }
+                    } else {
+                        if let Some(ref focus_var) = step.focus {
+                            output_tuple.insert(focus_var, binding);
+                            output_tuple.insert("@", &tuple["@"]);
+                        } else {
+                            output_tuple.insert("@", binding);
+                        }
+                        if let Some(ref index_var) = step.index {
+                            output_tuple
+                                .insert(index_var, Value::number(self.arena, binding_index as f64));
+                        }
+                    }
+                    result.push(output_tuple);
+                }
+            }
+        }
+
+        let mut result = &*result;
+        if let Some(ref stages) = step.stages {
+            result = self.evaluate_stages(stages, result, frame)?;
+        }
+
+        Ok(result)
+    }
+
+    fn evaluate_sort(
+        &self,
+        char_index: usize,
+        sort_terms: &[(Ast, bool)],
+        input: &'a Value<'a>,
+        frame: &Frame<'a>,
+    ) -> Result<&'a Value<'a>> {
+        if input.is_undefined() {
+            return Ok(Value::undefined());
+        }
+
+        if !input.is_array() || input.len() <= 1 {
+            return Ok(Value::wrap_in_array_if_needed(
+                self.arena,
+                input,
+                ArrayFlags::empty(),
+            ));
+        }
+
+        let unsorted = input.members().collect::<Vec<&'a Value<'a>>>();
+        let is_tuple_sort = input.has_flags(ArrayFlags::TUPLE_STREAM);
+
+        let comp = |a: &'a Value<'a>, b: &'a Value<'a>| {
+            let mut result = 0;
+
+            for (sort_term, descending) in sort_terms {
+                let aa = if is_tuple_sort {
+                    let tuple_frame = Frame::from_tuple(frame, a);
+                    self.evaluate(sort_term, &a["@"], &tuple_frame)?
+                } else {
+                    self.evaluate(sort_term, a, frame)?
+                };
+
+                let bb = if is_tuple_sort {
+                    let tuple_frame = Frame::from_tuple(frame, b);
+                    self.evaluate(sort_term, &b["@"], &tuple_frame)?
+                } else {
+                    self.evaluate(sort_term, b, frame)?
+                };
+
+                if aa.is_undefined() {
+                    result = if bb.is_undefined() { 0 } else { 1 };
+                    continue;
+                }
+
+                if bb.is_undefined() {
+                    result = -1;
+                    continue;
+                }
+
+                if !(aa.is_string() || aa.is_number()) || !(bb.is_string() || bb.is_number()) {
+                    return Err(Error::T2008InvalidOrderBy(char_index));
+                }
+
+                match (aa, bb) {
+                    (Value::String(a), Value::String(b)) if *a == *b => {
+                        continue;
+                    }
+                    (Value::String(a), Value::String(b)) if *a < *b => {
+                        result = -1;
+                    }
+                    (Value::String(..), Value::String(..)) => {
+                        result = 1;
+                    }
+                    (Value::Number(a), Value::Number(b)) if *a == *b => {
+                        continue;
+                    }
+                    (Value::Number(a), Value::Number(b)) if *a < *b => {
+                        result = -1;
+                    }
+                    (Value::Number(..), Value::Number(..)) => {
+                        result = 1;
+                    }
+                    _ => {
+                        return Err(Error::T2007CompareTypeMismatch(
+                            char_index,
+                            a.to_string(),
+                            b.to_string(),
+                        ));
+                    }
+                };
+
+                if *descending {
+                    result = -result;
+                }
+            }
+
+            Ok(result == 1)
+        };
+
+        let sorted = merge_sort(unsorted, &comp)?;
+        let result = Value::array_with_capacity(self.arena, sorted.len(), input.get_flags());
+        sorted.iter().for_each(|member| result.push(*member));
+
+        Ok(result)
     }
 
     fn evaluate_stages(
         &self,
-        _stages: &[Ast],
-        _input: &'a Value<'a>,
-        _frame: &Frame<'a>,
+        stages: &[Ast],
+        input: &'a Value<'a>,
+        frame: &Frame<'a>,
     ) -> Result<&'a Value<'a>> {
-        unimplemented!("Stages not yet implemented")
+        let mut result = input;
+        for stage in stages.iter() {
+            match stage.kind {
+                AstKind::Filter(ref predicate) => {
+                    result = self.evaluate_filter(predicate, result, frame)?;
+                }
+                AstKind::Index(ref index_var) => {
+                    // TODO: This is really annoying. We can't reach into the internal HashMap and
+                    // change the value of the index_var key because we have an &Value and in general
+                    // there's no other place we need to mutate Values after they have been created.
+                    //
+                    // So this just recreates the whole thing, which could be very inefficient for large
+                    // arrays.
+                    let new_result =
+                        Value::array_with_capacity(self.arena, result.len(), result.get_flags());
+                    for (tuple_index, tuple) in result.members().enumerate() {
+                        let new_tuple =
+                            Value::object_with_capacity(self.arena, tuple.entries().len());
+                        for (key, value) in tuple.entries() {
+                            new_tuple.insert(key, value);
+                        }
+                        new_tuple.insert(index_var, Value::number(self.arena, tuple_index as f64));
+                        new_result.push(new_tuple);
+                    }
+                    result = new_result;
+                }
+                _ => unreachable!(),
+            }
+        }
+        Ok(result)
     }
 
     fn evaluate_filter(
         &self,
-        node: &Ast,
+        predicate: &Ast,
         input: &'a Value<'a>,
         frame: &Frame<'a>,
     ) -> Result<&'a Value<'a>> {
-        let result = Value::array(self.arena, ArrayFlags::SEQUENCE);
+        let flags = if input.has_flags(ArrayFlags::TUPLE_STREAM) {
+            ArrayFlags::SEQUENCE | ArrayFlags::TUPLE_STREAM
+        } else {
+            ArrayFlags::SEQUENCE
+        };
+        let result = Value::array(self.arena, flags);
         let input = Value::wrap_in_array_if_needed(self.arena, input, ArrayFlags::empty());
 
         let get_index = |n: f64| {
@@ -741,40 +1060,44 @@ impl<'a> Evaluator<'a> {
             index as usize
         };
 
-        match node.kind {
-            AstKind::Filter(ref filter) => match filter.kind {
-                AstKind::Number(n) => {
-                    let index = get_index(n);
-                    let item = input.get_member(index as usize);
-                    if !item.is_undefined() {
-                        if item.is_array() {
-                            return Ok(item);
-                        } else {
-                            result.push(item);
-                        }
+        match predicate.kind {
+            AstKind::Number(n) => {
+                let index = get_index(n);
+                let item = input.get_member(index as usize);
+                if !item.is_undefined() {
+                    if item.is_array() {
+                        return Ok(item);
+                    } else {
+                        result.push(item);
                     }
                 }
-                _ => {
-                    for (i, item) in input.members().enumerate() {
-                        let mut index = self.evaluate(filter, item, frame)?;
-                        if index.is_valid_number()? {
-                            index = Value::wrap_in_array(self.arena, index, ArrayFlags::empty());
-                        }
-                        if index.is_array_of_valid_numbers()? {
-                            index.members().for_each(|v| {
-                                let index = get_index(v.as_f64());
-                                if index == i {
-                                    result.push(item);
-                                }
-                            });
-                        } else if index.is_truthy() {
-                            result.push(item);
-                        }
+            }
+            _ => {
+                for (item_index, item) in input.members().enumerate() {
+                    let mut index = if input.has_flags(ArrayFlags::TUPLE_STREAM) {
+                        let tuple_frame = Frame::from_tuple(frame, item);
+                        self.evaluate(predicate, &item["@"], &tuple_frame)?
+                    } else {
+                        self.evaluate(predicate, item, frame)?
+                    };
+
+                    if index.is_valid_number()? {
+                        index = Value::wrap_in_array(self.arena, index, ArrayFlags::empty());
+                    }
+
+                    if index.is_array_of_valid_numbers()? {
+                        index.members().for_each(|v| {
+                            let index = get_index(v.as_f64());
+                            if index == item_index {
+                                result.push(item);
+                            }
+                        });
+                    } else if index.is_truthy() {
+                        result.push(item);
                     }
                 }
-            },
-            _ => unimplemented!("Filters other than numbers are not yet supported"),
-        };
+            }
+        }
 
         Ok(result)
     }

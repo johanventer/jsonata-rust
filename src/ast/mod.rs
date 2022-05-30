@@ -32,8 +32,8 @@ pub enum BinaryOp {
     In,
     Map,
     Range,
-    ContextBind,
-    PositionalBind,
+    FocusBind,
+    IndexBind,
     Predicate,
     Apply,
     Bind,
@@ -59,8 +59,8 @@ impl std::fmt::Display for BinaryOp {
             BinaryOp::In => "in",
             BinaryOp::Map => ".",
             BinaryOp::Range => "..",
-            BinaryOp::ContextBind => "@",
-            BinaryOp::PositionalBind => "#",
+            BinaryOp::FocusBind => "@",
+            BinaryOp::IndexBind => "#",
             BinaryOp::Predicate => "[]",
             BinaryOp::Apply => "~>",
             BinaryOp::Bind => ":=",
@@ -113,6 +113,7 @@ pub enum AstKind {
     Path(Vec<Ast>),
     Filter(Box<Ast>),
     Sort(SortTerms),
+    Index(String),
 }
 
 #[derive(Debug, Clone)]
@@ -135,6 +136,16 @@ pub struct Ast {
     /// An optional list of evaluation stages, for example this specifies the filtering and
     /// indexing for various expressions.
     pub stages: Option<Vec<Ast>>,
+
+    /// Set on a step to indicate that it produces tuple bindings for things like index and focus
+    /// binds, and parent resolution.
+    pub tuple: bool,
+
+    /// A variable to bind the index of a step to
+    pub index: Option<String>,
+
+    // A variable to bind the context of a step to
+    pub focus: Option<String>,
 }
 
 impl Default for Ast {
@@ -154,6 +165,9 @@ impl Ast {
             group_by: None,
             predicates: None,
             stages: None,
+            tuple: false,
+            index: None,
+            focus: None,
         }
     }
 }
