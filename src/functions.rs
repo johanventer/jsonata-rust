@@ -1,4 +1,5 @@
 use std::borrow::Borrow;
+use std::rc::Rc;
 
 use bumpalo::Bump;
 
@@ -770,4 +771,110 @@ pub fn fn_join<'a, 'e>(
     }
 
     Ok(Value::string(context.arena, result))
+}
+
+pub fn fn_sort<'a, 'e>(
+    context: FunctionContext<'a, 'e>,
+    args: &'a Value<'a>,
+) -> Result<&'a Value<'a>> {
+    max_args!(context, args, 2);
+
+    let arr = &args[0];
+
+    if arr.is_undefined() {
+        return Ok(Value::undefined());
+    }
+
+    if !arr.is_array() || arr.len() <= 1 {
+        return Ok(Value::wrap_in_array_if_needed(
+            context.arena,
+            arr,
+            ArrayFlags::empty(),
+        ));
+    }
+
+    let unsorted = arr.members().collect::<Vec<&'a Value<'a>>>();
+    let sorted = if (&args[1]).is_undefined() {
+        if !arr.is_array_of_valid_numbers()? && !arr.is_array_of_strings() {
+            return Err(Error::D3070InvalidDefaultSort(context.char_index));
+        }
+
+        merge_sort(
+            unsorted,
+            Rc::new(|a: &'a Value<'a>, b: &'a Value<'a>| match (a, b) {
+                (Value::Number(a), Value::Number(b)) => a > b,
+                (Value::String(a), Value::String(b)) => a > b,
+                _ => unreachable!(),
+            }),
+        )
+    } else {
+        let comparator = args.get_member(1);
+        assert_arg!(comparator.is_function(), context, 2);
+
+        merge_sort(
+            unsorted,
+            Rc::new(|a: &'a Value<'a>, b: &'a Value<'a>| {
+                let args = Value::array_with_capacity(context.arena, 2, ArrayFlags::empty());
+                args.push(a);
+                args.push(b);
+                let result = context
+                    .evaluate_function(comparator, args)
+                    .unwrap_or_else(|_| Value::undefined());
+                result.is_truthy()
+            }),
+        )
+    };
+
+    fn merge_iter<'a, F>(
+        result: &mut Vec<&'a Value<'a>>,
+        left: &[&'a Value<'a>],
+        right: &[&'a Value<'a>],
+        comp: Rc<F>,
+    ) where
+        F: Fn(&'a Value<'a>, &'a Value<'a>) -> bool,
+    {
+        if left.is_empty() {
+            result.extend(right);
+        } else if right.is_empty() {
+            result.extend(left);
+        } else if comp(left[0], right[0]) {
+            result.push(right[0]);
+            merge_iter(result, left, &right[1..], comp);
+        } else {
+            result.push(left[0]);
+            merge_iter(result, &left[1..], right, comp);
+        }
+    }
+
+    fn merge<'a, F>(
+        left: &[&'a Value<'a>],
+        right: &[&'a Value<'a>],
+        comp: Rc<F>,
+    ) -> Vec<&'a Value<'a>>
+    where
+        F: Fn(&'a Value<'a>, &'a Value<'a>) -> bool,
+    {
+        let mut merged = Vec::with_capacity(left.len() + right.len());
+        merge_iter(&mut merged, left, right, comp);
+        merged
+    }
+
+    fn merge_sort<'a, F>(items: Vec<&'a Value<'a>>, comp: Rc<F>) -> Vec<&'a Value<'a>>
+    where
+        F: Fn(&'a Value<'a>, &'a Value<'a>) -> bool,
+    {
+        if items.len() <= 1 {
+            return items;
+        }
+        let middle = (items.len() as f64 / 2.0).floor() as usize;
+        let (left, right) = items.split_at(middle);
+        let left = merge_sort(left.to_vec(), comp.clone());
+        let right = merge_sort(right.to_vec(), comp.clone());
+        merge(&left, &right, comp)
+    }
+
+    let result = Value::array_with_capacity(context.arena, sorted.len(), arr.get_flags());
+    sorted.iter().for_each(|member| result.push(*member));
+
+    Ok(result)
 }

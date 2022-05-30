@@ -34,6 +34,7 @@ pub enum Error {
     D3030NonNumericCast(usize, String),
     D3060SqrtNegative(usize, String),
     D3061PowUnrepresentable(usize, String, String),
+    D3070InvalidDefaultSort(usize),
     D3141Assert(String),
     D3137Error(String),
 
@@ -104,6 +105,7 @@ impl Error {
             Error::D3030NonNumericCast(..) => "D3030",
             Error::D3060SqrtNegative(..) => "D3060",
             Error::D3061PowUnrepresentable(..) => "D3061",
+            Error::D3070InvalidDefaultSort(..) => "D3070",
             Error::D3141Assert(..) => "D3141",
             Error::D3137Error(..) => "D3137",
 
@@ -192,6 +194,8 @@ impl fmt::Display for Error {
                 write!(f, "{}: The sqrt function cannot be applied to a negative number: {}", p, n),
             D3061PowUnrepresentable(ref p, ref b, ref e) =>
                 write!(f, "{}: The power function has resulted in a value that cannot be represented as a JSON number: base={}, exponent={}", p, b, e),
+            D3070InvalidDefaultSort(ref p) =>
+                write!(f, "{}: The single argument form of the sort function can only be applied to an array of strings or an array of numbers.  Use the second argument to specify a comparison function", p),
             D3141Assert(ref m) =>
                 write!(f, "{}", m),
             D3137Error(ref m) =>
@@ -263,7 +267,6 @@ impl fmt::Display for Error {
 // "D3020": "Third argument of split function must evaluate to a positive number",
 // "D3040": "Third argument of match function must evaluate to a positive number",
 // "D3050": "The second argument of reduce function must be a function with at least two arguments",
-// "D3070": "The single argument form of the sort function can only be applied to an array of strings or an array of numbers.  Use the second argument to specify a comparison function",
 // "D3080": "The picture string must only contain a maximum of two sub-pictures",
 // "D3081": "The sub-picture must not contain more than one instance of the 'decimal-separator' character",
 // "D3082": "The sub-picture must not contain more than one instance of the 'percent' character",

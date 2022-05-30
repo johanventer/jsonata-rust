@@ -179,6 +179,20 @@ impl<'a> Value<'a> {
         }
     }
 
+    pub fn is_array_of_strings(&self) -> bool {
+        match self {
+            Value::Array(ref a, _) => {
+                for member in a.iter() {
+                    if !member.is_string() {
+                        return false;
+                    }
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+
     pub fn is_valid_number(&self) -> Result<bool> {
         match self {
             Value::Number(n) => {
