@@ -86,6 +86,18 @@ impl<'a> Value<'a> {
         arena.alloc(Value::Array(Box::new_in(Vec::new(), arena), flags))
     }
 
+    pub fn array_from(
+        arr: &'a [&Value<'a>],
+        arena: &'a Bump,
+        flags: ArrayFlags,
+    ) -> &'a mut Value<'a> {
+        let result = Value::array_with_capacity(arena, arr.len(), flags);
+        if let Value::Array(a, _) = result {
+            a.extend(arr);
+        }
+        result
+    }
+
     pub fn array_with_capacity(arena: &Bump, capacity: usize, flags: ArrayFlags) -> &mut Value {
         arena.alloc(Value::Array(
             Box::new_in(Vec::with_capacity(capacity), arena),
@@ -95,6 +107,17 @@ impl<'a> Value<'a> {
 
     pub fn object(arena: &Bump) -> &mut Value {
         arena.alloc(Value::Object(Box::new_in(HashMap::new(), arena)))
+    }
+
+    pub fn object_from(
+        hash: &HashMap<String, &'a Value<'a>>,
+        arena: &'a Bump,
+    ) -> &'a mut Value<'a> {
+        let result = Value::object_with_capacity(arena, hash.len());
+        if let Value::Object(o) = result {
+            o.extend(hash.iter().map(|(k, v)| (k.clone(), *v)));
+        }
+        result
     }
 
     pub fn object_with_capacity(arena: &Bump, capacity: usize) -> &mut Value {
@@ -132,6 +155,10 @@ impl<'a> Value<'a> {
 
     pub fn range(arena: &'a Bump, start: isize, end: isize) -> &'a mut Value<'a> {
         arena.alloc(Value::Range(Range::new(arena, start, end)))
+    }
+
+    pub fn range_from(arena: &'a Bump, range: &'a Range) -> &'a mut Value<'a> {
+        arena.alloc(Value::Range(range.clone()))
     }
 
     pub fn is_undefined(&self) -> bool {
@@ -434,6 +461,21 @@ impl<'a> Value<'a> {
         match *self {
             Value::Array(_, flags) => flags.contains(check_flags),
             _ => false,
+        }
+    }
+
+    pub fn clone(&'a self, arena: &'a Bump) -> &'a mut Value<'a> {
+        match self {
+            Self::Undefined => arena.alloc(Value::Undefined),
+            Self::Null => Value::null(arena),
+            Self::Number(n) => Value::number(arena, *n),
+            Self::Bool(b) => Value::bool(arena, *b),
+            Self::String(s) => Value::string(arena, s),
+            Self::Array(a, f) => Value::array_from(a, arena, *f),
+            Self::Object(o) => Value::object_from(o, arena),
+            Self::Lambda { ast, input, frame } => Value::lambda(arena, ast, input, frame.clone()),
+            Self::NativeFn { name, arity, func } => Value::nativefn(arena, name, *arity, *func),
+            Self::Range(range) => Value::range_from(arena, range),
         }
     }
 
