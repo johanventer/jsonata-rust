@@ -45,8 +45,9 @@ pub enum Value<'a> {
     String(String),
     Array(Box<'a, Vec<&'a Value<'a>>>, ArrayFlags),
     Object(Box<'a, HashMap<String, &'a Value<'a>>>),
+    Range(Range<'a>),
     Lambda {
-        ast: Ast,
+        ast: Box<'a, Ast>,
         input: &'a Value<'a>,
         frame: Frame<'a>,
     },
@@ -55,7 +56,11 @@ pub enum Value<'a> {
         arity: usize,
         func: fn(FunctionContext<'a, '_>, &'a Value<'a>) -> Result<&'a Value<'a>>,
     },
-    Range(Range<'a>),
+    Transformer {
+        pattern: std::boxed::Box<Ast>,
+        update: std::boxed::Box<Ast>,
+        delete: Option<std::boxed::Box<Ast>>,
+    },
 }
 
 #[allow(clippy::mut_from_ref)]
@@ -134,7 +139,7 @@ impl<'a> Value<'a> {
         frame: Frame<'a>,
     ) -> &'a mut Value<'a> {
         arena.alloc(Value::Lambda {
-            ast: node.clone(),
+            ast: Box::new_in(node.clone(), arena),
             input,
             frame,
         })
@@ -150,6 +155,19 @@ impl<'a> Value<'a> {
             name: name.to_string(),
             arity,
             func,
+        })
+    }
+
+    pub fn transformer(
+        arena: &'a Bump,
+        pattern: &std::boxed::Box<Ast>,
+        update: &std::boxed::Box<Ast>,
+        delete: &Option<std::boxed::Box<Ast>>,
+    ) -> &'a mut Value<'a> {
+        arena.alloc(Value::Transformer {
+            pattern: pattern.clone(),
+            update: update.clone(),
+            delete: delete.clone(),
         })
     }
 
@@ -259,7 +277,10 @@ impl<'a> Value<'a> {
     }
 
     pub fn is_function(&self) -> bool {
-        matches!(*self, Value::Lambda { .. } | Value::NativeFn { .. })
+        matches!(
+            *self,
+            Value::Lambda { .. } | Value::NativeFn { .. } | Value::Transformer { .. }
+        )
     }
 
     pub fn is_truthy(&'a self) -> bool {
@@ -282,7 +303,7 @@ impl<'a> Value<'a> {
                 }
             },
             Value::Object(ref o) => !o.is_empty(),
-            Value::Lambda { .. } | Value::NativeFn { .. } => false,
+            Value::Lambda { .. } | Value::NativeFn { .. } | Value::Transformer { .. } => false,
             Value::Range(ref r) => !r.is_empty(),
         }
     }
@@ -321,6 +342,7 @@ impl<'a> Value<'a> {
                 }
             }
             Value::NativeFn { arity, .. } => arity,
+            Value::Transformer { .. } => 1,
             _ => panic!("Not a function"),
         }
     }
@@ -475,6 +497,11 @@ impl<'a> Value<'a> {
             Self::Object(o) => Value::object_from(o, arena),
             Self::Lambda { ast, input, frame } => Value::lambda(arena, ast, input, frame.clone()),
             Self::NativeFn { name, arity, func } => Value::nativefn(arena, name, *arity, *func),
+            Self::Transformer {
+                pattern,
+                update,
+                delete,
+            } => Value::transformer(arena, pattern, update, delete),
             Self::Range(range) => Value::range_from(arena, range),
         }
     }

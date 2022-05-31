@@ -122,6 +122,11 @@ impl<'a> Evaluator<'a> {
             } => self.evaluate_function(input, proc, args, is_partial, frame, None)?,
             AstKind::Wildcard => self.evaluate_wildcard(node, input, frame)?,
             AstKind::Descendent => self.evaluate_descendants(input)?,
+            AstKind::Transform {
+                ref pattern,
+                ref update,
+                ref delete,
+            } => Value::transformer(self.arena, pattern, update, delete),
             _ => unimplemented!("TODO: node kind not yet supported: {:#?}", node.kind),
         };
 
@@ -575,8 +580,7 @@ impl<'a> Evaluator<'a> {
                     let rhs = self.evaluate(rhs_ast, input, frame)?;
 
                     if !rhs.is_function() {
-                        // TODO T2006
-                        unreachable!()
+                        return Err(Error::T2006RightSideNotFunction(rhs_ast.char_index));
                     }
 
                     if lhs.is_function() {
@@ -1303,7 +1307,90 @@ impl<'a> Evaluator<'a> {
                 let context = self.fn_context(name, char_index, input, frame);
                 func(context, evaluated_args)
             }
+            Value::Transformer {
+                ref pattern,
+                ref update,
+                ref delete,
+            } => {
+                let input = &evaluated_args[0];
+                self.apply_transformer(input, pattern, update, delete, frame)
+            }
             _ => Err(Error::T1006InvokedNonFunction(char_index)),
         }
+    }
+
+    fn apply_transformer(
+        &self,
+        input: &'a Value<'a>,
+        pattern_ast: &Ast,
+        update_ast: &Ast,
+        delete_ast: &Option<Box<Ast>>,
+        frame: &Frame<'a>,
+    ) -> Result<&'a Value<'a>> {
+        if input.is_undefined() {
+            return Ok(Value::undefined());
+        }
+
+        if input.is_array() {
+            return Ok(input);
+        }
+
+        if !input.is_object() {
+            return Err(Error::T0410ArgumentNotValid(
+                pattern_ast.char_index,
+                1,
+                "undefined".to_string(),
+            ));
+        }
+
+        let matches = self.evaluate(
+            pattern_ast,
+            Value::wrap_in_array(self.arena, input, ArrayFlags::empty()),
+            frame,
+        )?;
+
+        let result = input.clone(self.arena);
+
+        if !matches.is_undefined() {
+            let matches = Value::wrap_in_array_if_needed(self.arena, matches, ArrayFlags::empty());
+            for m in matches.members() {
+                let update = self.evaluate(update_ast, m, frame)?;
+                if !update.is_object() {
+                    return Err(Error::T2011UpdateNotObject(
+                        update_ast.char_index,
+                        update.to_string(),
+                    ));
+                } else {
+                    for (_key, _value) in update.entries() {
+                        // TODO: OMG, how do I mutate this without rewriting everything???
+                        // m.insert(key, value);
+                    }
+                }
+
+                if let Some(delete_ast) = delete_ast {
+                    let deletions = self.evaluate(delete_ast, m, frame)?;
+                    if !deletions.is_undefined() {
+                        let deletions = Value::wrap_in_array_if_needed(
+                            self.arena,
+                            deletions,
+                            ArrayFlags::empty(),
+                        );
+                        for deletion in deletions.members() {
+                            if !deletion.is_string() {
+                                return Err(Error::T2012DeleteNotStrings(
+                                    delete_ast.char_index,
+                                    deletions.to_string(),
+                                ));
+                            }
+                            if m.is_object() {
+                                // TODO: Remove the key `deletion`
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(result)
     }
 }
