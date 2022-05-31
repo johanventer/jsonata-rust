@@ -85,15 +85,6 @@ impl<'a, 'e> FunctionContext<'a, 'e> {
     }
 }
 
-pub fn fn_clone<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
-    args: &'a Value<'a>,
-) -> Result<&'a Value<'a>> {
-    max_args!(context, args, 1);
-    let arg = &args[0];
-    Ok(arg.clone(context.arena))
-}
-
 // Version of append that takes a mutable arg1 - this could probably be collapsed
 pub fn fn_append_internal<'a, 'e>(
     context: FunctionContext<'a, 'e>,
