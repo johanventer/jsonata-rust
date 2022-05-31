@@ -433,6 +433,13 @@ impl<'a> Value<'a> {
         }
     }
 
+    pub fn remove(&mut self, key: &str) {
+        match *self {
+            Value::Object(ref mut map) => map.remove(key),
+            _ => panic!("Not an object"),
+        };
+    }
+
     pub fn flatten(&'a self, arena: &'a Bump) -> &'a mut Value<'a> {
         let flattened = Self::array(arena, ArrayFlags::empty());
         self._flatten(flattened)
@@ -523,6 +530,22 @@ impl<'a> Value<'a> {
         } else {
             let serializer = Serializer::new(DumpFormatter, false);
             serializer.serialize(self).expect("Shouldn't fail")
+        }
+    }
+
+    // TODO: I don't have a good way to make modifications to values right now, so here's this absolutely
+    // no good, very bad, shouldn't exist reference transmuter :(
+    //
+    // This only exists for object transfomers, which specifically reach into existing values to make
+    // changes by updating and removing keys.
+    //
+    // Need to think up another way, but the whole evaluation pipeline is based on the immutability of Value,
+    // so something needs to give.
+    pub fn __very_unsafe_make_mut(&'a self) -> &'a mut Value<'a> {
+        unsafe {
+            let const_ptr = self as *const Value<'a>;
+            let mut_ptr = const_ptr as *mut Value<'a>;
+            &mut *mut_ptr
         }
     }
 }

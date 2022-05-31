@@ -1331,11 +1331,7 @@ impl<'a> Evaluator<'a> {
             return Ok(Value::undefined());
         }
 
-        if input.is_array() {
-            return Ok(input);
-        }
-
-        if !input.is_object() {
+        if !input.is_object() && !input.is_array() {
             return Err(Error::T0410ArgumentNotValid(
                 pattern_ast.char_index,
                 1,
@@ -1343,27 +1339,28 @@ impl<'a> Evaluator<'a> {
             ));
         }
 
+        let result = input.clone(self.arena);
+
         let matches = self.evaluate(
             pattern_ast,
-            Value::wrap_in_array(self.arena, input, ArrayFlags::empty()),
+            Value::wrap_in_array(self.arena, result, ArrayFlags::empty()),
             frame,
         )?;
-
-        let result = input.clone(self.arena);
 
         if !matches.is_undefined() {
             let matches = Value::wrap_in_array_if_needed(self.arena, matches, ArrayFlags::empty());
             for m in matches.members() {
                 let update = self.evaluate(update_ast, m, frame)?;
-                if !update.is_object() {
-                    return Err(Error::T2011UpdateNotObject(
-                        update_ast.char_index,
-                        update.to_string(),
-                    ));
-                } else {
-                    for (_key, _value) in update.entries() {
-                        // TODO: OMG, how do I mutate this without rewriting everything???
-                        // m.insert(key, value);
+                if !update.is_undefined() {
+                    if !update.is_object() {
+                        return Err(Error::T2011UpdateNotObject(
+                            update_ast.char_index,
+                            update.to_string(),
+                        ));
+                    } else {
+                        for (key, value) in update.entries() {
+                            m.__very_unsafe_make_mut().insert(key, value);
+                        }
                     }
                 }
 
@@ -1383,7 +1380,7 @@ impl<'a> Evaluator<'a> {
                                 ));
                             }
                             if m.is_object() {
-                                // TODO: Remove the key `deletion`
+                                m.__very_unsafe_make_mut().remove(&deletion.as_str());
                             }
                         }
                     }
