@@ -5,9 +5,9 @@ use bumpalo::boxed::Box;
 use bumpalo::Bump;
 use hashbrown::HashMap;
 
-use crate::ast::{Ast, AstKind};
-use crate::frame::Frame;
-use crate::functions::FunctionContext;
+use super::frame::Frame;
+use super::functions::FunctionContext;
+use crate::parser::ast::{Ast, AstKind};
 use crate::{Error, Result};
 
 pub mod impls;

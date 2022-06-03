@@ -1,8 +1,13 @@
+pub mod ast;
+mod process;
+mod symbol;
+mod tokenizer;
+
 use crate::{Error, Result};
 
-use super::ast::*;
-use super::symbol::Symbol;
-use super::tokenizer::*;
+use ast::*;
+use symbol::Symbol;
+use tokenizer::*;
 
 #[derive(Debug)]
 pub struct Parser<'a> {
