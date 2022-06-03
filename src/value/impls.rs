@@ -88,6 +88,7 @@ impl std::fmt::Debug for Value<'_> {
             Self::Object(o) => o.fmt(f),
             Self::Lambda { .. } => write!(f, "<lambda>"),
             Self::NativeFn { .. } => write!(f, "<nativefn>"),
+            Self::Transformer { .. } => write!(f, "<transformer>"),
             Self::Range(r) => write!(f, "<range({},{})>", r.start(), r.end()),
         }
     }

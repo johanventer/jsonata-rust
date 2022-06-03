@@ -288,7 +288,9 @@ impl<T: Formatter> Serializer<T> {
             Value::Bool(false) => self.write(b"false"),
             Value::Array(..) | Value::Range(..) => self.write_array(value)?,
             Value::Object(..) => self.write_object(value)?,
-            Value::Lambda { .. } | Value::NativeFn { .. } => self.write(b"\"\""),
+            Value::Lambda { .. } | Value::NativeFn { .. } | Value::Transformer { .. } => {
+                self.write(b"\"\"")
+            }
         };
 
         Ok(())

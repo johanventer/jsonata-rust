@@ -203,7 +203,9 @@ pub fn fn_boolean<'a, 'e>(
                 Value::bool(context.arena, false)
             }
         },
-        Value::Lambda { .. } | Value::NativeFn { .. } => Value::bool(context.arena, false),
+        Value::Lambda { .. } | Value::NativeFn { .. } | Value::Transformer { .. } => {
+            Value::bool(context.arena, false)
+        }
         Value::Range(ref range) => Value::bool(context.arena, !range.is_empty()),
     })
 }

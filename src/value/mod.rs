@@ -45,8 +45,9 @@ pub enum Value<'a> {
     String(String),
     Array(Box<'a, Vec<&'a Value<'a>>>, ArrayFlags),
     Object(Box<'a, HashMap<String, &'a Value<'a>>>),
+    Range(Range<'a>),
     Lambda {
-        ast: Ast,
+        ast: Box<'a, Ast>,
         input: &'a Value<'a>,
         frame: Frame<'a>,
     },
@@ -55,7 +56,11 @@ pub enum Value<'a> {
         arity: usize,
         func: fn(FunctionContext<'a, '_>, &'a Value<'a>) -> Result<&'a Value<'a>>,
     },
-    Range(Range<'a>),
+    Transformer {
+        pattern: std::boxed::Box<Ast>,
+        update: std::boxed::Box<Ast>,
+        delete: Option<std::boxed::Box<Ast>>,
+    },
 }
 
 #[allow(clippy::mut_from_ref)]
@@ -86,6 +91,18 @@ impl<'a> Value<'a> {
         arena.alloc(Value::Array(Box::new_in(Vec::new(), arena), flags))
     }
 
+    pub fn array_from(
+        arr: &'a [&Value<'a>],
+        arena: &'a Bump,
+        flags: ArrayFlags,
+    ) -> &'a mut Value<'a> {
+        let result = Value::array_with_capacity(arena, arr.len(), flags);
+        if let Value::Array(a, _) = result {
+            a.extend(arr);
+        }
+        result
+    }
+
     pub fn array_with_capacity(arena: &Bump, capacity: usize, flags: ArrayFlags) -> &mut Value {
         arena.alloc(Value::Array(
             Box::new_in(Vec::with_capacity(capacity), arena),
@@ -95,6 +112,17 @@ impl<'a> Value<'a> {
 
     pub fn object(arena: &Bump) -> &mut Value {
         arena.alloc(Value::Object(Box::new_in(HashMap::new(), arena)))
+    }
+
+    pub fn object_from(
+        hash: &HashMap<String, &'a Value<'a>>,
+        arena: &'a Bump,
+    ) -> &'a mut Value<'a> {
+        let result = Value::object_with_capacity(arena, hash.len());
+        if let Value::Object(o) = result {
+            o.extend(hash.iter().map(|(k, v)| (k.clone(), *v)));
+        }
+        result
     }
 
     pub fn object_with_capacity(arena: &Bump, capacity: usize) -> &mut Value {
@@ -111,7 +139,7 @@ impl<'a> Value<'a> {
         frame: Frame<'a>,
     ) -> &'a mut Value<'a> {
         arena.alloc(Value::Lambda {
-            ast: node.clone(),
+            ast: Box::new_in(node.clone(), arena),
             input,
             frame,
         })
@@ -130,8 +158,25 @@ impl<'a> Value<'a> {
         })
     }
 
+    pub fn transformer(
+        arena: &'a Bump,
+        pattern: &std::boxed::Box<Ast>,
+        update: &std::boxed::Box<Ast>,
+        delete: &Option<std::boxed::Box<Ast>>,
+    ) -> &'a mut Value<'a> {
+        arena.alloc(Value::Transformer {
+            pattern: pattern.clone(),
+            update: update.clone(),
+            delete: delete.clone(),
+        })
+    }
+
     pub fn range(arena: &'a Bump, start: isize, end: isize) -> &'a mut Value<'a> {
         arena.alloc(Value::Range(Range::new(arena, start, end)))
+    }
+
+    pub fn range_from(arena: &'a Bump, range: &'a Range) -> &'a mut Value<'a> {
+        arena.alloc(Value::Range(range.clone()))
     }
 
     pub fn is_undefined(&self) -> bool {
@@ -232,7 +277,10 @@ impl<'a> Value<'a> {
     }
 
     pub fn is_function(&self) -> bool {
-        matches!(*self, Value::Lambda { .. } | Value::NativeFn { .. })
+        matches!(
+            *self,
+            Value::Lambda { .. } | Value::NativeFn { .. } | Value::Transformer { .. }
+        )
     }
 
     pub fn is_truthy(&'a self) -> bool {
@@ -255,7 +303,7 @@ impl<'a> Value<'a> {
                 }
             },
             Value::Object(ref o) => !o.is_empty(),
-            Value::Lambda { .. } | Value::NativeFn { .. } => false,
+            Value::Lambda { .. } | Value::NativeFn { .. } | Value::Transformer { .. } => false,
             Value::Range(ref r) => !r.is_empty(),
         }
     }
@@ -294,6 +342,7 @@ impl<'a> Value<'a> {
                 }
             }
             Value::NativeFn { arity, .. } => arity,
+            Value::Transformer { .. } => 1,
             _ => panic!("Not a function"),
         }
     }
@@ -384,6 +433,13 @@ impl<'a> Value<'a> {
         }
     }
 
+    pub fn remove(&mut self, key: &str) {
+        match *self {
+            Value::Object(ref mut map) => map.remove(key),
+            _ => panic!("Not an object"),
+        };
+    }
+
     pub fn flatten(&'a self, arena: &'a Bump) -> &'a mut Value<'a> {
         let flattened = Self::array(arena, ArrayFlags::empty());
         self._flatten(flattened)
@@ -437,6 +493,26 @@ impl<'a> Value<'a> {
         }
     }
 
+    pub fn clone(&'a self, arena: &'a Bump) -> &'a mut Value<'a> {
+        match self {
+            Self::Undefined => arena.alloc(Value::Undefined),
+            Self::Null => Value::null(arena),
+            Self::Number(n) => Value::number(arena, *n),
+            Self::Bool(b) => Value::bool(arena, *b),
+            Self::String(s) => Value::string(arena, s),
+            Self::Array(a, f) => Value::array_from(a, arena, *f),
+            Self::Object(o) => Value::object_from(o, arena),
+            Self::Lambda { ast, input, frame } => Value::lambda(arena, ast, input, frame.clone()),
+            Self::NativeFn { name, arity, func } => Value::nativefn(arena, name, *arity, *func),
+            Self::Transformer {
+                pattern,
+                update,
+                delete,
+            } => Value::transformer(arena, pattern, update, delete),
+            Self::Range(range) => Value::range_from(arena, range),
+        }
+    }
+
     pub fn clone_array_with_flags(&self, arena: &'a Bump, flags: ArrayFlags) -> &'a mut Value<'a> {
         match *self {
             Value::Array(ref array, _) => arena.alloc(Value::Array(
@@ -454,6 +530,22 @@ impl<'a> Value<'a> {
         } else {
             let serializer = Serializer::new(DumpFormatter, false);
             serializer.serialize(self).expect("Shouldn't fail")
+        }
+    }
+
+    // TODO: I don't have a good way to make modifications to values right now, so here's this absolutely
+    // no good, very bad, shouldn't exist reference transmuter :(
+    //
+    // This only exists for object transfomers, which specifically reach into existing values to make
+    // changes by updating and removing keys.
+    //
+    // Need to think up another way, but the whole evaluation pipeline is based on the immutability of Value,
+    // so something needs to give.
+    pub fn __very_unsafe_make_mut(&'a self) -> &'a mut Value<'a> {
+        unsafe {
+            let const_ptr = self as *const Value<'a>;
+            let mut_ptr = const_ptr as *mut Value<'a>;
+            &mut *mut_ptr
         }
     }
 }

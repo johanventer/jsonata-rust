@@ -4,7 +4,7 @@ use bumpalo::Bump;
 
 use super::Value;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Range<'a> {
     arena: &'a Bump,
     start: isize,
