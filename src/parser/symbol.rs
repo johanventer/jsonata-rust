@@ -1,8 +1,8 @@
 use crate::{Error, Result};
 
 use super::ast::*;
-use super::parser::Parser;
 use super::tokenizer::{Token, TokenKind};
+use super::Parser;
 
 pub trait Symbol {
     fn left_binding_power(&self) -> u32;

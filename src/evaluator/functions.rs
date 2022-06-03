@@ -4,10 +4,10 @@ use bumpalo::Bump;
 
 use crate::{Error, Result};
 
-use super::evaluator::Evaluator;
 use super::frame::Frame;
 use super::value::serialize::{DumpFormatter, PrettyFormatter, Serializer};
 use super::value::{ArrayFlags, Value};
+use super::Evaluator;
 
 macro_rules! min_args {
     ($context:ident, $args:ident, $min:literal) => {
@@ -203,9 +203,9 @@ pub fn fn_boolean<'a, 'e>(
                 Value::bool(context.arena, false)
             }
         },
-        Value::Lambda { .. } | Value::NativeFn { .. } | Value::Transformer { .. } => {
-            Value::bool(context.arena, false)
-        }
+        Value::Lambda { .. }
+        | Value::NativeFn { .. }
+        | Value::Transformer { .. } => Value::bool(context.arena, false),
         Value::Range(ref range) => Value::bool(context.arena, !range.is_empty()),
     })
 }
@@ -324,7 +324,10 @@ pub fn fn_uppercase<'a, 'e>(
     if !arg.is_string() {
         Ok(Value::undefined())
     } else {
-        Ok(Value::string(context.arena, arg.as_str().to_uppercase()))
+        Ok(Value::string(
+            context.arena,
+            arg.as_str().to_uppercase(),
+        ))
     }
 }
 
@@ -810,13 +813,17 @@ pub fn fn_sort<'a, 'e>(
     } else {
         let comparator = args.get_member(1);
         assert_arg!(comparator.is_function(), context, 2);
-        merge_sort(unsorted, &|a: &'a Value<'a>, b: &'a Value<'a>| {
-            let args = Value::array_with_capacity(context.arena, 2, ArrayFlags::empty());
-            args.push(a);
-            args.push(b);
-            let result = context.evaluate_function(comparator, args)?;
-            Ok(result.is_truthy())
-        })?
+        merge_sort(
+            unsorted,
+            &|a: &'a Value<'a>, b: &'a Value<'a>| {
+                let args =
+                    Value::array_with_capacity(context.arena, 2, ArrayFlags::empty());
+                args.push(a);
+                args.push(b);
+                let result = context.evaluate_function(comparator, args)?;
+                Ok(result.is_truthy())
+            },
+        )?
     };
 
     let result = Value::array_with_capacity(context.arena, sorted.len(), arr.get_flags());
@@ -825,7 +832,10 @@ pub fn fn_sort<'a, 'e>(
     Ok(result)
 }
 
-pub fn merge_sort<'a, F>(items: Vec<&'a Value<'a>>, comp: &F) -> Result<Vec<&'a Value<'a>>>
+pub fn merge_sort<'a, F>(
+    items: Vec<&'a Value<'a>>,
+    comp: &F,
+) -> Result<Vec<&'a Value<'a>>>
 where
     F: Fn(&'a Value<'a>, &'a Value<'a>) -> Result<bool>,
 {

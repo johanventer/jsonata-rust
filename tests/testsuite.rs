@@ -6,8 +6,7 @@ use std::fs;
 use std::path;
 use test_generator::test_resources;
 
-use jsonata::value::ArrayFlags;
-use jsonata::{JsonAta, Value};
+use jsonata::{ArrayFlags, JsonAta, Value};
 
 const SKIP: &[&str] = &[
     // The order of object properties in the output is not deterministic,
@@ -68,6 +67,8 @@ fn test_case(resource: &str) {
         } else {
             panic!("No expression")
         };
+
+        eprintln!("EXPR: {expr}");
 
         let data = &case["data"];
         let dataset = &case["dataset"];

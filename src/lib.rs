@@ -1,27 +1,15 @@
 #![cfg_attr(not(doctest), doc = include_str!("../README.md"))]
-
-// TODO: Fix visibility of all these modules, they're all pub for now
-pub mod ast;
-pub mod errors;
-pub mod evaluator;
-pub mod frame;
-pub mod functions;
-pub mod parser;
-pub mod symbol;
-pub mod tokenizer;
-pub mod value;
-
-pub use errors::Error;
-pub use functions::FunctionContext;
-pub use value::Value;
-
 use bumpalo::Bump;
 
-use ast::Ast;
-use evaluator::Evaluator;
-use frame::Frame;
-use functions::*;
-use value::ArrayFlags;
+mod errors;
+mod evaluator;
+mod parser;
+
+pub use errors::Error;
+pub use evaluator::value::{ArrayFlags, Value};
+
+use evaluator::{frame::Frame, functions::*, Evaluator};
+use parser::ast::Ast;
 
 pub type Result<T> = std::result::Result<T, Error>;
 

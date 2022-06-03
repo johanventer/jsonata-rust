@@ -1,14 +1,18 @@
+pub mod frame;
+pub mod functions;
+pub mod value;
+
+use frame::Frame;
+use functions::*;
+use value::{ArrayFlags, Value};
+
 use bumpalo::Bump;
 use std::cell::RefCell;
 use std::collections::{hash_map, HashMap};
 use std::time::Instant;
 
+use super::parser::ast::*;
 use crate::{Error, Result};
-
-use super::ast::*;
-use super::frame::Frame;
-use super::functions::*;
-use super::value::{ArrayFlags, Value};
 
 struct EvaluatorInternal {
     depth: usize,
