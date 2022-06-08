@@ -49,7 +49,7 @@ impl<'a> JsonAta<'a> {
         let input = match input {
             Some(input) => {
                 let input_ast = parser::parse(input)?;
-                let evaluator = Evaluator::new(None, self.arena, None, None);
+                let evaluator = Evaluator::new(self.arena, None, None, None);
                 evaluator.evaluate(&input_ast, Value::undefined(), &Frame::new())?
             }
             None => Value::undefined(),
@@ -100,7 +100,7 @@ impl<'a> JsonAta<'a> {
         let chain_ast = Some(parser::parse(
             "function($f, $g) { function($x){ $g($f($x)) } }",
         )?);
-        let evaluator = Evaluator::new(chain_ast, self.arena, max_depth, time_limit);
+        let evaluator = Evaluator::new(self.arena, chain_ast, max_depth, time_limit);
         evaluator.evaluate(&self.ast, input, &self.frame)
     }
 }

@@ -2,6 +2,9 @@ pub mod frame;
 pub mod functions;
 pub mod value;
 
+pub mod new_frame;
+pub mod new_value;
+
 use frame::Frame;
 use functions::*;
 use value::{ArrayFlags, Value};
@@ -22,21 +25,21 @@ struct EvaluatorInternal {
 }
 
 pub struct Evaluator<'a> {
-    chain_ast: Option<Ast>,
     arena: &'a Bump,
+    chain_ast: Option<Ast>,
     internal: RefCell<EvaluatorInternal>,
 }
 
 impl<'a> Evaluator<'a> {
     pub fn new(
-        chain_ast: Option<Ast>,
         arena: &'a Bump,
+        chain_ast: Option<Ast>,
         max_depth: Option<usize>,
         time_limit: Option<usize>,
     ) -> Self {
         Evaluator {
-            chain_ast,
             arena,
+            chain_ast,
             internal: RefCell::new(EvaluatorInternal {
                 depth: 0,
                 started_at: None,
