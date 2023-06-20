@@ -35,6 +35,28 @@ jobs:
         with:
           command: test
 
+  test-wasm:
+    name: Test WebAssembly (WASI)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          target: wasm32-wasi
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: wasmtime-cli cargo-wasi
+      - uses: actions-rs/cargo@v1
+        env:
+          CARGO_TARGET_WASM32_WASI_RUNNER: "wasmtime --dir=."
+        with:
+          command: wasi
+          args: test -- --nocapture
+
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
@@ -45,7 +67,7 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
-      - run: rustup component add clippy
+          components: clippy
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
