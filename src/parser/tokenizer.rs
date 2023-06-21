@@ -257,9 +257,9 @@ impl<'a> Tokenizer<'a> {
         }
         let ch = ch as u8;
         Ok(match ch {
-            b'0'..=b'9' => (ch - b'0'),
-            b'a'..=b'f' => (ch + 10 - b'a'),
-            b'A'..=b'F' => (ch + 10 - b'A'),
+            b'0'..=b'9' => ch - b'0',
+            b'a'..=b'f' => ch + 10 - b'a',
+            b'A'..=b'F' => ch + 10 - b'A',
             _ => return Err(Error::S0104InvalidUnicodeEscape(self.start_char_index)),
         } as u16)
     }
