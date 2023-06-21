@@ -358,11 +358,11 @@ impl<'a> Evaluator<'a> {
         }
 
         let result = Value::object(self.arena);
-        for (key, value) in (&tuple_stream[0]).entries() {
+        for (key, value) in tuple_stream[0].entries() {
             result.insert(key, value);
         }
         for i in 1..tuple_stream.len() {
-            for (key, value) in (&tuple_stream[i]).entries() {
+            for (key, value) in tuple_stream[i].entries() {
                 let args = Value::array_with_capacity(self.arena, 2, ArrayFlags::empty());
                 args.push(result.get_entry(&key[..]));
                 args.push(value);
@@ -997,7 +997,7 @@ impl<'a> Evaluator<'a> {
 
         let sorted = merge_sort(unsorted, &comp)?;
         let result = Value::array_with_capacity(self.arena, sorted.len(), input.get_flags());
-        sorted.iter().for_each(|member| result.push(*member));
+        sorted.iter().for_each(|member| result.push(member));
 
         Ok(result)
     }
@@ -1071,7 +1071,7 @@ impl<'a> Evaluator<'a> {
         match predicate.kind {
             AstKind::Number(n) => {
                 let index = get_index(n);
-                let item = input.get_member(index as usize);
+                let item = input.get_member(index);
                 if !item.is_undefined() {
                     if item.is_array() {
                         return Ok(item);
@@ -1158,6 +1158,7 @@ impl<'a> Evaluator<'a> {
         })
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn recurse_descendants(
         &self,
         input: &'a Value<'a>,

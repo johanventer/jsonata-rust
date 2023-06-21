@@ -86,8 +86,8 @@ impl<'a, 'e> FunctionContext<'a, 'e> {
 }
 
 // Version of append that takes a mutable arg1 - this could probably be collapsed
-pub fn fn_append_internal<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_append_internal<'a>(
+    context: FunctionContext<'a, '_>,
     arg1: &'a mut Value<'a>,
     arg2: &'a Value<'a>,
 ) -> &'a mut Value<'a> {
@@ -123,8 +123,8 @@ pub fn fn_append_internal<'a, 'e>(
     result
 }
 
-pub fn fn_append<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_append<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     let arg1 = &args[0];
@@ -166,8 +166,8 @@ pub fn fn_append<'a, 'e>(
     Ok(result)
 }
 
-pub fn fn_boolean<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_boolean<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     max_args!(context, args, 1);
@@ -210,8 +210,8 @@ pub fn fn_boolean<'a, 'e>(
     })
 }
 
-pub fn fn_filter<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_filter<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     let arr = &args[0];
@@ -236,7 +236,7 @@ pub fn fn_filter<'a, 'e>(
             args.push(Value::number(context.arena, index as f64));
         }
         if arity >= 3 {
-            args.push(&*arr);
+            args.push(arr);
         }
 
         let include = context.evaluate_function(func, args)?;
@@ -249,8 +249,8 @@ pub fn fn_filter<'a, 'e>(
     Ok(result)
 }
 
-pub fn fn_string<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_string<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     max_args!(context, args, 2);
@@ -289,8 +289,8 @@ pub fn fn_string<'a, 'e>(
     }
 }
 
-pub fn fn_not<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_not<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     let arg = &args[0];
@@ -302,8 +302,8 @@ pub fn fn_not<'a, 'e>(
     })
 }
 
-pub fn fn_lowercase<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_lowercase<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     let arg = &args[0];
@@ -315,8 +315,8 @@ pub fn fn_lowercase<'a, 'e>(
     })
 }
 
-pub fn fn_uppercase<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_uppercase<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     let arg = &args[0];
@@ -331,8 +331,8 @@ pub fn fn_uppercase<'a, 'e>(
     }
 }
 
-pub fn fn_substring<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_substring<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     let string = &args[0];
@@ -392,8 +392,8 @@ pub fn fn_substring<'a, 'e>(
     }
 }
 
-pub fn fn_abs<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_abs<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     let arg = &args[0];
@@ -407,8 +407,8 @@ pub fn fn_abs<'a, 'e>(
     Ok(Value::number(context.arena, arg.as_f64().abs()))
 }
 
-pub fn fn_floor<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_floor<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     let arg = &args[0];
@@ -422,8 +422,8 @@ pub fn fn_floor<'a, 'e>(
     Ok(Value::number(context.arena, arg.as_f64().floor()))
 }
 
-pub fn fn_ceil<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_ceil<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     let arg = &args[0];
@@ -437,8 +437,8 @@ pub fn fn_ceil<'a, 'e>(
     Ok(Value::number(context.arena, arg.as_f64().ceil()))
 }
 
-pub fn fn_lookup_internal<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_lookup_internal<'a>(
+    context: FunctionContext<'a, '_>,
     input: &'a Value<'a>,
     key: &str,
 ) -> &'a Value<'a> {
@@ -464,8 +464,8 @@ pub fn fn_lookup_internal<'a, 'e>(
     }
 }
 
-pub fn fn_lookup<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_lookup<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     let input = &args[0];
@@ -474,8 +474,8 @@ pub fn fn_lookup<'a, 'e>(
     Ok(fn_lookup_internal(context.clone(), input, &key.as_str()))
 }
 
-pub fn fn_count<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_count<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     max_args!(context, args, 1);
@@ -494,8 +494,8 @@ pub fn fn_count<'a, 'e>(
     ))
 }
 
-pub fn fn_max<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_max<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     max_args!(context, args, 1);
@@ -518,8 +518,8 @@ pub fn fn_max<'a, 'e>(
     Ok(Value::number(context.arena, max))
 }
 
-pub fn fn_min<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_min<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     max_args!(context, args, 1);
@@ -542,8 +542,8 @@ pub fn fn_min<'a, 'e>(
     Ok(Value::number(context.arena, min))
 }
 
-pub fn fn_sum<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_sum<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     max_args!(context, args, 1);
@@ -566,8 +566,8 @@ pub fn fn_sum<'a, 'e>(
     Ok(Value::number(context.arena, sum))
 }
 
-pub fn fn_number<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_number<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     max_args!(context, args, 1);
@@ -594,8 +594,8 @@ pub fn fn_number<'a, 'e>(
     }
 }
 
-pub fn fn_exists<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_exists<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     min_args!(context, args, 1);
@@ -609,8 +609,8 @@ pub fn fn_exists<'a, 'e>(
     }
 }
 
-pub fn fn_assert<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_assert<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     let condition = &args[0];
@@ -629,8 +629,8 @@ pub fn fn_assert<'a, 'e>(
     }
 }
 
-pub fn fn_error<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_error<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     let message = &args[0];
@@ -644,8 +644,8 @@ pub fn fn_error<'a, 'e>(
     }))
 }
 
-pub fn fn_length<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_length<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     max_args!(context, args, 1);
@@ -664,8 +664,8 @@ pub fn fn_length<'a, 'e>(
     ))
 }
 
-pub fn fn_sqrt<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_sqrt<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     max_args!(context, args, 1);
@@ -686,8 +686,8 @@ pub fn fn_sqrt<'a, 'e>(
     }
 }
 
-pub fn fn_power<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_power<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     max_args!(context, args, 2);
@@ -715,8 +715,8 @@ pub fn fn_power<'a, 'e>(
     }
 }
 
-pub fn fn_reverse<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_reverse<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     max_args!(context, args, 1);
@@ -734,8 +734,8 @@ pub fn fn_reverse<'a, 'e>(
     Ok(result)
 }
 
-pub fn fn_join<'a, 'e>(
-    context: FunctionContext<'a, 'e>,
+pub fn fn_join<'a>(
+    context: FunctionContext<'a, '_>,
     args: &'a Value<'a>,
 ) -> Result<&'a Value<'a>> {
     max_args!(context, args, 2);
@@ -801,7 +801,7 @@ pub fn fn_sort<'a, 'e>(
     // at least it's just references.
 
     let unsorted = arr.members().collect::<Vec<&'a Value<'a>>>();
-    let sorted = if (&args[1]).is_undefined() {
+    let sorted = if args[1].is_undefined() {
         merge_sort(
             unsorted,
             &|a: &'a Value<'a>, b: &'a Value<'a>| match (a, b) {
@@ -827,7 +827,7 @@ pub fn fn_sort<'a, 'e>(
     };
 
     let result = Value::array_with_capacity(context.arena, sorted.len(), arr.get_flags());
-    sorted.iter().for_each(|member| result.push(*member));
+    sorted.iter().for_each(|member| result.push(member));
 
     Ok(result)
 }
