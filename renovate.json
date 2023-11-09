@@ -1,0 +1,39 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:base",
+    "group:monorepos",
+    "group:recommended"
+  ],
+  "automerge": true,
+  "platformAutomerge": true,
+  "rebaseWhen": "conflicted",
+  "stabilityDays": 21,
+  "internalChecksFilter": "strict",
+  "dependencyDashboard": true,
+  "major": {
+    "automerge": false,
+    "dependencyDashboardApproval": true,
+    "addLabels": ["major-upgrade"]
+  },
+  "replacement": {
+    "automerge": false,
+    "addLabels": ["replacement"]
+  },
+  "vulnerabilityAlerts": {
+    "addLabels": ["security"]
+  },
+  "transitiveRemediation": true,
+  "packageRules": [
+    {
+      "groupName": "high-confidence-rust-minor",
+      "matchManagers": ["cargo"],
+      "matchUpdateTypes": ["minor"]
+    },
+    {
+      "groupName": "high-confidence-rust-patch",
+      "matchManagers": ["cargo"],
+      "matchUpdateTypes": ["patch"]
+    }
+  ]
+}
