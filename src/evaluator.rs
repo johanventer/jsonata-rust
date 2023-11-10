@@ -730,7 +730,7 @@ impl<'a> Evaluator<'a> {
                 result = Value::wrap_in_array(
                     self.arena,
                     result,
-                    flags | ArrayFlags::SEQUENCE | ArrayFlags::SINGLETON,
+                    flags.clone() | ArrayFlags::SEQUENCE | ArrayFlags::SINGLETON,
                 );
             }
             result = result.clone_array_with_flags(self.arena, flags | ArrayFlags::SINGLETON);

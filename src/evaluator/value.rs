@@ -20,6 +20,7 @@ use self::serialize::{DumpFormatter, PrettyFormatter, Serializer};
 pub use iterator::MemberIterator;
 
 bitflags! {
+    #[derive(Clone)]
     pub struct ArrayFlags: u8 {
         const SEQUENCE     = 0b00000001;
         const SINGLETON    = 0b00000010;
@@ -480,14 +481,14 @@ impl<'a> Value<'a> {
     }
 
     pub fn get_flags(&self) -> ArrayFlags {
-        match *self {
-            Value::Array(_, flags) => flags,
+        match self {
+            Value::Array(_, flags) => flags.clone(),
             _ => panic!("Not an array"),
         }
     }
 
     pub fn has_flags(&self, check_flags: ArrayFlags) -> bool {
-        match *self {
+        match self {
             Value::Array(_, flags) => flags.contains(check_flags),
             _ => false,
         }
@@ -500,7 +501,7 @@ impl<'a> Value<'a> {
             Self::Number(n) => Value::number(arena, *n),
             Self::Bool(b) => Value::bool(arena, *b),
             Self::String(s) => Value::string(arena, s),
-            Self::Array(a, f) => Value::array_from(a, arena, *f),
+            Self::Array(a, f) => Value::array_from(a, arena, f.clone()),
             Self::Object(o) => Value::object_from(o, arena),
             Self::Lambda { ast, input, frame } => Value::lambda(arena, ast, input, frame.clone()),
             Self::NativeFn { name, arity, func } => Value::nativefn(arena, name, *arity, *func),
