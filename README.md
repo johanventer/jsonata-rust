@@ -1,13 +1,8 @@
-# jsonata-rust
+# jsonata-rs
 
-[<img alt="github" src="https://img.shields.io/badge/github-johanventer%2Fjsonata--rust-lightgrey?style=for-the-badge&logo=github" height=22>](https://github.com/johanventer/jsonata-rust/)
-[<img alt="crates.io" src="https://img.shields.io/crates/v/jsonata?logo=rust&style=for-the-badge" height=22>](https://crates.io/crates/jsonata)
-[<img alt="docs.rs" src="https://img.shields.io/docsrs/jsonata?label=docs.rs&logo=docs.rs&style=for-the-badge" height=22>](https://docs.rs/jsonata)
-[<img alt="test status" src="https://img.shields.io/github/workflow/status/johanventer/jsonata-rust/Test%20Suite?label=tests&style=for-the-badge" height=22>](https://github.com/johanventer/jsonata-rust/actions?query=branch%3Amain)
+An (incomplete) implementation of [JSONata](https://jsonata.org) in Rust. Stedi's fork of [jsonata-rust](https://github.com/johanventer/jsonata-rust).
 
-**Please don't use this in production yet, it will panic in unexpected places for unimplemented features, the API is not ergonomic and is changing fast, and the docs are lacking. This version is published to crates.io so interested people can start to play with it easily.**
-
-An (incomplete) implementation of [JSONata](https://jsonata.org) in Rust.
+**Alpha version. All internal and external interfaces are considered unstable and subject to change without notice.**
 
 ## What is JSONata?
 
@@ -20,7 +15,7 @@ From the JSONata website:
 - Create user-defined functions
 - Format query results into any JSON output structure
 
-Read the [full documentation](https://docs.jsonata.org/overview.html), and give it a go in the [exerciser environment](https://try.jsonata.org).
+Read the [full documentation](https://docs.jsonata.org/overview.html), and try it out in Stedi's [JSONata Playground](https://www.stedi.com/jsonata/playground).
 
 ## Getting started
 
