@@ -1,23 +1,23 @@
 use bumpalo::Bump;
+use clap::Parser;
 use std::path::PathBuf;
-use structopt::StructOpt;
 
 use jsonata::JsonAta;
 
 /// A command line JSON processor using JSONata
-#[derive(StructOpt)]
-#[structopt(name = "jsonata")]
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
 struct Opt {
     /// Parse the given expression, print the AST and exit
-    #[structopt(short, long)]
+    #[arg(short, long)]
     ast: bool,
 
     /// File containing the JSONata expression to evaluate (overrides expr on command line)
-    #[structopt(short, long, parse(from_os_str))]
+    #[arg(short, long)]
     expr_file: Option<PathBuf>,
 
     /// Input JSON file (if not specified, STDIN)
-    #[structopt(short, long, parse(from_os_str))]
+    #[arg(short, long)]
     input_file: Option<PathBuf>,
 
     /// JSONata expression to evaluate
@@ -28,7 +28,7 @@ struct Opt {
 }
 
 fn main() {
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
 
     let expr = match opt.expr_file {
         Some(expr_file) => {
